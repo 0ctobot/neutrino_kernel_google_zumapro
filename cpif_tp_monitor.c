@@ -76,6 +76,7 @@ static int tpmon_calc_dit_src_queue_status(struct cpif_tpmon *tpmon)
 
 #if IS_ENABLED(CONFIG_EXYNOS_DIT)
 	int ret = dit_get_src_usage(DIT_DIR_RX, &usage);
+
 	if (ret && (ret != -EPERM)) {
 		mif_err_limited("dit_get_src_usage() error:%d\n", ret);
 		return ret;
@@ -536,9 +537,6 @@ static void tpmon_set_gro(struct tpmon_data *data)
 	struct pktproc_adaptor *ppa = &mld->pktproc;
 	int i;
 #endif
-#if IS_ENABLED(CONFIG_EXYNOS_DIT)
-	struct net_device *netdev = NULL;
-#endif
 
 	if (!data->enable)
 		return;
@@ -563,9 +561,8 @@ static void tpmon_set_gro(struct tpmon_data *data)
 #endif
 
 #if IS_ENABLED(CONFIG_EXYNOS_DIT)
-	netdev = dit_get_netdev();
-	if (netdev) {
-		netdev->gro_flush_timeout = timeout;
+	if (dit_get_netdev()) {
+		dit_get_netdev()->gro_flush_timeout = timeout;
 		mld->dummy_net.gro_flush_timeout = 0;
 	}
 #endif
