@@ -1220,7 +1220,7 @@ irqreturn_t dit_irq_handler(int irq, void *arg)
 	return IRQ_HANDLED;
 }
 
-static bool dit_is_busy(enum dit_direction dir)
+bool dit_is_busy(enum dit_direction dir)
 {
 	u32 status_bits = 0;
 	u32 status_mask = 0;
@@ -1404,7 +1404,7 @@ exit:
 	return ret;
 }
 
-static int dit_reg_backup_restore(bool backup)
+int dit_reg_backup_restore(bool backup)
 {
 	/* NAT */
 	static const u16 nat_offset[] = {
@@ -2477,7 +2477,7 @@ static int dit_suspend(struct device *dev)
 
 	ret = dit_init(NULL, DIT_INIT_DEINIT, DIT_STORE_BACKUP);
 	if (ret) {
-		mif_err("deinit failed ret:%d\n", ret);
+		mif_err("do_suspend failed ret:%d\n", ret);
 		return ret;
 	}
 
@@ -2487,7 +2487,6 @@ static int dit_suspend(struct device *dev)
 static int dit_resume(struct device *dev)
 {
 	struct dit_ctrl_t *dc = dev_get_drvdata(dev);
-	unsigned int dir;
 	int ret;
 
 	if (unlikely(!dc)) {
