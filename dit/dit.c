@@ -2304,7 +2304,10 @@ EXPORT_SYMBOL(dit_stop_napi_poll);
 
 bool dit_support_clat(void)
 {
-	return dc ? dc->use_clat : false;
+	if (!dc)
+		return false;
+
+	return dc->use_clat && dc->clat_hal_ready;
 }
 EXPORT_SYMBOL(dit_support_clat);
 
