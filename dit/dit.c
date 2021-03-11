@@ -137,7 +137,7 @@ static void dit_print_dump(enum dit_direction dir, u32 dump_bits)
 		for (i = 0; i < desc_info->src_desc_ring_len; i++) {
 			if (!(src_desc[i].control & DIT_SRC_KICK_CONTROL_MASK))
 				continue;
-			pr_info("src[%06d] ctrl:0x%02X,stat:0x%02X,ch_id:%02u\n",
+			pr_info("src[%06d] ctrl:0x%02X,stat:0x%02X,ch_id:%03u\n",
 				i, src_desc[i].control, src_desc[i].status, src_desc[i].ch_id);
 		}
 
@@ -184,7 +184,7 @@ static void dit_print_dump(enum dit_direction dir, u32 dump_bits)
 	}
 }
 
-static bool dit_is_kicked_any(void)
+bool dit_is_kicked_any(void)
 {
 	unsigned int dir;
 
@@ -289,7 +289,7 @@ static void dit_debug_out_of_order(enum dit_direction dir, enum dit_desc_ring ri
 }
 #endif
 
-static int dit_check_dst_ready(enum dit_direction dir, enum dit_desc_ring ring_num)
+int dit_check_dst_ready(enum dit_direction dir, enum dit_desc_ring ring_num)
 {
 	struct dit_desc_info *desc_info;
 
@@ -682,7 +682,7 @@ static void dit_set_dst_desc_int_range(enum dit_direction dir,
 
 static int dit_enqueue_src_desc_ring_internal(enum dit_direction dir,
 		u8 *src, unsigned long src_paddr,
-		u16 len, u16 ch_id, bool csum)
+		u16 len, u8 ch_id, bool csum)
 {
 	struct dit_desc_info *desc_info;
 	struct dit_src_desc *src_desc;
@@ -732,7 +732,7 @@ static int dit_enqueue_src_desc_ring_internal(enum dit_direction dir,
 	else
 		src_desc->src_addr = virt_to_phys(src);
 	src_desc->length = len;
-	src_desc->ch_id = (ch_id & 0x1F);
+	src_desc->ch_id = ch_id;
 	src_desc->pre_csum = csum;
 	src_desc->udp_csum_zero = 0;
 	src_desc->control = 0;
@@ -785,7 +785,7 @@ static int dit_enqueue_src_desc_ring_internal(enum dit_direction dir,
 
 int dit_enqueue_src_desc_ring(enum dit_direction dir,
 		u8 *src, unsigned long src_paddr,
-		u16 len, u16 ch_id, bool csum)
+		u16 len, u8 ch_id, bool csum)
 {
 	return dit_enqueue_src_desc_ring_internal(
 		dir, src, src_paddr, len, ch_id, csum);
@@ -1058,6 +1058,7 @@ int dit_read_rx_dst_poll(struct napi_struct *napi, int budget)
 			dit_set_skb_udp_csum_zero(dst_desc, ring_num, skb);
 
 			dst_desc->packet_info = 0;
+			dst_desc->control = 0;
 			dst_desc->status = 0;
 
 			ret = dit_pass_to_net(ring_num, skb);
@@ -1540,6 +1541,8 @@ static int dit_init_hw(void)
 	WRITE_REG_VALUE(dc, DIT_ALL_INT_PENDING_MASK, DIT_REG_INT_PENDING);
 
 	WRITE_REG_VALUE(dc, 0x0, DIT_REG_CLK_GT_OFF);
+
+	DIT_INDIRECT_CALL(dc, do_init_hw);
 
 	WRITE_SHR_VALUE(dc, dc->sharability_value);
 
