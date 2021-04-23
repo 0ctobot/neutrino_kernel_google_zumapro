@@ -314,7 +314,7 @@ int pktproc_init_ul(struct pktproc_adaptor_ul *ppa_ul)
 static int pktproc_get_info_ul(struct pktproc_adaptor_ul *ppa_ul,
 		struct device_node *np)
 {
-	mif_dt_read_u32(np, "pktproc_ul_cp_base", ppa_ul->cp_base);
+	mif_dt_read_u64(np, "pktproc_ul_cp_base", ppa_ul->cp_base);
 	mif_dt_read_u32(np, "pktproc_ul_num_queue", ppa_ul->num_queue);
 	mif_dt_read_u32(np, "pktproc_ul_max_packet_size",
 			ppa_ul->max_packet_size);
