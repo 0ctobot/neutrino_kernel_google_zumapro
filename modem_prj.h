@@ -514,11 +514,6 @@ struct link_device {
 #if IS_ENABLED(CONFIG_LINK_DEVICE_PCIE)
 	int (*register_pcie)(struct link_device *ld);
 #endif
-
-#if IS_ENABLED(CONFIG_SBD_BOOTLOG)
-	/* print cp boot/main logs */
-	struct timer_list cplog_timer;
-#endif
 };
 
 static inline struct sk_buff *rx_alloc_skb(unsigned int length,
@@ -801,14 +796,5 @@ const struct file_operations *get_bootdump_io_fops(void);
 const struct file_operations *get_ipc_io_fops(void);
 int sipc5_init_io_device(struct io_device *iod);
 void sipc5_deinit_io_device(struct io_device *iod);
-
-#if IS_ENABLED(CONFIG_RPS) && IS_ENABLED(CONFIG_ARGOS)
-extern struct net init_net;
-extern int sec_argos_register_notifier(struct notifier_block *n, char *label);
-extern int sec_argos_unregister_notifier(struct notifier_block *n, char *label);
-int mif_init_argos_notifier(void);
-#else
-static inline int mif_init_argos_notifier(void) { return 0; }
-#endif
 
 #endif
