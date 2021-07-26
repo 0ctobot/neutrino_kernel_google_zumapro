@@ -1840,6 +1840,9 @@ static int dit_register_irq(struct platform_device *pdev)
 			ret = -EIO;
 			goto error;
 		}
+
+		if (dc->irq_pending_bit[i] == TX_DST0_INT_PENDING_BIT)
+			dc->irq_num_tx = irq_num;
 		dc->irq_buf[i] = irq_num;
 	}
 
@@ -2286,8 +2289,13 @@ int dit_set_irq_affinity(int affinity)
 	dc->irq_affinity = affinity;
 
 	for (i = 0; i < dc->irq_len; i++) {
-		mif_debug("num:%d affinity:%d\n", dc->irq_buf[i], affinity);
-		irq_set_affinity_hint(dc->irq_buf[i], cpumask_of(affinity));
+		int val = dc->irq_affinity;
+
+		if (dc->irq_buf[i] == dc->irq_num_tx)
+			val = dc->irq_affinity_tx;
+
+		mif_debug("num:%d affinity:%d\n", dc->irq_buf[i], val);
+		irq_set_affinity_hint(dc->irq_buf[i], cpumask_of(val));
 	}
 
 	return 0;
@@ -2468,6 +2476,7 @@ static int dit_read_dt(struct device_node *np)
 
 	mif_dt_read_u32(np, "dit_rx_extra_desc_ring_len", dc->rx_extra_desc_ring_len);
 	mif_dt_read_u32(np, "dit_irq_affinity", dc->irq_affinity);
+	dc->irq_affinity_tx = dc->irq_affinity;
 
 	return 0;
 }
