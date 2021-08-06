@@ -1411,7 +1411,7 @@ static bool dit_check_nat_enabled(void)
 
 static void dit_check_clat_enabled_internal(struct io_device *iod, void *args)
 {
-	bool *enabled = (bool *) args;
+	bool *enabled = (bool *)args;
 
 	if (*enabled || !dc->ld->is_ps_ch(iod->ch))
 		return;
@@ -1433,24 +1433,34 @@ static bool dit_check_clat_enabled(void)
 }
 
 static int dit_reg_backup_restore_internal(bool backup, const u16 *offset,
-	const u16 *size, void **buf, const unsigned int arr_len)
+					   const u16 *size, void **buf,
+					   const unsigned int arr_len)
 {
+	unsigned long flags;
 	unsigned int i;
 	int ret = 0;
 
 	for (i = 0; i < arr_len; i++) {
 		if (!buf[i]) {
-			buf[i] = devm_kzalloc(dc->dev, size[i], GFP_KERNEL);
+			buf[i] = kvzalloc(size[i], GFP_KERNEL);
 			if (!buf[i]) {
 				ret = -ENOMEM;
 				goto exit;
 			}
 		}
 
+		spin_lock_irqsave(&dc->src_lock, flags);
+		if (dit_is_kicked_any() || !dc->init_done) {
+			ret = -EAGAIN;
+			spin_unlock_irqrestore(&dc->src_lock, flags);
+			goto exit;
+		}
+
 		if (backup)
 			BACKUP_REG_VALUE(dc, buf[i], offset[i], size[i]);
 		else
 			RESTORE_REG_VALUE(dc, buf[i], offset[i], size[i]);
+		spin_unlock_irqrestore(&dc->src_lock, flags);
 	}
 
 exit:
@@ -1465,7 +1475,7 @@ exit:
 	return ret;
 }
 
-int dit_reg_backup_restore(bool backup)
+static int dit_reg_backup_restore(bool backup)
 {
 	/* NAT */
 	static const u16 nat_offset[] = {
@@ -1474,9 +1484,9 @@ int dit_reg_backup_restore(bool backup)
 		DIT_REG_NAT_RX_PORT_TABLE_SLOT,
 	};
 	static const u16 nat_size[] = {
-		DIT_REG_NAT_LOCAL_ADDR_MAX * DIT_REG_NAT_LOCAL_INTERVAL,
-		DIT_REG_NAT_LOCAL_ADDR_MAX * DIT_REG_ETHERNET_MAC_INTERVAL,
-		DIT_REG_NAT_LOCAL_PORT_MAX * DIT_REG_NAT_LOCAL_INTERVAL,
+		(DIT_REG_NAT_LOCAL_ADDR_MAX * DIT_REG_NAT_LOCAL_INTERVAL),
+		(DIT_REG_NAT_LOCAL_ADDR_MAX * DIT_REG_ETHERNET_MAC_INTERVAL),
+		(DIT_REG_NAT_LOCAL_PORT_MAX * DIT_REG_NAT_LOCAL_INTERVAL),
 	};
 	static const unsigned int nat_len = ARRAY_SIZE(nat_offset);
 	static void *nat_buf[ARRAY_SIZE(nat_offset)];
@@ -1488,27 +1498,30 @@ int dit_reg_backup_restore(bool backup)
 		DIT_REG_CLAT_TX_CLAT_SRC_0,
 	};
 	static const u16 clat_size[] = {
-		DIT_REG_CLAT_ADDR_MAX * DIT_REG_CLAT_TX_FILTER_INTERVAL,
-		DIT_REG_CLAT_ADDR_MAX * DIT_REG_CLAT_TX_PLAT_PREFIX_INTERVAL,
-		DIT_REG_CLAT_ADDR_MAX * DIT_REG_CLAT_TX_CLAT_SRC_INTERVAL,
+		(DIT_REG_CLAT_ADDR_MAX * DIT_REG_CLAT_TX_FILTER_INTERVAL),
+		(DIT_REG_CLAT_ADDR_MAX * DIT_REG_CLAT_TX_PLAT_PREFIX_INTERVAL),
+		(DIT_REG_CLAT_ADDR_MAX * DIT_REG_CLAT_TX_CLAT_SRC_INTERVAL),
 	};
 	static const unsigned int clat_len = ARRAY_SIZE(clat_offset);
 	static void *clat_buf[ARRAY_SIZE(clat_offset)];
 
 	int ret = 0;
 
+	if (unlikely(!dc))
+		return -EPERM;
+
 	/* NAT */
 	if (dit_check_nat_enabled()) {
-		ret = dit_reg_backup_restore_internal(backup, nat_offset, nat_size, nat_buf,
-			nat_len);
+		ret = dit_reg_backup_restore_internal(backup, nat_offset,
+						      nat_size, nat_buf, nat_len);
 		if (ret)
 			goto error;
 	}
 
 	/* CLAT */
 	if (dit_check_clat_enabled()) {
-		ret = dit_reg_backup_restore_internal(backup, clat_offset, clat_size, clat_buf,
-			clat_len);
+		ret = dit_reg_backup_restore_internal(backup, clat_offset,
+						      clat_size, clat_buf, clat_len);
 		if (ret)
 			goto error;
 	}
@@ -2631,9 +2644,15 @@ static int dit_suspend(struct device *dev)
 	if (unlikely(!dc) || unlikely(!dc->ld))
 		return 0;
 
-	ret = dit_init(NULL, DIT_INIT_DEINIT, DIT_STORE_BACKUP);
+	ret = dit_reg_backup_restore(true);
 	if (ret) {
-		mif_err("do_suspend failed ret:%d\n", ret);
+		mif_err("reg backup failed ret:%d\n", ret);
+		return ret;
+	}
+
+	ret = dit_init(NULL, DIT_INIT_DEINIT);
+	if (ret) {
+		mif_err("deinit failed ret:%d\n", ret);
 		return ret;
 	}
 
@@ -2645,25 +2664,26 @@ static int dit_resume(struct device *dev)
 	struct dit_ctrl_t *dc = dev_get_drvdata(dev);
 	int ret;
 
-	if (unlikely(!dc)) {
-		mif_err_limited("dc is null\n");
-		return -EPERM;
-	}
-
-	if (unlikely(!dc->ld)) {
-		mif_err_limited("dc->ld is null\n");
-		return -EPERM;
-	}
+	if (unlikely(!dc) || unlikely(!dc->ld))
+		return 0;
 
 	dit_set_irq_affinity(dc->irq_affinity);
 
-	ret = dit_init(NULL, DIT_INIT_NORMAL, DIT_STORE_RESTORE);
+	ret = dit_init(NULL, DIT_INIT_NORMAL);
 	if (ret) {
+		unsigned int dir;
+
 		mif_err("init failed ret:%d\n", ret);
 		for (dir = 0; dir < DIT_DIR_MAX; dir++) {
 			if (dit_is_busy(dir))
 				mif_err("busy (dir:%d)\n", dir);
 		}
+		return ret;
+	}
+
+	ret = dit_reg_backup_restore(false);
+	if (ret) {
+		mif_err("reg restore failed ret:%d\n", ret);
 		return ret;
 	}
 
