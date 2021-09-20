@@ -514,7 +514,7 @@ static void tpmon_set_gro(struct tpmon_data *data)
 	}
 #endif
 
-	mif_info("%s (flush timeout:%u)\n", data->name, timeout);
+	mif_info("%s (flush timeout:%ld)\n", data->name, timeout);
 }
 
 /* IRQ affinity */

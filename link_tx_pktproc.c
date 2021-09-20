@@ -167,7 +167,7 @@ static ssize_t region_show(struct device *dev, struct device_attribute *attr,
 	ssize_t count = 0;
 	int i;
 
-	count += scnprintf(&buf[count], PAGE_SIZE - count, "CP base:0x%08lx\n", ppa_ul->cp_base);
+	count += scnprintf(&buf[count], PAGE_SIZE - count, "CP base:0x%08llx\n", ppa_ul->cp_base);
 	count += scnprintf(&buf[count], PAGE_SIZE - count, "Num of queue:%d\n", ppa_ul->num_queue);
 	count += scnprintf(&buf[count], PAGE_SIZE - count, "HW cache coherency:%d\n",
 			ppa_ul->use_hw_iocc);
@@ -309,7 +309,7 @@ int pktproc_init_ul(struct pktproc_adaptor_ul *ppa_ul)
 
 		atomic_set(&q->active, 1);
 		atomic_set(&q->busy, 0);
-		mif_info("num_desc:0x%08x cp_desc_pbase:0x%08lx cp_buff_pbase:0x%08lx\n",
+		mif_info("num_desc:0x%08x cp_desc_pbase:0x%08llx cp_buff_pbase:0x%08llx\n",
 			q->num_desc, q->cp_desc_pbase, q->cp_buff_pbase);
 		mif_info("fore:%d rear:%d\n",
 			q->q_info->fore_ptr, q->q_info->rear_ptr);
@@ -334,7 +334,7 @@ static int pktproc_get_info_ul(struct pktproc_adaptor_ul *ppa_ul,
 	mif_dt_read_u32(np, "pktproc_ul_buff_rgn_cached", ppa_ul->buff_rgn_cached);
 	mif_dt_read_u32(np, "pktproc_ul_padding_required",
 			ppa_ul->padding_required);
-	mif_info("cp_base:0x%08lx num_queue:%d max_packet_size:%d hiprio_ack_only:%d iocc:%d\n",
+	mif_info("cp_base:0x%08llx num_queue:%d max_packet_size:%d hiprio_ack_only:%d iocc:%d\n",
 		 ppa_ul->cp_base, ppa_ul->num_queue, ppa_ul->default_max_packet_size,
 		 ppa_ul->hiprio_ack_only, ppa_ul->use_hw_iocc);
 	mif_info("cached: %d/%d/%d padding_required:%d\n", ppa_ul->info_rgn_cached,
@@ -353,7 +353,7 @@ static int pktproc_get_info_ul(struct pktproc_adaptor_ul *ppa_ul,
 			ppa_ul->buff_rgn_offset);
 	mif_dt_read_u32(np, "pktproc_ul_buff_rgn_size",
 			ppa_ul->buff_rgn_size);
-	mif_info("info_rgn 0x%08x 0x%08x desc_rgn 0x%08x 0x%08x buff_rgn 0x%08x 0x%08x\n",
+	mif_info("info_rgn 0x%08lx 0x%08lx desc_rgn 0x%08lx 0x%08lx buff_rgn 0x%08lx 0x%08lx\n",
 		ppa_ul->info_rgn_offset, ppa_ul->info_rgn_size,	ppa_ul->desc_rgn_offset,
 		ppa_ul->desc_rgn_size, ppa_ul->buff_rgn_offset, ppa_ul->buff_rgn_size);
 
@@ -474,7 +474,7 @@ int pktproc_create_ul(struct platform_device *pdev, struct mem_link_device *mld,
 	memset(ppa_ul->info_vbase, 0, ppa_ul->info_rgn_size);
 	memset(ppa_ul->desc_vbase, 0, ppa_ul->desc_rgn_size);
 
-	mif_info("info + desc size:0x%08x\n",
+	mif_info("info + desc size:0x%08lx\n",
 			ppa_ul->info_rgn_size + ppa_ul->desc_rgn_size);
 
 	buff_size = ppa_ul->buff_rgn_size;
@@ -575,9 +575,9 @@ int pktproc_create_ul(struct platform_device *pdev, struct mem_link_device *mld,
 
 		last_q_desc_offset += q->desc_size;
 
-		mif_info("num_desc:%d desc_offset:0x%08lx desc_size:0x%08x\n",
+		mif_info("num_desc:%d desc_offset:0x%08llx desc_size:0x%08x\n",
 			q->num_desc, q->cp_desc_pbase, q->desc_size);
-		mif_info("buff_offset:0x%08lx buff_size:0x%08x\n",
+		mif_info("buff_offset:0x%08llx buff_size:0x%08x\n",
 			q->cp_buff_pbase, q->q_buff_size);
 
 #if IS_ENABLED(CONFIG_EXYNOS_DIT)
