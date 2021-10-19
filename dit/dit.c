@@ -1459,7 +1459,6 @@ static int dit_reg_backup_restore_internal(bool backup, const u16 *offset,
 					   const u16 *size, void **buf,
 					   const unsigned int arr_len)
 {
-	unsigned long flags;
 	unsigned int i;
 	int ret = 0;
 
@@ -1472,18 +1471,10 @@ static int dit_reg_backup_restore_internal(bool backup, const u16 *offset,
 			}
 		}
 
-		spin_lock_irqsave(&dc->src_lock, flags);
-		if (dit_is_kicked_any() || !dc->init_done) {
-			ret = -EAGAIN;
-			spin_unlock_irqrestore(&dc->src_lock, flags);
-			goto exit;
-		}
-
 		if (backup)
 			BACKUP_REG_VALUE(dc, buf[i], offset[i], size[i]);
 		else
 			RESTORE_REG_VALUE(dc, buf[i], offset[i], size[i]);
-		spin_unlock_irqrestore(&dc->src_lock, flags);
 	}
 
 exit:
@@ -2728,13 +2719,7 @@ static int dit_suspend(struct device *dev)
 	if (unlikely(!dc) || unlikely(!dc->ld))
 		return 0;
 
-	ret = dit_reg_backup_restore(true);
-	if (ret) {
-		mif_err("reg backup failed ret:%d\n", ret);
-		return ret;
-	}
-
-	ret = dit_init(NULL, DIT_INIT_DEINIT);
+	ret = dit_init(NULL, DIT_INIT_DEINIT, DIT_STORE_BACKUP);
 	if (ret) {
 		mif_err("deinit failed ret:%d\n", ret);
 		return ret;
@@ -2753,7 +2738,7 @@ static int dit_resume(struct device *dev)
 
 	dit_set_irq_affinity(dc->irq_affinity);
 
-	ret = dit_init(NULL, DIT_INIT_NORMAL);
+	ret = dit_init(NULL, DIT_INIT_NORMAL, DIT_STORE_RESTORE);
 	if (ret) {
 		unsigned int dir;
 
@@ -2762,12 +2747,6 @@ static int dit_resume(struct device *dev)
 			if (dit_is_busy(dir))
 				mif_err("busy (dir:%d)\n", dir);
 		}
-		return ret;
-	}
-
-	ret = dit_reg_backup_restore(false);
-	if (ret) {
-		mif_err("reg restore failed ret:%d\n", ret);
 		return ret;
 	}
 
