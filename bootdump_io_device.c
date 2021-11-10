@@ -222,9 +222,6 @@ static long bootdump_ioctl(struct file *filp, unsigned int cmd, unsigned long ar
 			return -EINVAL;
 		}
 
-		if (ld->reset_zerocopy)
-			ld->reset_zerocopy(ld);
-
 		return ret;
 	}
 
