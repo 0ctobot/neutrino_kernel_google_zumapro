@@ -719,10 +719,16 @@ static int power_on_cp(struct modem_ctl *mc)
 	mif_gpio_set_value(&mc->cp_gpio[CP_GPIO_AP2CP_NRESET], 0, 50);
 #if IS_ENABLED(CONFIG_CP_WRESET_WA)
 	mif_gpio_set_value(&mc->cp_gpio[CP_GPIO_AP2CP_CP_PWR], 0, 0);
-	udelay(100);
+	udelay(50);
+#else
+	mif_gpio_set_value(&mc->cp_gpio[CP_GPIO_AP2CP_CP_PWR], 0, 50);
 #endif
 	mif_gpio_set_value(&mc->cp_gpio[CP_GPIO_AP2CP_CP_PWR], 1, 50);
 	mif_gpio_set_value(&mc->cp_gpio[CP_GPIO_AP2CP_NRESET], 1, 50);
+#if !IS_ENABLED(CONFIG_CP_WRESET_WA)
+	mif_gpio_set_value(&mc->cp_gpio[CP_GPIO_AP2CP_CP_WRST_N], 1, 0);
+	mif_gpio_set_value(&mc->cp_gpio[CP_GPIO_AP2CP_PM_WRST_N], 1, 0);
+#endif
 
 	mif_info("GPIO status after S5100 Power on\n");
 	print_mc_state(mc);
@@ -745,6 +751,10 @@ static int power_off_cp(struct modem_ctl *mc)
 
 	mif_gpio_set_value(&mc->cp_gpio[CP_GPIO_AP2CP_NRESET], 0, 0);
 	mif_gpio_set_value(&mc->cp_gpio[CP_GPIO_AP2CP_CP_PWR], 0, 0);
+#if !IS_ENABLED(CONFIG_CP_WRESET_WA)
+	mif_gpio_set_value(&mc->cp_gpio[CP_GPIO_AP2CP_CP_WRST_N], 0, 0);
+	mif_gpio_set_value(&mc->cp_gpio[CP_GPIO_AP2CP_PM_WRST_N], 0, 0);
+#endif
 
 	print_mc_state(mc);
 
@@ -778,6 +788,10 @@ static int power_shutdown_cp(struct modem_ctl *mc)
 
 	mif_gpio_set_value(&mc->cp_gpio[CP_GPIO_AP2CP_NRESET], 0, 0);
 	mif_gpio_set_value(&mc->cp_gpio[CP_GPIO_AP2CP_CP_PWR], 0, 0);
+#if !IS_ENABLED(CONFIG_CP_WRESET_WA)
+	mif_gpio_set_value(&mc->cp_gpio[CP_GPIO_AP2CP_CP_WRST_N], 0, 0);
+	mif_gpio_set_value(&mc->cp_gpio[CP_GPIO_AP2CP_PM_WRST_N], 0, 0);
+#endif
 
 	print_mc_state(mc);
 
@@ -822,18 +836,28 @@ static int power_reset_dump_cp(struct modem_ctl *mc)
 #endif
 
 	mif_info("s5100_cp_reset_required:%d\n", mc->s5100_cp_reset_required);
-	if (mc->s5100_cp_reset_required == true) {
+	if (mc->s5100_cp_reset_required) {
 		mif_gpio_set_value(&mc->cp_gpio[CP_GPIO_AP2CP_NRESET], 0, 50);
 #if IS_ENABLED(CONFIG_CP_WRESET_WA)
 		mif_gpio_set_value(&mc->cp_gpio[CP_GPIO_AP2CP_CP_PWR], 0, 0);
 		udelay(100);
 		mif_gpio_set_value(&mc->cp_gpio[CP_GPIO_AP2CP_CP_PWR], 1, 50);
+#else
+		mif_gpio_set_value(&mc->cp_gpio[CP_GPIO_AP2CP_CP_PWR], 0, 50);
+		mif_gpio_set_value(&mc->cp_gpio[CP_GPIO_AP2CP_CP_PWR], 1, 50);
 #endif
 		mif_gpio_set_value(&mc->cp_gpio[CP_GPIO_AP2CP_NRESET], 1, 50);
-		print_mc_state(mc);
+	} else {
+#if !IS_ENABLED(CONFIG_CP_WRESET_WA)
+		mif_gpio_set_value(&mc->cp_gpio[CP_GPIO_AP2CP_CP_WRST_N], 0, 50);
+		mif_gpio_set_value(&mc->cp_gpio[CP_GPIO_AP2CP_PM_WRST_N], 0, 50);
+		mif_gpio_set_value(&mc->cp_gpio[CP_GPIO_AP2CP_PM_WRST_N], 1, 50);
+		mif_gpio_set_value(&mc->cp_gpio[CP_GPIO_AP2CP_CP_WRST_N], 1, 50);
+#endif
 	}
 
 	mif_gpio_set_value(&mc->cp_gpio[CP_GPIO_AP2CP_AP_ACTIVE], 1, 0);
+	print_mc_state(mc);
 
 	mif_info("---\n");
 
@@ -867,6 +891,9 @@ static int power_reset_cp(struct modem_ctl *mc)
 #if IS_ENABLED(CONFIG_CP_WRESET_WA)
 	mif_gpio_set_value(&mc->cp_gpio[CP_GPIO_AP2CP_CP_PWR], 0, 0);
 	udelay(100);
+	mif_gpio_set_value(&mc->cp_gpio[CP_GPIO_AP2CP_CP_PWR], 1, 50);
+#else
+	mif_gpio_set_value(&mc->cp_gpio[CP_GPIO_AP2CP_CP_PWR], 0, 50);
 	mif_gpio_set_value(&mc->cp_gpio[CP_GPIO_AP2CP_CP_PWR], 1, 50);
 #endif
 	mif_gpio_set_value(&mc->cp_gpio[CP_GPIO_AP2CP_NRESET], 1, 50);
@@ -1631,6 +1658,10 @@ static int s5100_get_pdata(struct modem_ctl *mc, struct modem_data *pdata)
 	mc->cp_gpio[CP_GPIO_AP2CP_WAKEUP].label = "AP2CP_WAKEUP";
 	mc->cp_gpio[CP_GPIO_AP2CP_DUMP_NOTI].label = "AP2CP_DUMP_NOTI";
 	mc->cp_gpio[CP_GPIO_AP2CP_AP_ACTIVE].label = "AP2CP_AP_ACTIVE";
+#if !IS_ENABLED(CONFIG_CP_WRESET_WA)
+	mc->cp_gpio[CP_GPIO_AP2CP_CP_WRST_N].label = "AP2CP_CP_WRST_N";
+	mc->cp_gpio[CP_GPIO_AP2CP_PM_WRST_N].label = "AP2CP_PM_WRST_N";
+#endif
 	mc->cp_gpio[CP_GPIO_CP2AP_PS_HOLD].label = "CP2AP_PS_HOLD";
 	mc->cp_gpio[CP_GPIO_CP2AP_WAKEUP].label = "CP2AP_WAKEUP";
 	mc->cp_gpio[CP_GPIO_CP2AP_CP_ACTIVE].label = "CP2AP_CP_ACTIVE";
@@ -1641,6 +1672,10 @@ static int s5100_get_pdata(struct modem_ctl *mc, struct modem_data *pdata)
 	mc->cp_gpio[CP_GPIO_AP2CP_WAKEUP].node_name = "gpio_ap2cp_wake_up";
 	mc->cp_gpio[CP_GPIO_AP2CP_DUMP_NOTI].node_name = "gpio_ap2cp_dump_noti";
 	mc->cp_gpio[CP_GPIO_AP2CP_AP_ACTIVE].node_name = "gpio_ap2cp_pda_active";
+#if !IS_ENABLED(CONFIG_CP_WRESET_WA)
+	mc->cp_gpio[CP_GPIO_AP2CP_CP_WRST_N].node_name = "gpio_ap2cp_cp_wrst_n";
+	mc->cp_gpio[CP_GPIO_AP2CP_PM_WRST_N].node_name = "gpio_ap2cp_pm_wrst_n";
+#endif
 	mc->cp_gpio[CP_GPIO_CP2AP_PS_HOLD].node_name = "gpio_cp2ap_cp_ps_hold";
 	mc->cp_gpio[CP_GPIO_CP2AP_WAKEUP].node_name = "gpio_cp2ap_wake_up";
 	mc->cp_gpio[CP_GPIO_CP2AP_CP_ACTIVE].node_name = "gpio_cp2ap_phone_active";
