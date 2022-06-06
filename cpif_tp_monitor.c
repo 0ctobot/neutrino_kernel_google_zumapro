@@ -163,10 +163,13 @@ static void calc_rx_speed_internal(struct cpif_tpmon *tpmon,
 
 	/* mbps 131072 = 1024 * 1024 / 8 */
 	/* kbps 128 = 1024 / 8 */
-	divider_mbps = 131072 * tpmon->monitor_interval_msec / 1000;
-	divider_mbps *= tpmon->rx_bytes_valid_cnt;
-	divider_kbps = 128 * tpmon->monitor_interval_msec / 1000;
-	divider_kbps *= tpmon->rx_bytes_valid_cnt;
+	if (tpmon->monitor_interval_msec >= 1000) {
+		divider_mbps = 131072 * tpmon->monitor_interval_msec / 1000;
+		divider_kbps = 128 * tpmon->monitor_interval_msec / 1000;
+	} else {
+		divider_mbps = 131072;
+		divider_kbps = 128;
+	}
 
 	spin_lock_irqsave(&tpmon->lock, flags);
 	rx_bytes = rx_data->rx_bytes;
@@ -178,14 +181,17 @@ static void calc_rx_speed_internal(struct cpif_tpmon *tpmon,
 	rx_data->rx_bytes_data[rx_data->rx_bytes_idx] = rx_bytes;
 
 	rx_data->rx_bytes_idx++;
-	rx_data->rx_bytes_idx %= tpmon->rx_bytes_len;
+	if (tpmon->monitor_interval_msec >= 1000)
+		rx_data->rx_bytes_idx = 0;
+	else
+		rx_data->rx_bytes_idx %= (1000 / tpmon->monitor_interval_msec);
 
-	if (!divider_mbps || rx_data->rx_sum < divider_mbps)
+	if (rx_data->rx_sum < divider_mbps)
 		rx_data->rx_mbps = 0;
 	else
 		rx_data->rx_mbps = rx_data->rx_sum / divider_mbps;
 
-	if (!divider_kbps || rx_data->rx_sum < divider_kbps)
+	if (rx_data->rx_sum < divider_kbps)
 		rx_data->rx_kbps = 0;
 	else
 		rx_data->rx_kbps = rx_data->rx_sum / divider_kbps;
@@ -193,19 +199,10 @@ static void calc_rx_speed_internal(struct cpif_tpmon *tpmon,
 
 static void tpmon_calc_rx_speed(struct cpif_tpmon *tpmon)
 {
-	unsigned long flags;
-
-	if (tpmon->rx_bytes_valid_cnt < tpmon->rx_bytes_len)
-		tpmon->rx_bytes_valid_cnt++;
-
 	calc_rx_speed_internal(tpmon, &tpmon->rx_total);
 	calc_rx_speed_internal(tpmon, &tpmon->rx_tcp);
 	calc_rx_speed_internal(tpmon, &tpmon->rx_udp);
 	calc_rx_speed_internal(tpmon, &tpmon->rx_others);
-
-	spin_lock_irqsave(&tpmon->lock, flags);
-	tpmon->rx_bytes_skip_add = false;
-	spin_unlock_irqrestore(&tpmon->lock, flags);
 }
 
 /* Inforamtion */
@@ -833,8 +830,6 @@ void tpmon_add_rx_bytes(struct sk_buff *skb)
 	}
 
 	spin_lock_irqsave(&tpmon->lock, flags);
-	if (tpmon->rx_bytes_skip_add)
-		goto skip_add;
 
 	tpmon->rx_total.rx_bytes += skb->len;
 
@@ -850,7 +845,6 @@ void tpmon_add_rx_bytes(struct sk_buff *skb)
 		break;
 	}
 
-skip_add:
 	spin_unlock_irqrestore(&tpmon->lock, flags);
 }
 EXPORT_SYMBOL(tpmon_add_rx_bytes);
@@ -905,8 +899,6 @@ static int tpmon_init_params(struct cpif_tpmon *tpmon)
 	tpmon->legacy_packet_count = 0;
 
 	tpmon->jiffies_to_trigger = 0;
-	tpmon->rx_bytes_len = (MAX_RX_BYTES_COUNT / tpmon->monitor_interval_msec) ?: 1;
-	tpmon->rx_bytes_valid_cnt = tpmon->rx_bytes_len;
 
 	atomic_set(&tpmon->need_urgent, 0);
 	tpmon->urgent_active = false;
@@ -967,7 +959,6 @@ static bool tpmon_check_to_start(struct cpif_tpmon *tpmon)
 {
 	u64 jiffies_curr;
 	u64 delta_msec;
-	unsigned long flags;
 
 	jiffies_curr = get_jiffies_64();
 	if (!tpmon->jiffies_to_trigger) {
@@ -990,7 +981,7 @@ static bool tpmon_check_to_start(struct cpif_tpmon *tpmon)
 		return false;
 	}
 
-	if (!delta_msec || delta_msec < tpmon->trigger_msec_min)
+	if (delta_msec < tpmon->trigger_msec_min)
 		return false;
 
 	if (delta_msec >= 1000) {
@@ -1020,22 +1011,6 @@ static bool tpmon_check_to_start(struct cpif_tpmon *tpmon)
 	}
 
 	mif_info("trigger@%ldMbps\n", tpmon->rx_total.rx_mbps);
-
-	spin_lock_irqsave(&tpmon->lock, flags);
-	tpmon->rx_bytes_skip_add = true;
-
-	/* Normalize rx_bytes by interval */
-	tpmon->rx_total.rx_bytes *= tpmon->monitor_interval_msec;
-	tpmon->rx_total.rx_bytes /= delta_msec;
-	tpmon->rx_tcp.rx_bytes *= tpmon->monitor_interval_msec;
-	tpmon->rx_tcp.rx_bytes /= delta_msec;
-	tpmon->rx_udp.rx_bytes *= tpmon->monitor_interval_msec;
-	tpmon->rx_udp.rx_bytes /= delta_msec;
-	tpmon->rx_others.rx_bytes *= tpmon->monitor_interval_msec;
-	tpmon->rx_others.rx_bytes /= delta_msec;
-	spin_unlock_irqrestore(&tpmon->lock, flags);
-
-	tpmon->rx_bytes_valid_cnt = 0;
 
 	return true;
 }
