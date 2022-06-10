@@ -9,7 +9,7 @@
 
 #include <linux/types.h>
 #include <linux/kfifo.h>
-#include "../modem_v1.h"
+#include "modem_v1.h"
 #include "circ_queue.h"
 
 /*

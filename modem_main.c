@@ -35,8 +35,8 @@
 #include <net/ipv6.h>
 
 #if IS_ENABLED(CONFIG_LINK_DEVICE_SHMEM)
-#include <soc/google/shm_ipc.h>
-#include <soc/google/mcu_ipc.h>
+#include <linux/shm_ipc.h>
+#include "mcu_ipc.h"
 #endif
 
 #include <soc/google/exynos-modem-ctrl.h>

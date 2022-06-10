@@ -706,6 +706,7 @@ struct modem_ctl {
 #endif
 
 	struct notifier_block send_panic_nb;
+	struct notifier_block abox_call_state_nb;
 
 	struct modemctl_ops ops;
 	struct io_device *iod;

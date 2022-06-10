@@ -150,6 +150,8 @@ send_doorbell_again:
 			goto send_doorbell_again;
 		}
 		mif_err("[Need to CHECK] Can't send doorbell int (0x%x)\n", reg);
+		pci_read_config_dword(pdev, PCI_BASE_ADDRESS_0, &reg);
+		mif_err("Check BAR0 register : %#x\n", reg);
 		exynos_pcie_rc_register_dump(s51xx_pcie->pcie_channel_num);
 
 		return -EAGAIN;
@@ -216,9 +218,6 @@ void s51xx_pcie_save_state(struct pci_dev *pdev)
 void s51xx_pcie_restore_state(struct pci_dev *pdev)
 {
 	struct s51xx_pcie *s51xx_pcie = pci_get_drvdata(pdev);
-	struct pci_driver *driver = pdev->driver;
-	struct modem_ctl *mc = container_of(driver, struct modem_ctl, pci_driver);
-
 	int ret;
 	u32 val;
 
@@ -249,6 +248,8 @@ void s51xx_pcie_restore_state(struct pci_dev *pdev)
 
 	if (ret)
 		mif_err("Can't enable PCIe Device after linkup!\n");
+
+	dev_info(&pdev->dev, "[%s] PCIe RC bme bit setting\n", __func__);
 	pci_set_master(pdev);
 
 	/* DBG: print out EP config values after restore_state */
@@ -256,21 +257,17 @@ void s51xx_pcie_restore_state(struct pci_dev *pdev)
 
 	/* BAR0 value correction  */
 	pci_read_config_dword(pdev, PCI_BASE_ADDRESS_0, &val);
-	dev_dbg(&pdev->dev, "restored:PCI_BASE_ADDRESS_0 = 0x%x\n", val);
-	if (val != s51xx_pcie->dbaddr_base) {
-		pci_write_config_dword(pdev, PCI_BASE_ADDRESS_0, s51xx_pcie->dbaddr_base);
+	dev_dbg(&pdev->dev, "restored:PCI_BASE_ADDRESS_0 = %#x\n", val);
+	if ((val & PCI_BASE_ADDRESS_MEM_MASK) != s51xx_pcie->dbaddr_changed_base) {
+		pci_write_config_dword(pdev, PCI_BASE_ADDRESS_0,
+					s51xx_pcie->dbaddr_changed_base);
 		pci_write_config_dword(pdev, PCI_BASE_ADDRESS_1, 0x0);
-		mif_info("write BAR0 value:  0x%x\n", s51xx_pcie->dbaddr_base);
+		mif_info("write BAR0 value: %#x\n", s51xx_pcie->dbaddr_changed_base);
 		s51xx_pcie_chk_ep_conf(pdev);
 	}
 
 	/* Enable L1.2 after PCIe power on */
-	if (mc->phone_state == STATE_CRASH_EXIT) {
-		pr_err("Disable L1.2 on CP CRASH!!!\n");
-		s51xx_pcie_l1ss_ctrl(0, s51xx_pcie->pcie_channel_num);
-	} else {
-		s51xx_pcie_l1ss_ctrl(1, s51xx_pcie->pcie_channel_num);
-	}
+	s51xx_pcie_l1ss_ctrl(1, s51xx_pcie->pcie_channel_num);
 
 	s51xx_pcie->link_status = 1;
 	/* pci_pme_active(s51xx_pcie.s51xx_pdev, 1); */
@@ -368,6 +365,7 @@ static int s51xx_pcie_probe(struct pci_dev *pdev, const struct pci_device_id *en
 	pci_read_config_dword(pdev, PCI_BASE_ADDRESS_0, &val);
 	val &= PCI_BASE_ADDRESS_MEM_MASK;
 	s51xx_pcie->dbaddr_offset = db_addr - val;
+	s51xx_pcie->dbaddr_changed_base = val;
 	dev_info(dev, "db_addr : 0x%x , val : 0x%x, offset : 0x%x\n",
 			db_addr, val, (unsigned int)s51xx_pcie->dbaddr_offset);
 
@@ -385,7 +383,7 @@ static int s51xx_pcie_probe(struct pci_dev *pdev, const struct pci_device_id *en
 	pdev->resource[0].end = val + SZ_4K;
 	pdev->resource[0].flags = 0x82000000;
 	if (pci_assign_resource(pdev, 0))
-			pr_warn("%s: failed to assign EP BAR0 pci resource\n", __func__);
+		pr_warn("%s: failed to assign EP BAR0 pci resource\n", __func__);
 
 	/* get Doorbell base address from root bus range */
 	tmp_rsc = bus_self->resource + resno;

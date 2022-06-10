@@ -8,7 +8,7 @@
 #define __EXYNOS_IPC_H__
 
 #include <linux/types.h>
-#include "../modem_v1.h"
+#include "modem_v1.h"
 
 #define SHM_BOOT_MAGIC		0xBDBD
 #define SHM_DUMP_MAGIC		0xBDBD

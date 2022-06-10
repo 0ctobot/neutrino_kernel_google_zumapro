@@ -32,7 +32,6 @@
 #include <linux/bitops.h>
 #include <soc/google/exynos-modem-ctrl.h>
 
-#include <soc/google/acpm_ipc_ctrl.h>
 #include "modem_prj.h"
 #include "modem_utils.h"
 #include "cpif_version.h"

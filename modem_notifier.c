@@ -10,7 +10,7 @@
 #include <linux/module.h>
 #include <linux/notifier.h>
 
-#include <soc/google/modem_notifier.h>
+#include "modem_notifier.h"
 #include "modem_prj.h"
 #include "modem_utils.h"
 
@@ -30,8 +30,7 @@ EXPORT_SYMBOL(register_modem_event_notifier);
 
 void modem_notify_event(enum modem_event evt, void *mc)
 {
-	mif_info("event notify (%d)\n", evt);
-	raw_notifier_call_chain(&modem_event_notifier, evt, mc);
+	/* ToDo */
 }
 EXPORT_SYMBOL(modem_notify_event);
 

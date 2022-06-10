@@ -5,7 +5,7 @@
  */
 
 #include <asm/cacheflush.h>
-#include <soc/google/shm_ipc.h>
+#include <linux/shm_ipc.h>
 #include "modem_prj.h"
 #include "modem_utils.h"
 #include "link_device_memory.h"
@@ -404,6 +404,7 @@ int pktproc_create_ul(struct platform_device *pdev, struct mem_link_device *mld,
 		return ret;
 	}
 
+#if !IS_ENABLED(CONFIG_LINK_DEVICE_PCIE_IOCC)
 	if (!ppa_ul->use_hw_iocc && ppa_ul->info_rgn_cached) {
 		mif_err("cannot support sw iocc based caching on info region\n");
 		return -EINVAL;
@@ -418,6 +419,7 @@ int pktproc_create_ul(struct platform_device *pdev, struct mem_link_device *mld,
 		mif_err("cannot support sw iocc based caching on buff region\n");
 		return -EINVAL;
 	}
+#endif
 
 	/* Get base addr */
 	mif_info("memaddr:0x%lx memsize:0x%08x\n", memaddr, memsize);

@@ -12,8 +12,8 @@
 #include <linux/delay.h>
 #include <linux/of.h>
 #include <linux/of_gpio.h>
-#include <soc/google/mcu_ipc.h>
-#include <soc/google/shm_ipc.h>
+#include <linux/shm_ipc.h>
+#include "mcu_ipc.h"
 #include <soc/google/modem_notifier.h>
 #include <soc/google/cal-if.h>
 #include <soc/google/exynos-modem-ctrl.h>
@@ -624,11 +624,7 @@ static int trigger_cp_crash(struct modem_ctl *mc)
 
 	mif_info("+++\n");
 
-	if (ld->protocol == PROTOCOL_SIT &&
-			crash_type == CRASH_REASON_RIL_TRIGGER_CP_CRASH)
-		ld->link_trigger_cp_crash(mld, crash_type, ld->crash_reason.string);
-	else
-		ld->link_trigger_cp_crash(mld, crash_type, "Forced crash is called");
+	ld->link_trigger_cp_crash(mld, crash_type, "Forced crash is called");
 
 	mif_info("---\n");
 	return 0;

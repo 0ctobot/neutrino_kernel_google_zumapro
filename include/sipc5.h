@@ -8,7 +8,7 @@
 #define __SIPC5_H__
 
 #include <linux/types.h>
-#include "../modem_v1.h"
+#include "modem_v1.h"
 
 /* SIPC5 link-layer header */
 struct __packed sipc5_link_header {

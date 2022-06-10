@@ -14,6 +14,7 @@
 #include <linux/vmalloc.h>
 #include <linux/platform_device.h>
 #include <linux/kallsyms.h>
+#include <linux/shm_ipc.h>
 #include <linux/suspend.h>
 #include <linux/reboot.h>
 #include <linux/pci.h>
@@ -21,17 +22,16 @@
 #if IS_ENABLED(CONFIG_ECT)
 #include <soc/google/ect_parser.h>
 #endif
-#include <soc/google/shm_ipc.h>
-#include <soc/google/mcu_ipc.h>
-#include <soc/google/modem_notifier.h>
 #include <soc/google/cal-if.h>
 #include <linux/soc/samsung/exynos-smc.h>
 #include <trace/events/napi.h>
+#include "mcu_ipc.h"
 #include "modem_prj.h"
 #include "modem_utils.h"
 #include "link_device.h"
 #include "modem_dump.h"
 #include "modem_ctrl.h"
+#include "modem_notifier.h"
 #if IS_ENABLED(CONFIG_LINK_DEVICE_PCIE)
 #include "s51xx_pcie.h"
 #endif
@@ -3583,9 +3583,6 @@ static int set_ld_attr(struct platform_device *pdev,
 
 	ld->close_tx = shmem_close_tx;
 	ld->get_cp_crash_reason = get_cp_crash_reason;
-
-	ld->gro_flush = gro_flush_timer;
-	ld->update_flush_time = update_flush_time;
 
 	ld->protocol = modem->protocol;
 	ld->capability_check = modem->capability_check;

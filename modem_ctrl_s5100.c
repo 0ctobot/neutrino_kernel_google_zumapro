@@ -26,9 +26,9 @@
 #include <linux/panic_notifier.h>
 
 #include <linux/exynos-pci-ctrl.h>
-#include <soc/google/modem_notifier.h>
-#include <soc/google/shm_ipc.h>
+#include <linux/shm_ipc.h>
 
+#include "modem_notifier.h"
 #include "modem_prj.h"
 #include "modem_utils.h"
 #include "modem_ctrl.h"
@@ -326,7 +326,7 @@ static irqreturn_t cp_active_handler(int irq, void *data)
 		ld->crash_reason.type = CRASH_REASON_CP_ACT_CRASH;
 
 	mc->s5100_cp_reset_required = false;
-	mif_info("Set s5100_cp_reset_required to %u\n", mc->s5100_cp_reset_required);
+	mif_info("Set s5100_cp_reset_required to 0\n");
 
 	if (old_state != new_state) {
 		mif_err("new_state = %s\n", cp_state_str(new_state));
@@ -769,7 +769,6 @@ static void gpio_power_wreset_cp(struct modem_ctl *mc)
 #if !IS_ENABLED(CONFIG_CP_WRESET_WA)
 	mif_gpio_set_value(&mc->cp_gpio[CP_GPIO_AP2CP_CP_WRST_N], 0, 50);
 	mif_gpio_set_value(&mc->cp_gpio[CP_GPIO_AP2CP_PM_WRST_N], 0, 50);
-	mif_gpio_set_value(&mc->cp_gpio[CP_GPIO_AP2CP_PM_WRST_N], 1, 50);
 	mif_gpio_set_value(&mc->cp_gpio[CP_GPIO_AP2CP_CP_WRST_N], 1, 50);
 #endif
 }
@@ -1229,11 +1228,7 @@ static int trigger_cp_crash_internal(struct modem_ctl *mc)
 		mif_err("do not need to set dump_noti\n");
 	}
 
-	if (ld->protocol == PROTOCOL_SIT &&
-			crash_type == CRASH_REASON_RIL_TRIGGER_CP_CRASH)
-		ld->link_trigger_cp_crash(mld, crash_type, ld->crash_reason.string);
-	else
-		ld->link_trigger_cp_crash(mld, crash_type, "Forced crash is called");
+	ld->link_trigger_cp_crash(mld, crash_type, "Forced crash is called");
 
 exit:
 	mif_err("---\n");

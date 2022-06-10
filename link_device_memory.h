@@ -25,7 +25,7 @@
 #include <linux/mm.h>
 #include <asm/cacheflush.h>
 
-#include <soc/google/mcu_ipc.h>
+#include "mcu_ipc.h"
 #include "modem_prj.h"
 #include "include/circ_queue.h"
 #include "include/sbd.h"

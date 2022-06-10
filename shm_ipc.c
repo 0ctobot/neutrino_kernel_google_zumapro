@@ -13,7 +13,7 @@
 #include <linux/slab.h>
 #include <linux/of_reserved_mem.h>
 #include <linux/of_fdt.h>
-#include <soc/google/shm_ipc.h>
+#include <linux/shm_ipc.h>
 
 #include "modem_utils.h"
 
