@@ -1448,6 +1448,7 @@ static int tpmon_set_target(struct tpmon_data *data)
 #if IS_ENABLED(CONFIG_EXYNOS_PM_QOS)
 	struct cpif_tpmon *tpmon = data->tpmon;
 #endif
+	int ret = 0;
 
 	switch (data->target) {
 #if IS_ENABLED(CONFIG_RPS)
@@ -1513,12 +1514,10 @@ static int tpmon_set_target(struct tpmon_data *data)
 	case TPMON_TARGET_CPU_CL1_MAX:
 	case TPMON_TARGET_CPU_CL2:
 	case TPMON_TARGET_CPU_CL2_MAX:
-		{
-			int ret = tpmon_set_cpufreq(data);
-			if (ret) {
-				mif_err("tpmon_set_cpufreq() error:%d\n", ret);
-				return ret;
-			}
+		ret = tpmon_set_cpufreq(data);
+		if (ret) {
+			mif_err("tpmon_set_cpufreq() error:%d\n", ret);
+			return ret;
 		}
 		break;
 #endif
