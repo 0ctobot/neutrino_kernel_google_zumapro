@@ -225,6 +225,24 @@ static long bootdump_ioctl(struct file *filp, unsigned int cmd, unsigned long ar
 		mif_debug("%s: IOCTL_LOAD_CP_IMAGE\n", iod->name);
 		return ld->load_cp_image(ld, iod, arg);
 
+	case IOCTL_LOAD_GNSS_IMAGE:
+		if (!ld->load_gnss_image) {
+			mif_err("%s: load_gnss_image is null\n", iod->name);
+			return -EINVAL;
+		}
+
+		mif_info("%s: IOCTL_LOAD_GNSS_IMAGE\n", iod->name);
+		return ld->load_gnss_image(ld, iod, arg);
+
+	case IOCTL_READ_GNSS_IMAGE:
+		if (!ld->read_gnss_image) {
+			mif_err("%s: read_gnss_image is null\n", iod->name);
+			return -EINVAL;
+		}
+
+		mif_info("%s: IOCTL_READ_GNSS_IMAGE\n", iod->name);
+		return ld->read_gnss_image(ld, iod, arg);
+
 	case IOCTL_START_CP_BOOTLOADER:
 	{
 		void __user *uarg = (void __user *)arg;

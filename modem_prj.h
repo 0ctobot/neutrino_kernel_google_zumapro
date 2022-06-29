@@ -87,6 +87,14 @@ struct cp_image {
 } __packed;
 #define IOCTL_LOAD_CP_IMAGE		_IOW(IOCTL_MAGIC, 0x40, struct cp_image)
 
+struct gnss_image {
+	u32 firmware_size;
+	u32 offset;
+	char *firmware_bin;
+} __packed;
+#define IOCTL_LOAD_GNSS_IMAGE		_IOW(IOCTL_MAGIC, 0x41, struct gnss_image)
+#define IOCTL_READ_GNSS_IMAGE		_IOR(IOCTL_MAGIC, 0x42, struct gnss_image)
+
 #define IOCTL_GET_SRINFO		_IO(IOCTL_MAGIC, 0x45)
 #define IOCTL_SET_SRINFO		_IO(IOCTL_MAGIC, 0x46)
 #define IOCTL_GET_CP_BOOTLOG		_IO(IOCTL_MAGIC, 0x47)
@@ -475,6 +483,8 @@ struct link_device {
 
 	/* method for CP booting */
 	int (*load_cp_image)(struct link_device *ld, struct io_device *iod, unsigned long arg);
+	int (*load_gnss_image)(struct link_device *ld, struct io_device *iod, unsigned long arg);
+	int (*read_gnss_image)(struct link_device *ld, struct io_device *iod, unsigned long arg);
 	void (*link_prepare_normal_boot)(struct link_device *ld, struct io_device *iod);
 	int (*link_start_normal_boot)(struct link_device *ld, struct io_device *iod);
 

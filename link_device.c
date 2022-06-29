@@ -2088,6 +2088,78 @@ out:
 	return ret;
 }
 
+static int link_load_gnss_image(struct link_device *ld,
+	struct io_device *iod, unsigned long arg)
+{
+	struct gnss_image img;
+	void __iomem *dst;
+	void __user *src;
+
+	int ret = 0;
+	struct mem_link_device *mld = to_mem_link_device(ld);
+
+	memset(&img, 0, sizeof(struct gnss_image));
+
+	mif_info("Load GNSS images\n");
+
+	if (!mld->gnss_v_base) {
+		mld->gnss_v_base = cp_shmem_get_nc_region(
+			cp_shmem_get_base(0, SHMEM_GNSS_FW),
+			cp_shmem_get_size(0, SHMEM_GNSS_FW));
+		if (!mld->gnss_v_base) {
+			mif_err("cp_shmem_get_nc_region() fail\n");
+			return -ENOMEM;
+		}
+	}
+
+	ret = copy_from_user(&img, (const void __user *)arg, sizeof(img));
+	if (ret) {
+		mif_err("copy_from_user() fail:%d\n", ret);
+		return ret;
+	}
+
+	dst = (void __iomem *)(mld->gnss_v_base + img.offset);
+	src = (void __user *)((unsigned long)img.firmware_bin);
+	ret = copy_from_user_memcpy_toio(dst, src, img.firmware_size);
+	if (ret) {
+		mif_err("copy_from_user_memcpy_toio() fail:%d\n", ret);
+		return ret;
+	}
+
+	return ret;
+}
+
+static int link_read_gnss_image(struct link_device *ld,
+	struct io_device *iod, unsigned long arg)
+{
+	struct gnss_image img;
+	int err = 0;
+	struct mem_link_device *mld = to_mem_link_device(ld);
+
+	memset(&img, 0, sizeof(struct gnss_image));
+	err = copy_from_user(&img, (const void __user *)arg,
+			sizeof(struct gnss_image));
+	if (err) {
+		mif_err("copy_from_user fail:%d\n", err);
+		return err;
+	}
+
+	if (img.offset + img.firmware_size > cp_shmem_get_size(0, SHMEM_GNSS_FW)) {
+		mif_err("offset:%d size:%d error\n",
+			img.offset, img.firmware_size);
+		return -EFAULT;
+	}
+
+	err = copy_to_user(img.firmware_bin,
+		mld->gnss_v_base + img.offset, img.firmware_size);
+	if (err) {
+		mif_err("copy_to_user fail:%d\n", err);
+		return err;
+	}
+
+	return 0;
+}
+
 int shm_get_security_param2(u32 cp_num, unsigned long mode, u32 bl_size,
 		unsigned long *param)
 {
@@ -3595,6 +3667,11 @@ static int set_ld_attr(struct platform_device *pdev,
 				err = -ENODEV;
 				goto error;
 			}
+		}
+
+		if (mld->attrs & LINK_ATTR_XMIT_BTDLR_GNSS) {
+			ld->load_gnss_image = link_load_gnss_image;
+			ld->read_gnss_image = link_read_gnss_image;
 		}
 	} while (0);
 
