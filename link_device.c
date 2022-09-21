@@ -19,6 +19,7 @@
 #include <linux/reboot.h>
 #include <linux/pci.h>
 #include <linux/of_reserved_mem.h>
+#include <net/xfrm.h>
 #if IS_ENABLED(CONFIG_ECT)
 #include <soc/google/ect_parser.h>
 #endif
@@ -1233,6 +1234,7 @@ static int xmit_ipc_to_pktproc(struct mem_link_device *mld, struct sk_buff *skb)
 	struct pktproc_adaptor_ul *ppa_ul = &mld->pktproc_ul;
 	// Set the ul queue to high priority by default.
 	struct pktproc_queue_ul *q = ppa_ul->q[PKTPROC_UL_HIPRIO];
+	struct sec_path *sp = skb_sec_path(skb);
 	int len;
 	int ret = -EBUSY;
 	unsigned long flags;
@@ -1251,7 +1253,9 @@ static int xmit_ipc_to_pktproc(struct mem_link_device *mld, struct sk_buff *skb)
 	 * 4) If queue_mapping of skb is 1(high priority), and skb length larger then
 	 *    the maximum packet size of high priority queue, set queue to
 	 *    PKTPROC_UL_NORM.
-	 * 5) Check again if the skb length exceeds the maximum size of
+	 * 5) For any packets with IPsec headers, always use normal priority buffers.
+	 *    (b/247006240)
+	 * 6) Check again if the skb length exceeds the maximum size of
 	 *    PKTPROC_UL_NORM queue.
 	 */
 #if IS_ENABLED(CONFIG_CP_PKTPROC_UL_SINGLE_QUEUE)
@@ -1260,7 +1264,8 @@ static int xmit_ipc_to_pktproc(struct mem_link_device *mld, struct sk_buff *skb)
 	else
 #endif
 	if (skb->queue_mapping != 1 ||
-		(skb->queue_mapping == 1 && len > q->max_packet_size)) {
+		(skb->queue_mapping == 1 && len > q->max_packet_size) ||
+		(sp && sp->len > 0)) {
 		q = ppa_ul->q[PKTPROC_UL_NORM];
 		if (len > q->max_packet_size) {
 			mif_err_limited("ERR!PKTPROC UL QUEUE:%d skb len:%d too large (max:%u)\n",
