@@ -24,6 +24,7 @@
 #include <linux/time.h>
 #include <linux/timer.h>
 #include <linux/panic_notifier.h>
+#include <linux/s5910.h>
 
 #include <linux/exynos-pci-ctrl.h>
 #include <linux/shm_ipc.h>
@@ -862,6 +863,11 @@ static int power_shutdown_cp(struct modem_ctl *mc)
 			break;
 		}
 		msleep(20);
+	}
+
+	if (mc->s5910_dev) {
+		mif_gpio_set_value(&mc->cp_gpio[CP_GPIO_AP2CP_NRESET], 0, 50);
+		s5910_shutdown_sequence(mc->s5910_dev);
 	}
 
 	gpio_power_off_cp(mc);

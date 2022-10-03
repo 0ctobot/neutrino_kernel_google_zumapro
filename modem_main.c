@@ -34,6 +34,8 @@
 #include <linux/inet.h>
 #include <net/ipv6.h>
 
+#include <linux/s5910.h>
+
 #if IS_ENABLED(CONFIG_LINK_DEVICE_SHMEM)
 #include <linux/shm_ipc.h>
 #include "mcu_ipc.h"
@@ -776,6 +778,26 @@ static int cpif_probe(struct platform_device *pdev)
 		devm_kfree(dev, msd);
 		err = -ENOMEM;
 		goto fail;
+	}
+
+	/* get the s5910 node pointer */
+	modemctl->s5910_dev = NULL;
+	if (dev->of_node) {
+		struct device_node *np;
+		struct device *dp;
+		struct device_link *link;
+
+		np = of_parse_phandle(dev->of_node, "google,clk-buffer", 0);
+		if (np) {
+			dp = s5910_get_device(np);
+			if (dp) {
+				modemctl->s5910_dev = dp;
+				link = device_link_add(dev, dp, 0);
+				if (link)
+					mif_info("%s s5910 linked\n",
+							pdata->name);
+			}
+		}
 	}
 
 	if (toe_dev_create(pdev)) {

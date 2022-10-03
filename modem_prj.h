@@ -587,6 +587,7 @@ struct modem_ctl {
 	char *name;
 	struct modem_data *mdm_data;
 	struct modem_shared *msd;
+	struct device *s5910_dev;
 
 	enum modem_state phone_state;
 
