@@ -1019,6 +1019,8 @@ static int set_cp_rom_boot_img(struct mem_link_device *mld)
 
 	boot_img_addr = cp_shmem_get_base(modem->cp_num, SHMEM_IPC) + mld->boot_img_offset;
 
+	iowrite32(0x0,
+		  mld->msi_reg_base + offsetof(struct msi_reg_type, boot_stage));
 	iowrite32(PADDR_LO(boot_img_addr),
 		  mld->msi_reg_base + offsetof(struct msi_reg_type, img_addr_lo));
 	iowrite32(PADDR_HI(boot_img_addr),
