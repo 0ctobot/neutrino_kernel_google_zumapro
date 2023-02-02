@@ -4003,7 +4003,7 @@ struct link_device *create_link_device(struct platform_device *pdev, u32 link_ty
 		goto error;
 
 	init_dummy_netdev(&mld->dummy_net);
-	netif_napi_add(&mld->dummy_net, &mld->mld_napi, mld_rx_int_poll, NAPI_POLL_WEIGHT);
+	netif_napi_add_weight(&mld->dummy_net, &mld->mld_napi, mld_rx_int_poll, NAPI_POLL_WEIGHT);
 	napi_enable(&mld->mld_napi);
 
 	INIT_LIST_HEAD(&ld->list);

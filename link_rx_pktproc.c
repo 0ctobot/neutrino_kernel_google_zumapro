@@ -2050,7 +2050,7 @@ int pktproc_create(struct platform_device *pdev, struct mem_link_device *mld,
 		/* NAPI */
 		if (ppa->use_exclusive_irq) {
 			init_dummy_netdev(&q->netdev);
-			netif_napi_add(&q->netdev, &q->napi, pktproc_poll, NAPI_POLL_WEIGHT);
+			netif_napi_add_weight(&q->netdev, &q->napi, pktproc_poll, NAPI_POLL_WEIGHT);
 			napi_enable(&q->napi);
 			q->napi_ptr = &q->napi;
 		} else {

@@ -84,7 +84,7 @@ int dit_net_init(struct dit_ctrl_t *dc)
 	priv = netdev_priv(dev);
 	priv->dc = dc;
 
-	netif_napi_add(dc->netdev, &dc->napi, dit_read_rx_dst_poll, NAPI_POLL_WEIGHT);
+	netif_napi_add_weight(dc->netdev, &dc->napi, dit_read_rx_dst_poll, NAPI_POLL_WEIGHT);
 	napi_enable(&dc->napi);
 
 	return 0;
