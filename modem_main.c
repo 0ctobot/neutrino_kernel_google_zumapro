@@ -627,7 +627,7 @@ static int simslot_count(struct seq_file *m, void *v)
 
 static int simslot_count_open(struct inode *inode, struct file *file)
 {
-	return single_open(file, simslot_count, PDE_DATA(inode));
+	return single_open(file, simslot_count, pde_data(inode));
 }
 
 static const struct file_operations simslot_count_fops = {
