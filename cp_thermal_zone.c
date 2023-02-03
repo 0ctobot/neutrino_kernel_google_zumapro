@@ -77,10 +77,10 @@ static const struct attribute_group cp_temp_group = {
 	.attrs = cp_temp_attrs,
 };
 
-static int cp_sensor_get_temp(void *data, int *temp)
+static int cp_sensor_get_temp(struct thermal_zone_device *tz, int *temp)
 {
 	int ret = 0;
-	struct cp_temp_sensor *s = data;
+	struct cp_temp_sensor *s = tz->devdata;
 
 	if (s && s->valid)
 		*temp = s->temp;
@@ -90,7 +90,7 @@ static int cp_sensor_get_temp(void *data, int *temp)
 	return ret;
 }
 
-static struct thermal_zone_of_device_ops cp_thermal_zone_ops = { .get_temp = cp_sensor_get_temp };
+static struct thermal_zone_device_ops cp_thermal_zone_ops = { .get_temp = cp_sensor_get_temp };
 
 static int cp_thermal_zone_probe(struct platform_device *pdev)
 {
@@ -122,7 +122,7 @@ static int cp_thermal_zone_probe(struct platform_device *pdev)
 
 	for (i = 0; i < temp_manager->num_sensors; ++i) {
 		dev_info(dev, "Registering CP temp sensor %d", i);
-		tzd = devm_thermal_zone_of_sensor_register(dev, i, &temp_manager->sensor[i],
+		tzd = devm_thermal_of_zone_register(dev, i, &temp_manager->sensor[i],
 							   &cp_thermal_zone_ops);
 		if (IS_ERR(tzd)) {
 			dev_err(dev, "Error registering CP temperature sensor %d", i);
