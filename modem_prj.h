@@ -701,7 +701,7 @@ struct modem_ctl {
 	int pcie_pm_resume_gpio_val;
 	bool device_reboot;
 
-#if IS_ENABLED(CONFIG_SUSPEND_DURING_VOICE_CALL)
+#if IS_ENABLED(CONFIG_CPIF_AP_SUSPEND_DURING_VOICE_CALL)
 	bool pcie_voice_call_on;
 	struct work_struct call_on_work;
 	struct work_struct call_off_work;
