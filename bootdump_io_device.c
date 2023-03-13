@@ -191,7 +191,16 @@ static long bootdump_ioctl(struct file *filp, unsigned int cmd, unsigned long ar
 				mif_err("%s: power_reset_dump is null\n", iod->name);
 				return -EINVAL;
 			}
-			ret = mc->ops.power_reset_dump(mc);
+			ret = mc->ops.power_reset_dump(mc, 0);
+			break;
+
+		case CP_BOOT_MODE_SILENT:
+			mif_info("%s: silent mode\n", iod->name);
+			if (!mc->ops.power_reset_dump) {
+				mif_err("%s: power_reset_dump is null\n", iod->name);
+				return -EINVAL;
+			}
+			ret = mc->ops.power_reset_dump(mc, 1);
 			break;
 
 		default:
@@ -201,6 +210,14 @@ static long bootdump_ioctl(struct file *filp, unsigned int cmd, unsigned long ar
 
 		return ret;
 	}
+
+	case IOCTL_SILENT_RESET:
+		if (!mc->ops.silent_reset) {
+			mif_err("%s: silent_reset is null\n", iod->name);
+			return -EINVAL;
+		}
+		mif_info("%s: IOCTL_SILENT_RESET\n", iod->name);
+		return mc->ops.silent_reset(mc);
 
 	case IOCTL_REQ_SECURITY:
 		if (!ld->security_req) {

@@ -880,7 +880,7 @@ exit:
 	return 0;
 }
 
-static int power_reset_dump_cp(struct modem_ctl *mc)
+static int power_reset_dump_cp(struct modem_ctl *mc, bool silent)
 {
 	struct s51xx_pcie *s51xx_pcie = NULL;
 	struct link_device *ld = get_current_link(mc->iod);
@@ -910,7 +910,10 @@ static int power_reset_dump_cp(struct modem_ctl *mc)
 	if (mif_gpio_set_value(&mc->cp_gpio[CP_GPIO_AP2CP_DUMP_NOTI], 1, 10))
 		mif_gpio_toggle_value(&mc->cp_gpio[CP_GPIO_AP2CP_AP_ACTIVE], 50);
 #else
-	mif_gpio_set_value(&mc->cp_gpio[CP_GPIO_AP2CP_DUMP_NOTI], 1, 0);
+	if (silent)
+		mif_gpio_set_value(&mc->cp_gpio[CP_GPIO_AP2CP_DUMP_NOTI], 0, 0);
+	else
+		mif_gpio_set_value(&mc->cp_gpio[CP_GPIO_AP2CP_DUMP_NOTI], 1, 0);
 #endif
 
 	mif_info("s5100_cp_reset_required:%d\n", mc->s5100_cp_reset_required);
@@ -952,6 +955,55 @@ static int power_reset_cp(struct modem_ctl *mc)
 
 	gpio_power_offon_cp(mc);
 	print_mc_state(mc);
+
+	mif_info("---\n");
+
+	return 0;
+}
+
+static int silent_reset_cp(struct modem_ctl *mc)
+{
+	struct link_device *ld = get_current_link(mc->iod);
+	struct mem_link_device *mld = to_mem_link_device(ld);
+	int ret = 0;
+
+	mif_info("%s: +++\n", mc->name);
+
+	if (!cpif_wake_lock_active(mc->ws))
+		cpif_wake_lock(mc->ws);
+
+	mif_gpio_set_value(&mc->cp_gpio[CP_GPIO_AP2CP_DUMP_NOTI], 0, 0);
+
+	/* Clear shared memory */
+	init_ctrl_msg(&mld->ap2cp_msg);
+	init_ctrl_msg(&mld->cp2ap_msg);
+
+	if (init_control_messages(mc))
+		mif_err("Failed to initialize control messages\n");
+
+	/* 2cp dump WA */
+	if (timer_pending(&mld->crash_ack_timer))
+		del_timer(&mld->crash_ack_timer);
+	atomic_set(&mld->forced_cp_crash, 0);
+
+	mif_info("Set link mode to LINK_MODE_BOOT.\n");
+
+	if (ld->link_prepare_normal_boot)
+		ld->link_prepare_normal_boot(ld, mc->bootd);
+
+	change_modem_state(mc, STATE_BOOTING);
+	mc->phone_state = STATE_BOOTING;
+
+	if (ld->link_start_normal_boot) {
+		mif_info("link_start_normal_boot\n");
+		ld->link_start_normal_boot(ld, mc->iod);
+	}
+
+	ret = modem_ctrl_check_offset_data(mc);
+	if (ret) {
+		mif_err("modem_ctrl_check_offset_data() error:%d\n", ret);
+		return ret;
+	}
 
 	mif_info("---\n");
 
@@ -1718,6 +1770,7 @@ static void s5100_get_ops(struct modem_ctl *mc)
 	mc->ops.power_shutdown = power_shutdown_cp;
 	mc->ops.power_reset = power_reset_cp;
 	mc->ops.power_reset_dump = power_reset_dump_cp;
+	mc->ops.silent_reset = silent_reset_cp;
 
 	mc->ops.start_normal_boot = start_normal_boot;
 	mc->ops.complete_normal_boot = complete_normal_boot;

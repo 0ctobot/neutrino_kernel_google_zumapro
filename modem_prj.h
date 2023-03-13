@@ -61,6 +61,7 @@ enum cp_boot_mode {
 	CP_BOOT_MODE_NORMAL,
 	CP_BOOT_MODE_DUMP,
 	CP_BOOT_RE_INIT,
+	CP_BOOT_MODE_SILENT,
 	CP_BOOT_REQ_CP_RAM_LOGGING = 5,
 	CP_BOOT_MODE_MANUAL = 7,
 	CP_BOOT_EXT_BAAW = 11,
@@ -191,6 +192,8 @@ struct t_handover_block_info {
 #define IOCTL_SET_SPI_BOOT_MODE		_IO('o', 0x58)
 
 #define IOCTL_GET_OPENED_STATUS 	_IOR(IOCTL_MAGIC, 0x59, int)
+
+#define IOCTL_SILENT_RESET			_IO(IOCTL_MAGIC, 0x60)
 
 /*
  * Definitions for IO devices
@@ -535,7 +538,8 @@ struct modemctl_ops {
 	int (*power_off)(struct modem_ctl *mc);
 	int (*power_shutdown)(struct modem_ctl *mc);
 	int (*power_reset)(struct modem_ctl *mc);
-	int (*power_reset_dump)(struct modem_ctl *mc);
+	int (*power_reset_dump)(struct modem_ctl *mc, bool silent);
+	int (*silent_reset)(struct modem_ctl *mc);
 
 	int (*start_normal_boot)(struct modem_ctl *mc);
 	int (*complete_normal_boot)(struct modem_ctl *mc);
