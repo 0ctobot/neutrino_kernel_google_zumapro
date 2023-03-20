@@ -1361,7 +1361,7 @@ static int s5100_poweroff_pcie(struct modem_ctl *mc, bool force_off)
 
 	mutex_lock(&mc->pcie_onoff_lock);
 	mutex_lock(&mc->pcie_check_lock);
-	mif_info("+++\n");
+	mif_debug("+++\n");
 
 	if (!mc->pcie_powered_on &&
 			(s51xx_check_pcie_link_status(mc->pcie_ch_num) == 0)) {
@@ -1417,7 +1417,7 @@ static int s5100_poweroff_pcie(struct modem_ctl *mc, bool force_off)
 		cpif_wake_unlock(mc->ws);
 
 exit:
-	mif_info("---\n");
+	mif_debug("---\n");
 	mutex_unlock(&mc->pcie_check_lock);
 	mutex_unlock(&mc->pcie_onoff_lock);
 
