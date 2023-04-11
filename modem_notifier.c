@@ -15,7 +15,7 @@
 #include "modem_utils.h"
 
 static struct raw_notifier_head modem_event_notifier;
-#if IS_ENABLED(CONFIG_SUSPEND_DURING_VOICE_CALL)
+#if IS_ENABLED(CONFIG_CPIF_AP_SUSPEND_DURING_VOICE_CALL)
 static struct raw_notifier_head modem_voice_call_event_notifier;
 #endif
 
@@ -34,7 +34,7 @@ void modem_notify_event(enum modem_event evt, void *mc)
 }
 EXPORT_SYMBOL(modem_notify_event);
 
-#if IS_ENABLED(CONFIG_SUSPEND_DURING_VOICE_CALL)
+#if IS_ENABLED(CONFIG_CPIF_AP_SUSPEND_DURING_VOICE_CALL)
 int register_modem_voice_call_event_notifier(struct notifier_block *nb)
 {
 	if (!nb)

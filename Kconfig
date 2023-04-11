@@ -107,7 +107,7 @@ config MODEM_IF_LEGACY_QOS
 	help
 	  This enables QoS for legacy buffer model
 
-config SUSPEND_DURING_VOICE_CALL
+config CPIF_AP_SUSPEND_DURING_VOICE_CALL
 	bool "control wake_lock by voice call start/end notification"
 	depends on LINK_DEVICE_PCIE
 	default n

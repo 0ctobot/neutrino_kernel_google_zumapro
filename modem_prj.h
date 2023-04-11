@@ -61,6 +61,7 @@ enum cp_boot_mode {
 	CP_BOOT_MODE_NORMAL,
 	CP_BOOT_MODE_DUMP,
 	CP_BOOT_RE_INIT,
+	CP_BOOT_MODE_SILENT,
 	CP_BOOT_REQ_CP_RAM_LOGGING = 5,
 	CP_BOOT_MODE_MANUAL = 7,
 	CP_BOOT_EXT_BAAW = 11,
@@ -86,6 +87,14 @@ struct cp_image {
 	u32 len;
 } __packed;
 #define IOCTL_LOAD_CP_IMAGE		_IOW(IOCTL_MAGIC, 0x40, struct cp_image)
+
+struct gnss_image {
+	u32 firmware_size;
+	u32 offset;
+	char *firmware_bin;
+} __packed;
+#define IOCTL_LOAD_GNSS_IMAGE		_IOW(IOCTL_MAGIC, 0x41, struct gnss_image)
+#define IOCTL_READ_GNSS_IMAGE		_IOR(IOCTL_MAGIC, 0x42, struct gnss_image)
 
 #define IOCTL_GET_SRINFO		_IO(IOCTL_MAGIC, 0x45)
 #define IOCTL_SET_SRINFO		_IO(IOCTL_MAGIC, 0x46)
@@ -183,6 +192,8 @@ struct t_handover_block_info {
 #define IOCTL_SET_SPI_BOOT_MODE		_IO('o', 0x58)
 
 #define IOCTL_GET_OPENED_STATUS 	_IOR(IOCTL_MAGIC, 0x59, int)
+
+#define IOCTL_SILENT_RESET			_IO(IOCTL_MAGIC, 0x60)
 
 /*
  * Definitions for IO devices
@@ -475,6 +486,8 @@ struct link_device {
 
 	/* method for CP booting */
 	int (*load_cp_image)(struct link_device *ld, struct io_device *iod, unsigned long arg);
+	int (*load_gnss_image)(struct link_device *ld, struct io_device *iod, unsigned long arg);
+	int (*read_gnss_image)(struct link_device *ld, struct io_device *iod, unsigned long arg);
 	void (*link_prepare_normal_boot)(struct link_device *ld, struct io_device *iod);
 	int (*link_start_normal_boot)(struct link_device *ld, struct io_device *iod);
 
@@ -525,7 +538,8 @@ struct modemctl_ops {
 	int (*power_off)(struct modem_ctl *mc);
 	int (*power_shutdown)(struct modem_ctl *mc);
 	int (*power_reset)(struct modem_ctl *mc);
-	int (*power_reset_dump)(struct modem_ctl *mc);
+	int (*power_reset_dump)(struct modem_ctl *mc, bool silent);
+	int (*silent_reset)(struct modem_ctl *mc);
 
 	int (*start_normal_boot)(struct modem_ctl *mc);
 	int (*complete_normal_boot)(struct modem_ctl *mc);
@@ -674,6 +688,8 @@ struct modem_ctl {
 	struct pci_driver pci_driver;
 
 	int pcie_ch_num;
+	int pcie_linkdown_retry_cnt;
+	int pcie_linkdown_retry_cnt_all;
 	int pcie_cto_retry_cnt;
 	int pcie_cto_retry_cnt_all;
 
@@ -685,7 +701,7 @@ struct modem_ctl {
 	int pcie_pm_resume_gpio_val;
 	bool device_reboot;
 
-#if IS_ENABLED(CONFIG_SUSPEND_DURING_VOICE_CALL)
+#if IS_ENABLED(CONFIG_CPIF_AP_SUSPEND_DURING_VOICE_CALL)
 	bool pcie_voice_call_on;
 	struct work_struct call_on_work;
 	struct work_struct call_off_work;
