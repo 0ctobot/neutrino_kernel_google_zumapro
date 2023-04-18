@@ -1281,6 +1281,118 @@ exit:
 	return err;
 }
 
+#if IS_ENABLED(CONFIG_SEC_MODEM_S5400)
+static int start_normal_boot_bl1(struct modem_ctl *mc)
+{
+	struct link_device *ld = get_current_link(mc->bootd);
+	struct mem_link_device *mld = to_mem_link_device(ld);
+	int ret = 0;
+
+	mif_info("+++\n");
+
+	if (init_control_messages(mc))
+		mif_err("Failed to initialize control messages\n");
+
+	/* 2cp dump WA */
+	if (timer_pending(&mld->crash_ack_timer))
+		del_timer(&mld->crash_ack_timer);
+	atomic_set(&mld->forced_cp_crash, 0);
+
+	mif_info("Set link mode to LINK_MODE_BOOT.\n");
+
+	if (ld->link_prepare_normal_boot)
+		ld->link_prepare_normal_boot(ld, mc->bootd);
+
+	change_modem_state(mc, STATE_BOOTING);
+
+	mif_info("Disable phone actvie interrupt.\n");
+	mif_disable_irq(&mc->cp_gpio_irq[CP_GPIO_IRQ_CP2AP_CP_ACTIVE]);
+
+	mif_gpio_set_value(&mc->cp_gpio[CP_GPIO_AP2CP_AP_ACTIVE], 1, 0);
+	mc->phone_state = STATE_BOOTING;
+
+	if (ld->link_start_normal_boot) {
+		mif_info("link_start_normal_boot\n");
+		ld->link_start_normal_boot(ld, mc->iod);
+	}
+
+	ret = modem_ctrl_check_offset_data(mc);
+	if (ret) {
+		mif_err("modem_ctrl_check_offset_data() error:%d\n", ret);
+		return ret;
+	}
+
+	if (mld->attrs & LINK_ATTR_XMIT_BTDLR_PCIE) {
+		register_pcie(ld);
+		if (mc->s51xx_pdev && mc->pcie_registered)
+			set_cp_rom_boot_img(mld);
+
+		ret = check_cp_status(mc, 200, true);
+		if (ret < 0)
+			goto status_error;
+	} else {
+		ret = check_cp_status(mc, 200, false);
+		if (ret < 0)
+			goto status_error;
+
+		register_pcie(ld);
+	}
+
+status_error:
+	if (ret < 0) {
+		mif_err("ERR! check_cp_status fail (err %d)\n", ret);
+		if (mld->attrs & LINK_ATTR_XMIT_BTDLR_PCIE)
+			debug_cp_rom_boot_img(mld);
+		if (cpif_wake_lock_active(mc->ws))
+			cpif_wake_unlock(mc->ws);
+
+		return ret;
+	}
+
+	mif_info("---\n");
+	return 0;
+}
+
+static int start_normal_boot_bootloader(struct modem_ctl *mc)
+{
+	struct link_device *ld = get_current_link(mc->bootd);
+	struct mem_link_device *mld = to_mem_link_device(ld);
+	int ret = 0;
+
+	mif_info("+++\n");
+
+	if (mld->attrs & LINK_ATTR_XMIT_BTDLR_PCIE) {
+		s5100_poweroff_pcie(mc, false);
+
+		ret = check_cp_status(mc, 200, false);
+		if (ret < 0)
+			goto status_error;
+
+		s5100_poweron_pcie(mc, false);
+	} else {
+		ret = check_cp_status(mc, 200, false);
+		if (ret < 0)
+			goto status_error;
+
+		register_pcie(ld);
+	}
+
+status_error:
+	if (ret < 0) {
+		mif_err("ERR! check_cp_status fail (err %d)\n", ret);
+		if (mld->attrs & LINK_ATTR_XMIT_BTDLR_PCIE)
+			debug_cp_rom_boot_img(mld);
+		if (cpif_wake_lock_active(mc->ws))
+			cpif_wake_unlock(mc->ws);
+
+		return ret;
+	}
+
+	mif_info("---\n");
+	return 0;
+}
+#endif
+
 static int trigger_cp_crash_internal(struct modem_ctl *mc)
 {
 	struct link_device *ld = get_current_link(mc->bootd);
@@ -1435,6 +1547,108 @@ status_error:
 	mif_err("---\n");
 	return err;
 }
+
+#if IS_ENABLED(CONFIG_SEC_MODEM_S5400)
+static int start_dump_boot_bl1(struct modem_ctl *mc)
+{
+	struct link_device *ld = get_current_link(mc->bootd);
+	struct mem_link_device *mld = to_mem_link_device(ld);
+	int ret = 0;
+
+	mif_err("+++\n");
+
+	/* Change phone state to CRASH_EXIT */
+	mc->phone_state = STATE_CRASH_EXIT;
+
+	if (!ld->link_start_dump_boot) {
+		mif_err("%s: link_start_dump_boot is null\n", ld->name);
+		return -EFAULT;
+	}
+
+	ret = ld->link_start_dump_boot(ld, mc->bootd);
+	if (ret)
+		return ret;
+
+	mif_gpio_set_value(&mc->cp_gpio[CP_GPIO_AP2CP_AP_ACTIVE], 1, 0);
+	/* do not handle cp2ap_wakeup irq during dump process */
+	mif_disable_irq(&mc->cp_gpio_irq[CP_GPIO_IRQ_CP2AP_WAKEUP]);
+
+	if (mld->attrs & LINK_ATTR_XMIT_BTDLR_PCIE) {
+		register_pcie(ld);
+		if (mc->s51xx_pdev && mc->pcie_registered)
+			set_cp_rom_boot_img(mld);
+
+		ret = check_cp_status(mc, 200, true);
+		if (ret < 0)
+			goto status_error;
+	} else {
+		ret = check_cp_status(mc, 200, false);
+		if (ret < 0)
+			goto status_error;
+
+		register_pcie(ld);
+	}
+
+status_error:
+	if (ret < 0) {
+		mif_err("ERR! check_cp_status fail (err %d)\n", ret);
+		if (mld->attrs & LINK_ATTR_XMIT_BTDLR_PCIE)
+			debug_cp_rom_boot_img(mld);
+		return ret;
+	}
+
+	mif_err("---\n");
+	return ret;
+}
+
+static int start_dump_boot_bootloader(struct modem_ctl *mc)
+{
+	struct link_device *ld = get_current_link(mc->bootd);
+	struct mem_link_device *mld = to_mem_link_device(ld);
+	int ret = 0;
+	int val;
+
+	mif_err("+++\n");
+
+	if (mld->attrs & LINK_ATTR_XMIT_BTDLR_PCIE) {
+		if (mc->s51xx_pdev && mc->pcie_registered)
+			set_cp_rom_boot_img(mld);
+
+		ret = check_cp_status(mc, 200, true);
+		if (ret < 0)
+			goto status_error;
+
+		iowrite32(0, mld->msi_reg_base + offsetof(struct msi_reg_type, boot_stage));
+		val = (int)ioread32(mld->msi_reg_base + offsetof(struct msi_reg_type, boot_stage));
+		mif_info("Clear boot_stage == 0x%X\n", val);
+
+		s5100_poweroff_pcie(mc, false);
+
+		ret = check_cp_status(mc, 200, false);
+		if (ret < 0)
+			goto status_error;
+
+		s5100_poweron_pcie(mc, false);
+	} else {
+		ret = check_cp_status(mc, 200, false);
+		if (ret < 0)
+			goto status_error;
+
+		register_pcie(ld);
+	}
+
+status_error:
+	if (ret < 0) {
+		mif_err("ERR! check_cp_status fail (err %d)\n", ret);
+		if (mld->attrs & LINK_ATTR_XMIT_BTDLR_PCIE)
+			debug_cp_rom_boot_img(mld);
+		return ret;
+	}
+
+	mif_err("---\n");
+	return ret;
+}
+#endif
 
 static int s5100_poweroff_pcie(struct modem_ctl *mc, bool force_off)
 {
@@ -1841,6 +2055,12 @@ static void s5100_get_ops(struct modem_ctl *mc)
 
 	mc->ops.start_normal_boot = start_normal_boot;
 	mc->ops.complete_normal_boot = complete_normal_boot;
+#if IS_ENABLED(CONFIG_SEC_MODEM_S5400)
+	mc->ops.start_normal_boot_bl1 = start_normal_boot_bl1;
+	mc->ops.start_normal_boot_bootloader = start_normal_boot_bootloader;
+	mc->ops.start_dump_boot_bl1 = start_dump_boot_bl1;
+	mc->ops.start_dump_boot_bootloader = start_dump_boot_bootloader;
+#endif
 
 	mc->ops.start_dump_boot = start_dump_boot;
 	mc->ops.trigger_cp_crash = trigger_cp_crash;

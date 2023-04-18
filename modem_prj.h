@@ -66,6 +66,12 @@ enum cp_boot_mode {
 	CP_BOOT_REQ_CP_RAM_LOGGING = 5,
 	CP_BOOT_MODE_MANUAL = 7,
 	CP_BOOT_EXT_BAAW = 11,
+#if IS_ENABLED(CONFIG_SEC_MODEM_S5400)
+	CP_BOOT_MODE_NORMAL_BL1 = 32,
+	CP_BOOT_MODE_NORMAL_BOOTLOADER,
+	CP_BOOT_MODE_DUMP_BL1,
+	CP_BOOT_MODE_DUMP_BOOTLOADER,
+#endif
 	MAX_CP_BOOT_MODE
 };
 struct boot_mode {
@@ -550,6 +556,12 @@ struct modemctl_ops {
 
 	int (*start_normal_boot)(struct modem_ctl *mc);
 	int (*complete_normal_boot)(struct modem_ctl *mc);
+#if IS_ENABLED(CONFIG_SEC_MODEM_S5400)
+	int (*start_normal_boot_bl1)(struct modem_ctl *mc);
+	int (*start_normal_boot_bootloader)(struct modem_ctl *mc);
+	int (*start_dump_boot_bl1)(struct modem_ctl *mc);
+	int (*start_dump_boot_bootloader)(struct modem_ctl *mc);
+#endif
 
 	int (*trigger_cp_crash)(struct modem_ctl *mc);
 	int (*start_dump_boot)(struct modem_ctl *mc);

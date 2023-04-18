@@ -289,6 +289,40 @@ static long bootdump_ioctl(struct file *filp, unsigned int cmd, unsigned long ar
 			}
 			return mc->ops.start_dump_boot(mc);
 
+#if IS_ENABLED(CONFIG_SEC_MODEM_S5400)
+		case CP_BOOT_MODE_NORMAL_BL1:
+			mif_info("%s: bl1 boot mode\n", iod->name);
+			if (!mc->ops.start_normal_boot_bl1) {
+				mif_err("%s: start_normal_boot_bl1 is null\n", iod->name);
+				return -EINVAL;
+			}
+			return mc->ops.start_normal_boot_bl1(mc);
+
+		case CP_BOOT_MODE_NORMAL_BOOTLOADER:
+			mif_info("%s: bootloader boot mode\n", iod->name);
+			if (!mc->ops.start_normal_boot_bootloader) {
+				mif_err("%s: start_normal_boot_bootloader is null\n", iod->name);
+				return -EINVAL;
+			}
+			return mc->ops.start_normal_boot_bootloader(mc);
+
+		case CP_BOOT_MODE_DUMP_BL1:
+			mif_info("%s: bl1 dump boot mode\n", iod->name);
+			if (!mc->ops.start_dump_boot_bl1) {
+				mif_err("%s: start_dump_boot_bl1 is null\n", iod->name);
+				return -EINVAL;
+			}
+			return mc->ops.start_dump_boot_bl1(mc);
+
+		case CP_BOOT_MODE_DUMP_BOOTLOADER:
+			mif_info("%s: bootloader dump boot mode\n", iod->name);
+			if (!mc->ops.start_dump_boot_bootloader) {
+				mif_err("%s: start_dump_boot_bootloader is null\n", iod->name);
+				return -EINVAL;
+			}
+			return mc->ops.start_dump_boot_bootloader(mc);
+#endif
+
 		default:
 			mif_err("boot_mode is invalid:%d\n", mode.idx);
 			return -EINVAL;
