@@ -896,10 +896,16 @@ static int power_shutdown_cp(struct modem_ctl *mc)
 		s5910_shutdown_sequence(mc->s5910_dev);
 	}
 
+#if IS_ENABLED(CONFIG_SEC_MODEM_S5400)
+	exynos_pcie_poweroff(mc->pcie_ch_num);
+#endif
+
 	gpio_power_off_cp(mc);
 	print_mc_state(mc);
 
+#if !IS_ENABLED(CONFIG_SEC_MODEM_S5400)
 	pcie_clean_dislink(mc);
+#endif
 
 exit:
 	mif_err("---\n");
