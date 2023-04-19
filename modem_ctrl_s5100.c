@@ -1078,6 +1078,42 @@ static int check_cp_status(struct modem_ctl *mc, unsigned int count, bool check_
 	return 0;
 }
 
+#if IS_ENABLED(CONFIG_SEC_MODEM_S5400)
+static int check_boot_status(struct modem_ctl *mc, unsigned int count, bool check_bl1)
+{
+	struct link_device *ld = get_current_link(mc->bootd);
+	struct mem_link_device *mld = to_mem_link_device(ld);
+	bool check_done = false;
+	int cnt = 0;
+	int val;
+
+	do {
+		/* ensure that CP updates the value */
+		msleep(20);
+
+		val = (int)ioread32(mld->msi_reg_base +
+			offsetof(struct msi_reg_type, boot_stage));
+		if (val == (check_bl1 ? BOOT_STAGE_BL1_DOWNLOAD_DONE_MASK : BOOT_STAGE_DONE_MASK)) {
+			check_done = true;
+			break;
+		}
+
+		mif_info_limited("boot_stage == 0x%X (cnt %d)\n", val, cnt);
+	} while (++cnt < count);
+
+	if (!check_done) {
+		mif_err("ERR! boot_stage == 0x%X (cnt %d)\n", val, cnt);
+		return -EFAULT;
+	}
+
+	mif_info("boot_stage == 0x%X (cnt %d)\n", val, cnt);
+	if (cnt == 0)
+		msleep(10);
+
+	return 0;
+}
+#endif
+
 static int set_cp_rom_boot_img(struct mem_link_device *mld)
 {
 	struct link_device *ld = &mld->link_dev;
@@ -1327,15 +1363,9 @@ static int start_normal_boot_bl1(struct modem_ctl *mc)
 		if (mc->s51xx_pdev && mc->pcie_registered)
 			set_cp_rom_boot_img(mld);
 
-		ret = check_cp_status(mc, 200, true);
+		ret = check_boot_status(mc, 200, true);
 		if (ret < 0)
 			goto status_error;
-	} else {
-		ret = check_cp_status(mc, 200, false);
-		if (ret < 0)
-			goto status_error;
-
-		register_pcie(ld);
 	}
 
 status_error:
@@ -1358,10 +1388,22 @@ static int start_normal_boot_bootloader(struct modem_ctl *mc)
 	struct link_device *ld = get_current_link(mc->bootd);
 	struct mem_link_device *mld = to_mem_link_device(ld);
 	int ret = 0;
+	int val;
 
 	mif_info("+++\n");
 
 	if (mld->attrs & LINK_ATTR_XMIT_BTDLR_PCIE) {
+		if (mc->s51xx_pdev && mc->pcie_registered)
+			set_cp_rom_boot_img(mld);
+
+		ret = check_boot_status(mc, 200, false);
+		if (ret < 0)
+			goto status_error;
+
+		iowrite32(0, mld->msi_reg_base + offsetof(struct msi_reg_type, boot_stage));
+		val = (int)ioread32(mld->msi_reg_base + offsetof(struct msi_reg_type, boot_stage));
+		mif_info("Clear boot_stage == 0x%X\n", val);
+
 		s5100_poweroff_pcie(mc, false);
 
 		ret = check_cp_status(mc, 200, false);
@@ -1369,12 +1411,6 @@ static int start_normal_boot_bootloader(struct modem_ctl *mc)
 			goto status_error;
 
 		s5100_poweron_pcie(mc, false);
-	} else {
-		ret = check_cp_status(mc, 200, false);
-		if (ret < 0)
-			goto status_error;
-
-		register_pcie(ld);
 	}
 
 status_error:
@@ -1578,15 +1614,9 @@ static int start_dump_boot_bl1(struct modem_ctl *mc)
 		if (mc->s51xx_pdev && mc->pcie_registered)
 			set_cp_rom_boot_img(mld);
 
-		ret = check_cp_status(mc, 200, true);
+		ret = check_boot_status(mc, 200, true);
 		if (ret < 0)
 			goto status_error;
-	} else {
-		ret = check_cp_status(mc, 200, false);
-		if (ret < 0)
-			goto status_error;
-
-		register_pcie(ld);
 	}
 
 status_error:
@@ -1614,7 +1644,7 @@ static int start_dump_boot_bootloader(struct modem_ctl *mc)
 		if (mc->s51xx_pdev && mc->pcie_registered)
 			set_cp_rom_boot_img(mld);
 
-		ret = check_cp_status(mc, 200, true);
+		ret = check_boot_status(mc, 200, false);
 		if (ret < 0)
 			goto status_error;
 
@@ -1629,12 +1659,6 @@ static int start_dump_boot_bootloader(struct modem_ctl *mc)
 			goto status_error;
 
 		s5100_poweron_pcie(mc, false);
-	} else {
-		ret = check_cp_status(mc, 200, false);
-		if (ret < 0)
-			goto status_error;
-
-		register_pcie(ld);
 	}
 
 status_error:

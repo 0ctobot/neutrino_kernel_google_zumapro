@@ -21,6 +21,27 @@ struct msi_reg_type {
 	u32 img_size;
 };
 
+#if IS_ENABLED(CONFIG_SEC_MODEM_S5400)
+enum boot_stage_bit {
+	BOOT_STAGE_ROM_BIT,
+	BOOT_STAGE_PCI_LINKUP_START_BIT,
+	BOOT_STAGE_PCI_LTSSM_DISABLE_BIT,
+	BOOT_STAGE_PCI_PHY_INIT_DONE_BIT,
+	BOOT_STAGE_PCI_DBI_DONE_BIT,
+	BOOT_STAGE_PCI_MSI_START_BIT,
+	BOOT_STAGE_PCI_WAIT_DOORBELL_BIT,
+	BOOT_STAGE_DOWNLOAD_PBL_BIT,
+	BOOT_STAGE_DOWNLOAD_PSP_BL1_DONE_BIT,
+	BOOT_STAGE_DOWNLOAD_HOST_BL1_DONE_BIT,
+	BOOT_STAGE_DOWNLOAD_HOST_BL1B_DONE_BIT,
+	BOOT_STAGE_DOWNLOAD_PBL_DONE_BIT,
+	BOOT_STAGE_BL1_WAIT_DOORBELL_BIT,
+	BOOT_STAGE_BL1_DOWNLOAD_DONE_BIT,
+	RESERVED_BIT,
+	/* Not documented, but this is the last stage */
+	BOOT_STAGE_DONE_BIT,
+};
+#else
 enum boot_stage_bit {
 	BOOT_STAGE_ROM_BIT,
 	BOOT_STAGE_PCI_LINKUP_START_BIT,
@@ -35,12 +56,16 @@ enum boot_stage_bit {
 	BOOT_STAGE_SECURITY_START_BIT,
 	BOOT_STAGE_CHECK_BL1_ID_BIT,
 	BOOT_STAGE_JUMP_BL1_BIT,
-	/* Not documented but the it is the last stage */
+	/* Not documented, but this is the last stage */
 	BOOT_STAGE_DONE_BIT,
 };
+#endif
 
 /* Every bits of boot_stage_bit are filled */
 #define BOOT_STAGE_DONE_MASK	(BIT(BOOT_STAGE_DONE_BIT + 1) - 1)
+#if IS_ENABLED(CONFIG_SEC_MODEM_S5400)
+#define BOOT_STAGE_BL1_DOWNLOAD_DONE_MASK      (BIT(BOOT_STAGE_BL1_DOWNLOAD_DONE_BIT + 1) - 1)
+#endif
 #endif
 
 void modem_ctrl_set_kerneltime(struct modem_ctl *mc);
