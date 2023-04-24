@@ -238,6 +238,12 @@ enum link_state {
 	LINK_STATE_CP_CRASH
 };
 
+enum link_up_mode {
+	GEN1_BOOTING,
+	GEN3_BOOTING,
+	GEN3_ONLINE,
+};
+
 struct cp_power_stats {
 	u64 count;			/* count state was entered */
 	u64 duration_usec;		/* total time (usecs) in state */
@@ -701,6 +707,7 @@ struct modem_ctl {
 	bool pcie_pm_resume_wait;
 	int pcie_pm_resume_gpio_val;
 	bool device_reboot;
+	bool trigger_crash;
 
 #if IS_ENABLED(CONFIG_CPIF_AP_SUSPEND_DURING_VOICE_CALL)
 	bool pcie_voice_call_on;
@@ -744,6 +751,8 @@ struct modem_ctl {
 #endif
 
 	struct cp_power_stats cp_power_stats;
+	struct mutex cp_crash_lock;
+	spinlock_t cp_active_lock;
 	spinlock_t power_stats_lock;
 #if defined(CPIF_WAKEPKT_SET_MARK)
 	atomic_t mark_skb_wakeup;
