@@ -233,7 +233,7 @@ void s51xx_pcie_save_state(struct pci_dev *pdev)
 		mif_err("Can't set D3 state!!!!\n");
 }
 
-void s51xx_pcie_restore_state(struct pci_dev *pdev)
+void s51xx_pcie_restore_state(struct pci_dev *pdev, bool boot_on)
 {
 	struct s51xx_pcie *s51xx_pcie = pci_get_drvdata(pdev);
 	int ret;
@@ -284,8 +284,13 @@ void s51xx_pcie_restore_state(struct pci_dev *pdev)
 		s51xx_pcie_chk_ep_conf(pdev);
 	}
 
-	/* Enable L1.2 after PCIe power on */
-	s51xx_pcie_l1ss_ctrl(1, s51xx_pcie->pcie_channel_num);
+	if (boot_on) {
+		/* Disable L1.2 after PCIe power on when booting */
+		s51xx_pcie_l1ss_ctrl(0, s51xx_pcie->pcie_channel_num);
+	} else {
+		/* Enable L1.2 after PCIe power on */
+		s51xx_pcie_l1ss_ctrl(1, s51xx_pcie->pcie_channel_num);
+	}
 
 	s51xx_pcie->link_status = 1;
 	/* pci_pme_active(s51xx_pcie.s51xx_pdev, 1); */

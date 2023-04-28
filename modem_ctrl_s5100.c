@@ -1870,7 +1870,7 @@ int s5100_poweron_pcie(struct modem_ctl *mc, enum link_up_mode mode)
 	mc->pcie_powered_on = true;
 
 	if (mc->s51xx_pdev != NULL) {
-		s51xx_pcie_restore_state(mc->s51xx_pdev);
+		s51xx_pcie_restore_state(mc->s51xx_pdev, boot_on);
 
 		/* DBG: check MSI sfr setting values */
 		print_msi_register(mc->s51xx_pdev);
