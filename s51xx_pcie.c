@@ -388,7 +388,7 @@ static int s51xx_pcie_probe(struct pci_dev *pdev, const struct pci_device_id *en
 	struct pci_dev *bus_self = bus->self;
 	struct resource *tmp_rsc;
 	int resno = PCI_BRIDGE_MEM_WINDOW;
-	u32 val, db_addr;
+	u32 val, db_addr = 0;
 
 	dev_info(dev, "%s EP driver Probe(%s), chNum: %d\n",
 			driver->name, __func__, mc->pcie_ch_num);
@@ -401,52 +401,72 @@ static int s51xx_pcie_probe(struct pci_dev *pdev, const struct pci_device_id *en
 
 	mc->s51xx_pdev = pdev;
 
-	if (of_property_read_u32(mc_dev->of_node, "pci_db_addr", &db_addr)) {
-		dev_err(dev, "Failed to parse the EP DB base address\n");
-		return -EINVAL;
+	if (of_property_read_u32(mc_dev->of_node, "pci_db_addr", &db_addr))
+		dev_info(dev, "EP DB base address is not defined!\n");
+
+	if (db_addr != 0x0) {
+		pci_write_config_dword(pdev, PCI_BASE_ADDRESS_0, db_addr);
+		pci_read_config_dword(pdev, PCI_BASE_ADDRESS_0, &val);
+		val &= PCI_BASE_ADDRESS_MEM_MASK;
+		s51xx_pcie->dbaddr_offset = db_addr - val;
+		s51xx_pcie->dbaddr_changed_base = val;
+		dev_info(dev, "db_addr : 0x%x , val : 0x%x, offset : 0x%x\n",
+				db_addr, val, (unsigned int)s51xx_pcie->dbaddr_offset);
+
+		mif_info("Disable BAR resources.\n");
+		for (i = 0; i < 6; i++) {
+			pdev->resource[i].start = 0x0;
+			pdev->resource[i].end = 0x0;
+			if (pci_assign_resource(pdev, i))
+				pr_warn("%s: failed to assign pci resource (i=%d)\n", __func__, i);
+		}
+
+		/* EP BAR setup: BAR0 (4kB) */
+		pdev->resource[0].start = val;
+		pdev->resource[0].end = val + SZ_4K;
+		if (pci_assign_resource(pdev, 0))
+			pr_warn("%s: failed to assign EP BAR0 pci resource\n", __func__);
+
+		/* get Doorbell base address from root bus range */
+		tmp_rsc = bus_self->resource + resno;
+		dev_info(&bus_self->dev, "[%s] BAR %d: tmp rsc : %pR\n", __func__, resno, tmp_rsc);
+		s51xx_pcie->dbaddr_base = tmp_rsc->start;
+
+		mif_info("Set Doorbell register address.\n");
+		s51xx_pcie->doorbell_addr = devm_ioremap(&pdev->dev,
+				s51xx_pcie->dbaddr_base + s51xx_pcie->dbaddr_offset, SZ_4);
+
+		/*
+		 * ret = abox_pci_doorbell_paddr_set(s51xx_pcie->dbaddr_base +
+		 * s51xx_pcie->dbaddr_offset);
+		 * if (!ret)
+		 * dev_err(dev, "PCIe doorbell setting for ABOX is failed\n");
+		 */
+
+		mif_info("s51xx_pcie.doorbell_addr = %p  (start 0x%lx offset : %lx)\n",
+			s51xx_pcie->doorbell_addr, (unsigned long)s51xx_pcie->dbaddr_base,
+						(unsigned long)s51xx_pcie->dbaddr_offset);
+	} else {
+		/* If CP's Class Code is not defined, assign resource directly.
+		   ret = pci_assign_resource(pdev, 0);
+		   if (ret)
+		   	ret = pci_assign_resource(pdev, 0);
+		*/
+		/* Set doorbell base address as pcie outbound base address */
+		s51xx_pcie->dbaddr_base = pci_resource_start(pdev, 0);
+		s51xx_pcie->doorbell_addr = devm_ioremap(&pdev->dev,
+						s51xx_pcie->dbaddr_base, SZ_4K);
+
+		/*
+		ret = abox_pci_doorbell_paddr_set(s51xx_pcie->dbaddr_base);
+		if (!ret)
+			dev_err(dev, "PCIe doorbell setting for ABOX is failed \n");
+		*/
+
+		pr_info("s51xx_pcie.doorbell_addr = %#lx (PHYSICAL %#lx)\n",
+			(unsigned long)s51xx_pcie->doorbell_addr,
+			(unsigned long)s51xx_pcie->dbaddr_base);
 	}
-
-	pci_write_config_dword(pdev, PCI_BASE_ADDRESS_0, db_addr);
-	pci_read_config_dword(pdev, PCI_BASE_ADDRESS_0, &val);
-	val &= PCI_BASE_ADDRESS_MEM_MASK;
-	s51xx_pcie->dbaddr_offset = db_addr - val;
-	s51xx_pcie->dbaddr_changed_base = val;
-	dev_info(dev, "db_addr : 0x%x , val : 0x%x, offset : 0x%x\n",
-			db_addr, val, (unsigned int)s51xx_pcie->dbaddr_offset);
-
-	mif_info("Disable BAR resources.\n");
-	for (i = 0; i < 6; i++) {
-		pdev->resource[i].start = 0x0;
-		pdev->resource[i].end = 0x0;
-		if (pci_assign_resource(pdev, i))
-			pr_warn("%s: failed to assign pci resource (i=%d)\n", __func__, i);
-	}
-
-	/* EP BAR setup: BAR0 (4kB) */
-	pdev->resource[0].start = val;
-	pdev->resource[0].end = val + SZ_4K;
-	if (pci_assign_resource(pdev, 0))
-		pr_warn("%s: failed to assign EP BAR0 pci resource\n", __func__);
-
-	/* get Doorbell base address from root bus range */
-	tmp_rsc = bus_self->resource + resno;
-	dev_info(&bus_self->dev, "[%s] BAR %d: tmp rsc : %pR\n", __func__, resno, tmp_rsc);
-	s51xx_pcie->dbaddr_base = tmp_rsc->start;
-
-	mif_info("Set Doorbell register address.\n");
-	s51xx_pcie->doorbell_addr = devm_ioremap(&pdev->dev,
-			s51xx_pcie->dbaddr_base + s51xx_pcie->dbaddr_offset, SZ_4);
-
-	/*
-	 * ret = abox_pci_doorbell_paddr_set(s51xx_pcie->dbaddr_base +
-	 * s51xx_pcie->dbaddr_offset);
-	 * if (!ret)
-	 * dev_err(dev, "PCIe doorbell setting for ABOX is failed\n");
-	 */
-
-	mif_info("s51xx_pcie.doorbell_addr = %p  (start 0x%lx offset : %lx)\n",
-		s51xx_pcie->doorbell_addr, (unsigned long)s51xx_pcie->dbaddr_base,
-					(unsigned long)s51xx_pcie->dbaddr_offset);
 
 	if (s51xx_pcie->doorbell_addr == NULL)
 		mif_err("Can't ioremap doorbell address!!!\n");

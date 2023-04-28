@@ -31,7 +31,7 @@ struct s51xx_pcie {
 	int pcie_channel_num;
 	struct pci_dev *s51xx_pdev;
 	int irq_num_base;
-	u32 __iomem *doorbell_addr;
+	void __iomem *doorbell_addr;
 	u32 __iomem *reg_base;
 	u64 dbaddr_base;
 	u32 dbaddr_offset;
