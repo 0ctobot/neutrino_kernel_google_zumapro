@@ -237,7 +237,6 @@ void s51xx_pcie_restore_state(struct pci_dev *pdev, bool boot_on)
 {
 	struct s51xx_pcie *s51xx_pcie = pci_get_drvdata(pdev);
 	int ret;
-	u32 val;
 
 	dev_dbg(&pdev->dev, "[%s]\n", __func__);
 
@@ -273,7 +272,9 @@ void s51xx_pcie_restore_state(struct pci_dev *pdev, bool boot_on)
 	/* DBG: print out EP config values after restore_state */
 	s51xx_pcie_chk_ep_conf(pdev);
 
+#if !IS_ENABLED(CONFIG_SEC_MODEM_S5400)
 	/* BAR0 value correction  */
+	u32 val = 0;
 	pci_read_config_dword(pdev, PCI_BASE_ADDRESS_0, &val);
 	dev_dbg(&pdev->dev, "restored:PCI_BASE_ADDRESS_0 = %#x\n", val);
 	if ((val & PCI_BASE_ADDRESS_MEM_MASK) != s51xx_pcie->dbaddr_changed_base) {
@@ -283,7 +284,7 @@ void s51xx_pcie_restore_state(struct pci_dev *pdev, bool boot_on)
 		mif_info("write BAR0 value: %#x\n", s51xx_pcie->dbaddr_changed_base);
 		s51xx_pcie_chk_ep_conf(pdev);
 	}
-
+#endif
 	if (boot_on) {
 		/* Disable L1.2 after PCIe power on when booting */
 		s51xx_pcie_l1ss_ctrl(0, s51xx_pcie->pcie_channel_num);
