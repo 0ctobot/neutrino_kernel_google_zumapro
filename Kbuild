@@ -1,5 +1,10 @@
 TCM_CORE=tcm/
 
+ccflags-y += -I$(srctree)/../private/google-modules/display
+ccflags-y += -I$(srctree)/../private/google-modules/display/include/uapi
+ccflags-y += -I$(srctree)/../private/google-modules/touch/common
+ccflags-y += -I$(srctree)/../private/google-modules/touch/common/include
+
 obj-$(CONFIG_TOUCHSCREEN_SYNA_TCM2) = syna_touch.o
 syna_touch-objs += \
 			syna_tcm2.o \

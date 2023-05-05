@@ -12,12 +12,14 @@ EXTRA_CFLAGS	+= -DCONFIG_TOUCHSCREEN_SYNA_TCM2_REFLASH
 EXTRA_CFLAGS	+= -DCONFIG_TOUCHSCREEN_SYNA_TCM2_SYSFS
 EXTRA_CFLAGS	+= -DCONFIG_TOUCHSCREEN_SYNA_TCM2_TESTING
 EXTRA_CFLAGS	+= -DUSE_DRM_BRIDGE
-EXTRA_CFLAGS	+= -I$(KERNEL_SRC)/../google-modules/display
-EXTRA_CFLAGS	+= -I$(KERNEL_SRC)/../google-modules/touch/common
-EXTRA_CFLAGS	+= -I$(KERNEL_SRC)/../google-modules/touch/common/include
-EXTRA_CFLAGS	+= -I$(KERNEL_SRC)/../google-modules/touch/synaptics
-EXTRA_CFLAGS	+= -I$(KERNEL_SRC)/../google-modules/touch/synaptics/tcm
-EXTRA_SYMBOLS	+= $(OUT_DIR)/../google-modules/touch/common/Module.symvers
+EXTRA_CFLAGS	+= -I$(KERNEL_SRC)/../private/google-modules/display
+EXTRA_CFLAGS	+= -I$(KERNEL_SRC)/../private/google-modules/touch/common
+EXTRA_CFLAGS	+= -I$(KERNEL_SRC)/../private/google-modules/touch/common/include
+EXTRA_CFLAGS	+= -I$(KERNEL_SRC)/../private/google-modules/touch/synaptics
+EXTRA_CFLAGS	+= -I$(KERNEL_SRC)/../private/google-modules/touch/synaptics/tcm
+EXTRA_SYMBOLS	+= $(OUT_DIR)/../private/google-modules/touch/common/Module.symvers
+
+include $(KERNEL_SRC)/../private/google-modules/soc/gs/Makefile.include
 
 modules modules_install clean:
 	$(MAKE) -C $(KERNEL_SRC) M=$(M) \

@@ -58,7 +58,7 @@
 #endif
 
 #include <linux/pm_qos.h>
-#include "../../../gs-google/drivers/soc/google/vh/kernel/systrace.h"
+#include <trace/hooks/systrace.h>
 
 #define PLATFORM_DRIVER_NAME "synaptics_tcm"
 
