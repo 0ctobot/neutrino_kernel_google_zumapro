@@ -849,8 +849,10 @@ static int syna_spi_read(struct syna_hw_interface *hw_if,
 		xfer[0].len = rd_len;
 		xfer[0].tx_buf = buf;
 		xfer[0].rx_buf = rd_data;
-		if (bus->spi_block_delay_us)
-			xfer[0].delay_usecs = bus->spi_block_delay_us;
+		if (bus->spi_block_delay_us) {
+			xfer[0].delay.unit = SPI_DELAY_UNIT_USECS;
+			xfer[0].delay.value = bus->spi_block_delay_us;
+		}
 		spi_message_add_tail(&xfer[0], &msg);
 	} else {
 		buf[0] = 0xff;
@@ -858,9 +860,12 @@ static int syna_spi_read(struct syna_hw_interface *hw_if,
 			xfer[idx].len = 1;
 			xfer[idx].tx_buf = buf;
 			xfer[idx].rx_buf = &rd_data[idx];
-			xfer[idx].delay_usecs = bus->spi_byte_delay_us;
-			if (bus->spi_block_delay_us && (idx == rd_len - 1))
-				xfer[idx].delay_usecs = bus->spi_block_delay_us;
+			xfer[idx].delay.unit = SPI_DELAY_UNIT_USECS;
+			xfer[idx].delay.value =  bus->spi_byte_delay_us;
+			if (bus->spi_block_delay_us && (idx == rd_len - 1)) {
+				xfer[idx].delay.unit = SPI_DELAY_UNIT_USECS;
+				xfer[idx].delay.value =  bus->spi_block_delay_us;
+			}
 			spi_message_add_tail(&xfer[idx], &msg);
 		}
 	}
@@ -923,16 +928,21 @@ static int syna_spi_write(struct syna_hw_interface *hw_if,
 	if (bus->spi_byte_delay_us == 0) {
 		xfer[0].len = wr_len;
 		xfer[0].tx_buf = wr_data;
-		if (bus->spi_block_delay_us)
-			xfer[0].delay_usecs = bus->spi_block_delay_us;
+		if (bus->spi_block_delay_us) {
+			xfer[0].delay.unit = SPI_DELAY_UNIT_USECS;
+			xfer[0].delay.value = bus->spi_block_delay_us;
+		}
 		spi_message_add_tail(&xfer[0], &msg);
 	} else {
 		for (idx = 0; idx < wr_len; idx++) {
 			xfer[idx].len = 1;
 			xfer[idx].tx_buf = &wr_data[idx];
-			xfer[idx].delay_usecs = bus->spi_byte_delay_us;
-			if (bus->spi_block_delay_us && (idx == wr_len - 1))
-				xfer[idx].delay_usecs = bus->spi_block_delay_us;
+			xfer[idx].delay.unit = SPI_DELAY_UNIT_USECS;
+			xfer[idx].delay.value = bus->spi_byte_delay_us;
+			if (bus->spi_block_delay_us && (idx == wr_len - 1)) {
+				xfer[idx].delay.unit = SPI_DELAY_UNIT_USECS;
+				xfer[idx].delay.value = bus->spi_block_delay_us;
+			}
 			spi_message_add_tail(&xfer[idx], &msg);
 		}
 	}
