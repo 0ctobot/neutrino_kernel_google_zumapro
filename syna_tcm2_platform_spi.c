@@ -152,9 +152,7 @@ static int syna_spi_request_gpio(int gpio, bool config, int dir,
 			return retval;
 		}
 	} else {
-#ifdef DEV_MANAGED_API
-		devm_gpio_free(dev, gpio);
-#else /* Legacy API */
+#ifndef DEV_MANAGED_API
 		gpio_free(gpio);
 #endif
 	}
