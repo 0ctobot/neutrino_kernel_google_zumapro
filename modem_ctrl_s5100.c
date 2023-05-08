@@ -81,9 +81,9 @@ static void print_mc_state(struct modem_ctl *mc)
 	int ap_status = mif_gpio_get_value(&mc->cp_gpio[CP_GPIO_AP2CP_AP_ACTIVE], false);
 	int phone_active = mif_gpio_get_value(&mc->cp_gpio[CP_GPIO_CP2AP_CP_ACTIVE], false);
 
-	mif_debug("%s: %ps:GPIO pwr:%d rst:%d phd:%d c2aw:%d a2cw:%d dmp:%d ap_act:%d cp_act:%d\n",
-		 mc->name, CALLER, pwr, reset, pshold, ap_wakeup, cp_wakeup, dump,
-		 ap_status, phone_active);
+	logbuffer_log(mc->log, "%s: %ps:GPIO pwr:%d rst:%d phd:%d c2aw:%d a2cw:%d dmp:%d ap_act:%d cp_act:%d",
+		mc->name, CALLER, pwr, reset, pshold, ap_wakeup, cp_wakeup, dump,
+		ap_status, phone_active);
 }
 
 static void pcie_clean_dislink(struct modem_ctl *mc)
@@ -1820,6 +1820,7 @@ int s5100_try_gpio_cp_wakeup(struct modem_ctl *mc)
 	    (mif_gpio_get_value(&mc->cp_gpio[CP_GPIO_CP2AP_WAKEUP], false) == 0) &&
 	    (s51xx_check_pcie_link_status(mc->pcie_ch_num) == 0)) {
 		mif_gpio_set_value(&mc->cp_gpio[CP_GPIO_AP2CP_WAKEUP], 1, 0);
+		print_mc_state(mc);
 		return 0;
 	}
 	return -EPERM;
