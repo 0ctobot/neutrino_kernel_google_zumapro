@@ -901,7 +901,7 @@ static void syna_dev_report_input_events(struct syna_tcm *tcm)
 	unsigned int touch_count;
 	struct input_dev *input_dev = tcm->input_dev;
 	unsigned int max_objects = tcm->tcm_dev->max_objects;
-	struct tcm_touch_data_blob *touch_data;
+	struct tcm_touch_data_blob __maybe_unused *touch_data;
 	struct tcm_objects_data_blob *object_data;
 	s64 ms_delta;
 
@@ -910,10 +910,10 @@ static void syna_dev_report_input_events(struct syna_tcm *tcm)
 
 	syna_pal_mutex_lock(&tcm->tp_event_mutex);
 
-	touch_data = &tcm->tp_data;
 	object_data = &tcm->tp_data.object_data[0];
 
 #ifdef ENABLE_WAKEUP_GESTURE
+	touch_data = &tcm->tp_data;
 	if ((tcm->pwr_state == LOW_PWR) && tcm->irq_wake) {
 		if (touch_data->gesture_id) {
 			LOGD("Gesture detected, id:%d\n",
