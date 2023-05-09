@@ -1371,7 +1371,7 @@ static struct attribute_group attr_group = {
  * @return
  *    on success, 0; otherwise, negative value on error.
  */
-int syna_sysfs_create_dir(struct syna_tcm *tcm,
+static int syna_sysfs_create_dir(struct syna_tcm *tcm,
 		struct platform_device *pdev)
 {
 	int retval = 0;
@@ -1417,7 +1417,7 @@ int syna_sysfs_create_dir(struct syna_tcm *tcm,
  * @return
  *    on success, 0; otherwise, negative value on error.
  */
-void syna_sysfs_remove_dir(struct syna_tcm *tcm)
+static void syna_sysfs_remove_dir(struct syna_tcm *tcm)
 {
 	if (!tcm) {
 		LOGE("Invalid tcm device handle\n");
