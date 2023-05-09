@@ -1,5 +1,9 @@
+# SPDX-License-Identifier: GPL-2.0-or-later
+
 TCM_CORE=tcm/
 
+ccflags-y += -I$(srctree)/$(src)
+ccflags-y += -I$(srctree)/$(src)/$(TCM_CORE)
 ccflags-y += -I$(srctree)/../private/google-modules/display
 ccflags-y += -I$(srctree)/../private/google-modules/display/include/uapi
 ccflags-y += -I$(srctree)/../private/google-modules/touch/common
