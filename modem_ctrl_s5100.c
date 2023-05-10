@@ -1534,8 +1534,10 @@ exit:
 			if (s51xx_pcie_send_doorbell_int(mc->s51xx_pdev,
 						mld->intval_ap2cp_msg) != 0)
 				force_crash = true;
-		} else
+		} else {
+			mdelay(1);
 			s5100_try_gpio_cp_wakeup(mc);
+		}
 	}
 	spin_unlock_irqrestore(&mc->pcie_tx_lock, flags);
 
