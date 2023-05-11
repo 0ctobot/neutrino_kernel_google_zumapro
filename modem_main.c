@@ -780,8 +780,10 @@ static int cpif_probe(struct platform_device *pdev)
 	}
 
 	modemctl->log = logbuffer_register("cpif");
-	if (IS_ERR_OR_NULL(modemctl->log))
+	if (IS_ERR_OR_NULL(modemctl->log)) {
 		mif_err("Failed to register logbuffer!\n");
+		modemctl->log = NULL;
+	}
 
 	/* get the s5910 node pointer */
 	modemctl->s5910_dev = NULL;
