@@ -1513,6 +1513,8 @@ static int s5100_poweroff_pcie(struct modem_ctl *mc, bool force_off)
 
 	exynos_pcie_poweroff(mc->pcie_ch_num);
 
+	print_mc_state(mc);
+
 	if (cpif_wake_lock_active(mc->ws))
 		cpif_wake_unlock(mc->ws);
 
