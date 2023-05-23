@@ -67,7 +67,6 @@
 #endif
 #include <linux/fs.h>
 #include <linux/moduleparam.h>
-#include <linux/kfifo.h>
 
 /**
  * @brief: DEV_MANAGED_API

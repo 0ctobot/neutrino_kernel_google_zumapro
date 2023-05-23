@@ -829,13 +829,10 @@ static ssize_t syna_sysfs_force_active_store(struct kobject *kobj,
 	LOGI("Set bus reference bit %#x %s.", ref,
 	     active ? "enable" : "disable");
 
-	if (active) {
+	if (active)
 		pm_stay_awake(&tcm->pdev->dev);
-		syna_hc_dump(tcm);
-		syna_debug_dump(tcm);
-	} else {
+	else
 		pm_relax(&tcm->pdev->dev);
-	}
 
 	retval = syna_set_bus_ref(tcm, ref, active);
 	if (retval < 0) {
