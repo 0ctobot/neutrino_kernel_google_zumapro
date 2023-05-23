@@ -564,12 +564,6 @@ struct syna_tcm {
 	u8 next_enable_fw_grip;
 	u8 next_enable_fw_palm;
 
-#if defined(USE_DRM_BRIDGE)
-	struct drm_bridge panel_bridge;
-	struct drm_connector *connector;
-	bool is_panel_lp_mode;
-#endif
-
 	/* fifo to pass the data to userspace */
 	unsigned int fifo_remaining_frame;
 	struct list_head frame_fifo_queue;

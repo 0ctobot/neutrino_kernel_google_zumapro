@@ -59,9 +59,7 @@
 #include <linux/uaccess.h>
 #include <linux/crc32.h>
 #include <linux/firmware.h>
-#if defined(USE_DRM_BRIDGE)
-#include <drm/drm_bridge.h>
-#elif defined(CONFIG_DRM_PANEL)
+#if defined(CONFIG_DRM_PANEL)
 #include <drm/drm_panel.h>
 #elif CONFIG_FB
 #include <linux/fb.h>

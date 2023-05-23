@@ -48,10 +48,6 @@
 #ifdef MULTICHIP_DUT_REFLASH
 #include "synaptics_touchcom_func_romboot.h"
 #endif
-#if defined(USE_DRM_BRIDGE)
-#include <samsung/exynos_drm_connector.h>
-#include <samsung/panel/panel-samsung-drv.h>
-#endif
 
 /* Init the kfifo for health check. */
 #define SYNA_HC_KFIFO_LEN 4 /* Must be power of 2. */
@@ -2704,142 +2700,6 @@ int syna_set_bus_ref(struct syna_tcm *tcm, u32 ref, bool enable)
 	return result;
 }
 
-#if defined(USE_DRM_BRIDGE)
-static struct drm_connector *syna_get_bridge_connector(struct drm_bridge *bridge)
-{
-	struct drm_connector *connector;
-	struct drm_connector_list_iter conn_iter;
-
-	drm_connector_list_iter_begin(bridge->dev, &conn_iter);
-	drm_for_each_connector_iter(connector, &conn_iter) {
-		if (connector->encoder == bridge->encoder)
-			break;
-	}
-	drm_connector_list_iter_end(&conn_iter);
-	return connector;
-}
-
-static bool syna_bridge_is_lp_mode(struct drm_connector *connector)
-{
-	if (connector && connector->state) {
-		struct exynos_drm_connector_state *s =
-			to_exynos_connector_state(connector->state);
-		return s->exynos_mode.is_lp_mode;
-	}
-	return false;
-}
-
-static void syna_panel_bridge_enable(struct drm_bridge *bridge)
-{
-	struct syna_tcm *tcm =
-			container_of(bridge, struct syna_tcm, panel_bridge);
-
-	LOGD("%s\n", __func__);
-	if (!tcm ->is_panel_lp_mode)
-		syna_set_bus_ref(tcm, SYNA_BUS_REF_SCREEN_ON, true);
-}
-
-static void syna_panel_bridge_disable(struct drm_bridge *bridge)
-{
-	struct syna_tcm *tcm =
-			container_of(bridge, struct syna_tcm, panel_bridge);
-
-	if (bridge->encoder && bridge->encoder->crtc) {
-		const struct drm_crtc_state *crtc_state = bridge->encoder->crtc->state;
-
-		if (drm_atomic_crtc_effectively_active(crtc_state))
-			return;
-	}
-
-	LOGD("%s\n", __func__);
-	syna_set_bus_ref(tcm, SYNA_BUS_REF_SCREEN_ON, false);
-}
-
-static void syna_panel_bridge_mode_set(struct drm_bridge *bridge,
-				       const struct drm_display_mode *mode,
-				       const struct drm_display_mode *adjusted_mode)
-{
-	struct syna_tcm *tcm =
-			container_of(bridge, struct syna_tcm, panel_bridge);
-
-	LOGD("%s\n", __func__);
-
-	if (!tcm->connector || !tcm->connector->state) {
-		LOGI("%s: Get bridge connector.\n", __func__);
-		tcm->connector = syna_get_bridge_connector(bridge);
-	}
-
-	tcm->is_panel_lp_mode = syna_bridge_is_lp_mode(tcm->connector);
-	if (tcm->is_panel_lp_mode)
-		syna_set_bus_ref(tcm, SYNA_BUS_REF_SCREEN_ON, false);
-	else
-		syna_set_bus_ref(tcm, SYNA_BUS_REF_SCREEN_ON, true);
-
-	if (mode && tcm->hw_if->dynamic_report_rate) {
-		int vrefresh = drm_mode_vrefresh(mode);
-		LOGD("Display refresh rate %dHz", vrefresh);
-		if (vrefresh == 120 || vrefresh == 90)
-			tcm->next_report_rate_config = CONFIG_HIGH_REPORT_RATE;
-		else
-			tcm->next_report_rate_config = CONFIG_LOW_REPORT_RATE;
-
-		if (tcm->last_vrefresh_rate != vrefresh)
-			cancel_delayed_work_sync(&tcm->set_report_rate_work);
-
-		if (tcm->next_report_rate_config != tcm->touch_report_rate_config &&
-			tcm->pwr_state == PWR_ON && tcm->bus_refmask != 0) {
-			/*
-			 * Queue the work immediately for increasing touch report rate
-			 * to 240Hz and queue 2 seconds delay work for decreasing
-			 * touch report rate.
-			 */
-			queue_delayed_work(tcm->event_wq, &tcm->set_report_rate_work,
-				(tcm->next_report_rate_config == CONFIG_HIGH_REPORT_RATE) ?
-				0 : msecs_to_jiffies(2 * MSEC_PER_SEC));
-		}
-		tcm->last_vrefresh_rate = vrefresh;
-	}
-}
-
-static const struct drm_bridge_funcs panel_bridge_funcs = {
-	.enable = syna_panel_bridge_enable,
-	.disable = syna_panel_bridge_disable,
-	.mode_set = syna_panel_bridge_mode_set,
-};
-
-static int syna_register_panel_bridge(struct syna_tcm *tcm)
-{
-#ifdef CONFIG_OF
-	tcm->panel_bridge.of_node = tcm->pdev->dev.parent->of_node;
-#endif
-	tcm->panel_bridge.funcs = &panel_bridge_funcs;
-	drm_bridge_add(&tcm->panel_bridge);
-
-	return 0;
-}
-
-static void syna_unregister_panel_bridge(struct drm_bridge *bridge)
-{
-	struct drm_bridge *node;
-
-	drm_bridge_remove(bridge);
-
-	if (!bridge->dev) /* not attached */
-		return;
-
-	drm_modeset_lock(&bridge->dev->mode_config.connection_mutex, NULL);
-	list_for_each_entry(node, &bridge->encoder->bridge_chain, chain_node)
-		if (node == bridge) {
-			if (bridge->funcs->detach)
-				bridge->funcs->detach(bridge);
-			list_del(&bridge->chain_node);
-			break;
-		}
-	drm_modeset_unlock(&bridge->dev->mode_config.connection_mutex);
-	bridge->dev = NULL;
-}
-#endif
-
 /**
  * syna_dev_disconnect()
  *
@@ -3217,9 +3077,7 @@ static int syna_dev_probe(struct platform_device *pdev)
 	}
 #endif
 
-#if defined(USE_DRM_BRIDGE)
-	retval = syna_register_panel_bridge(tcm);
-#elif defined(ENABLE_DISP_NOTIFIER)
+#if defined(ENABLE_DISP_NOTIFIER)
 #if defined(USE_DRM_PANEL_NOTIFIER)
 	dev = syna_request_managed_device();
 	active_panel = syna_dev_get_panel(dev->of_node);
@@ -3328,14 +3186,7 @@ static int syna_dev_remove(struct platform_device *pdev)
 	cancel_work_sync(&tcm->set_palm_mode_work);
 	cancel_delayed_work_sync(&tcm->set_report_rate_work);
 
-#if IS_ENABLED(CONFIG_TOUCHSCREEN_TBN)
-	if (tcm->tbn_register_mask)
-		unregister_tbn(&tcm->tbn_register_mask);
-#endif
-
-#if defined(USE_DRM_BRIDGE)
-	syna_unregister_panel_bridge(&tcm->panel_bridge);
-#elif defined(ENABLE_DISP_NOTIFIER)
+#if defined(ENABLE_DISP_NOTIFIER)
 #if defined(USE_DRM_PANEL_NOTIFIER)
 	if (active_panel)
 		drm_panel_notifier_unregister(active_panel,
@@ -3410,40 +3261,8 @@ static void syna_dev_shutdown(struct platform_device *pdev)
  * Declare a TouchComm platform device
  */
 #ifdef CONFIG_PM
-#if defined(USE_DRM_BRIDGE)
-static int syna_pm_suspend(struct device *dev)
-{
-	struct syna_tcm *tcm = dev_get_drvdata(dev);
-
-	if (tcm->bus_refmask)
-		LOGW("bus_refmask 0x%X\n", tcm->bus_refmask);
-
-	if (tcm->pwr_state == PWR_ON) {
-		LOGW("can't suspend because touch bus is in use!\n");
-		if (tcm->bus_refmask == SYNA_BUS_REF_BUGREPORT &&
-		    ktime_ms_delta(ktime_get(), tcm->bugreport_ktime_start) > 30 * MSEC_PER_SEC) {
-			syna_set_bus_ref(tcm, SYNA_BUS_REF_BUGREPORT, false);
-			pm_relax(&tcm->pdev->dev);
-			tcm->bugreport_ktime_start = 0;
-			LOGE("Force release SYNA_BUS_REF_BUGREPORT reference bit.");
-		}
-		return -EBUSY;
-	}
-
-	return 0;
-}
-
-static int syna_pm_resume(struct device *dev)
-{
-	return 0;
-}
-#endif
-
 static const struct dev_pm_ops syna_dev_pm_ops = {
-#if defined(USE_DRM_BRIDGE)
-	.suspend = syna_pm_suspend,
-	.resume = syna_pm_resume,
-#elif !defined(ENABLE_DISP_NOTIFIER)
+#if !defined(ENABLE_DISP_NOTIFIER)
 	.suspend = syna_dev_suspend,
 	.resume = syna_dev_resume,
 #endif
