@@ -28,6 +28,7 @@
 
 #include <linux/exynos-pci-ctrl.h>
 #include <linux/shm_ipc.h>
+#include <dt-bindings/pci/pci.h>
 
 #include "modem_notifier.h"
 #include "modem_prj.h"
@@ -1556,15 +1557,16 @@ int s5100_poweron_pcie(struct modem_ctl *mc, enum link_up_mode mode)
 	unsigned long flags2;
 	bool boot_on;
 
-	if (mode == GEN1_BOOTING)
-		boot_on = true;
-	else
-		boot_on = false;
-
 	if (mc == NULL) {
 		mif_err("Skip pci power on: mc is NULL\n");
 		return 0;
 	}
+
+	if (mode == GEN1_BOOTING) {
+		boot_on = true;
+		mif_info("PCIe gen1 linkup with CP ROM start.\n");
+	} else
+		boot_on = false;
 
 	ld = get_current_link(mc->iod);
 	mld = to_mem_link_device(ld);
@@ -1620,8 +1622,17 @@ int s5100_poweron_pcie(struct modem_ctl *mc, enum link_up_mode mode)
 	if (exynos_pcie_rc_get_cpl_timeout_state(mc->pcie_ch_num))
 		exynos_pcie_set_ready_cto_recovery(mc->pcie_ch_num);
 
-	if (exynos_pcie_poweron(mc->pcie_ch_num, (boot_on ? 1 : 3)) != 0)
+	if (exynos_pcie_poweron(mc->pcie_ch_num,
+			(boot_on ? LINK_SPEED_GEN1 : LINK_SPEED_GEN3)) != 0) {
+		if (boot_on) {
+			mif_err("PCIe gen1 linkup with CP ROM failed.\n");
+			logbuffer_log(mc->log, "PCIe gen1 linkup with CP ROM failed.");
+		}
 		goto exit;
+	}
+
+	if (boot_on)
+		mif_info("PCIe gen1 linkup with CP ROM succeed.\n");
 
 	mc->pcie_powered_on = true;
 
