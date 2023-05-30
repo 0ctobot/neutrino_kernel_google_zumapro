@@ -150,9 +150,6 @@ struct syna_hw_interface {
 	u16 compression_threhsold;
 	u16 grip_delta_threshold;
 	u16 grip_border_threshold;
-#if IS_ENABLED(CONFIG_TOUCHSCREEN_OFFLOAD)
-	u32 offload_id;
-#endif
 	int udfps_x;
 	int udfps_y;
 	bool dynamic_report_rate;

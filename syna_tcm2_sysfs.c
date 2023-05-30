@@ -1283,91 +1283,6 @@ static struct kobj_attribute kobj_attr_fw_palm =
 	       syna_sysfs_fw_palm_store);
 
 /**
- * syna_sysfs_default_mf_show()
- *
- * Attribute to show motion filter mode.
- *
- * @param
- *    [ in] kobj:  an instance of kobj
- *    [ in] attr:  an instance of kobj attribute structure
- *    [out] buf:  string buffer shown on console
- *
- * @return
- *    on success, number of characters being output;
- *    otherwise, negative value on error.
- */
-static ssize_t syna_sysfs_mf_mode_show(struct kobject *kobj,
-		struct kobj_attribute *attr, char *buf)
-{
-	int retval = 0;
-	struct device *p_dev;
-	struct kobject *p_kobj;
-	struct syna_tcm *tcm;
-
-	p_kobj = g_sysfs_dir->parent;
-	p_dev = container_of(p_kobj, struct device, kobj);
-	tcm = dev_get_drvdata(p_dev);
-
-	syna_pal_mutex_lock(&g_extif_mutex);
-
-	retval = scnprintf(buf, PAGE_SIZE, "%d\n", tcm->mf_mode);
-
-	syna_pal_mutex_unlock(&g_extif_mutex);
-	return retval;
-}
-
-/**
- * syna_sysfs_mf_mode_store()
- *
- * Attribute to set motion filter mode.
- *  0 = Always unfilter.
- *  1 = Dynamic change motion filter.
- *  2 = Always filter by touch FW.
- *
- * @param
- *    [ in] kobj:  an instance of kobj
- *    [ in] attr:  an instance of kobj attribute structure
- *    [ in] buf:   string buffer input
- *    [ in] count: size of buffer input
- *
- * @return
- *    on success, return count; otherwise, return error code
- */
-static ssize_t syna_sysfs_mf_mode_store(struct kobject *kobj,
-		struct kobj_attribute *attr, const char *buf, size_t count)
-{
-	int retval = count;
-	u8 input;
-	struct device *p_dev;
-	struct kobject *p_kobj;
-	struct syna_tcm *tcm;
-
-	p_kobj = g_sysfs_dir->parent;
-	p_dev = container_of(p_kobj, struct device, kobj);
-	tcm = dev_get_drvdata(p_dev);
-
-	if (kstrtou8(buf, 16, &input)) {
-		LOGE("Invalid input %s", buf);
-		return -EINVAL;
-	}
-
-	syna_set_bus_ref(tcm, SYNA_BUS_REF_SYSFS, true);
-	syna_pal_mutex_lock(&g_extif_mutex);
-
-	tcm->mf_mode = input;
-
-	LOGI("Set motion filer mode %d.\n", tcm->mf_mode);
-
-	syna_pal_mutex_unlock(&g_extif_mutex);
-	syna_set_bus_ref(tcm, SYNA_BUS_REF_SYSFS, false);
-	return retval;
-}
-
-static struct kobj_attribute kobj_attr_mf_mode =
-	__ATTR(mf_mode, 0644, syna_sysfs_mf_mode_show,
-	       syna_sysfs_mf_mode_store);
-
-/**
  * syna_sysfs_compression_threshold_show()
  *
  * Attribute get the heatmap compression threshold.
@@ -1469,7 +1384,6 @@ static struct attribute *attrs[] = {
 	&kobj_attr_high_sensitivity.attr,
 	&kobj_attr_fw_grip.attr,
 	&kobj_attr_fw_palm.attr,
-	&kobj_attr_mf_mode.attr,
 	&kobj_attr_compression_threshold.attr,
 	NULL,
 };

@@ -99,10 +99,6 @@ static unsigned char custom_touch_format[] = {
 	struct drm_panel *active_panel;
 #endif
 
-#if IS_ENABLED(CONFIG_TOUCHSCREEN_OFFLOAD)
-static void reserve_then_queue_frame(struct syna_tcm *tcm, bool has_heatmap);
-#endif
-
 /**
  * syna_dev_enable_lowpwr_gesture()
  *
@@ -253,71 +249,6 @@ static void syna_dev_restore_feature_setting(struct syna_tcm *tcm, unsigned int 
 				tcm->touch_report_rate_config,
 				delay_ms_resp);
 	}
-}
-
-/* Update a state machine used to toggle control of the touch IC's motion
- * filter.
- */
-static int syna_update_motion_filter(struct syna_tcm *tcm, u8 touches)
-{
-	/* Motion filter timeout, in milliseconds */
-	const u32 mf_timeout_ms = 500;
-	u8 next_state;
-
-	if (tcm->mf_mode == MF_OFF) {
-		if (touches != 0)
-			next_state = MF_UNFILTERED;
-		else
-			next_state = MF_FILTERED;
-	} else if (tcm->mf_mode == MF_DYNAMIC) {
-		/* Determine the next filter state. The motion filter is enabled by
-		 * default and it is disabled while a single finger is touching the
-		 * screen. If another finger is touched down or if a timeout expires,
-		 * the motion filter is reenabled and remains enabled until all fingers
-		 * are lifted.
-		 */
-		next_state = tcm->mf_state;
-		switch (tcm->mf_state) {
-		case MF_FILTERED:
-			if (touches == 1) {
-				next_state = MF_UNFILTERED;
-				tcm->mf_downtime = ktime_get();
-			}
-			break;
-		case MF_UNFILTERED:
-			if (touches == 0) {
-				next_state = MF_FILTERED;
-			} else if (touches > 1 ||
-				   ktime_after(ktime_get(),
-					       ktime_add_ms(tcm->mf_downtime,
-							    mf_timeout_ms))) {
-				next_state = MF_FILTERED_LOCKED;
-			}
-			break;
-		case MF_FILTERED_LOCKED:
-			if (touches == 0) {
-				next_state = MF_FILTERED;
-			}
-			break;
-		}
-	} else if (tcm->mf_mode == MF_ON) {
-		next_state = MF_FILTERED;
-	} else {
-		/* Set 1(Dynamic) as default when an invalid value is found. */
-		tcm->mf_mode = MF_DYNAMIC;
-		return 0;
-	}
-
-	/* Queue work to update filter state */
-	if ((next_state == MF_UNFILTERED) !=
-	    (tcm->mf_state == MF_UNFILTERED)) {
-		tcm->set_continuously_report = (next_state == MF_UNFILTERED) ? 0x01 : 0x00;
-		queue_work(tcm->event_wq, &tcm->motion_filter_work);
-	}
-
-	tcm->mf_state = next_state;
-
-	return 0;
 }
 
 static void syna_motion_filter_work(struct work_struct *work)
@@ -669,23 +600,6 @@ static void syna_dev_free_input_events(struct syna_tcm *tcm)
 
 	syna_pal_mutex_lock(&tcm->tp_event_mutex);
 
-#if IS_ENABLED(CONFIG_TOUCHSCREEN_OFFLOAD)
-	for (idx = 0; idx < MAX_NUM_OBJECTS; idx++) {
-		tcm->offload.coords[idx].status = COORD_STATUS_INACTIVE;
-		tcm->offload.coords[idx].major = 0;
-		tcm->offload.coords[idx].minor = 0;
-		tcm->offload.coords[idx].pressure = 0;
-	}
-
-	/* If the previous coord_frame that was pushed to touch_offload had
-	 * active coords (eg. there are fingers still on the screen), push an
-	 * empty coord_frame to touch_offload for clearing coords in twoshay.*/
-	if (tcm->touch_offload_active_coords && tcm->offload.offload_running) {
-		tcm->offload_reserved_coords = true;
-		LOGI("active coords %u", tcm->touch_offload_active_coords);
-		reserve_then_queue_frame(tcm, false);
-	} else {
-#endif
 #ifdef TYPE_B_PROTOCOL
 	for (idx = 0; idx < MAX_NUM_OBJECTS; idx++) {
 		input_mt_slot(input_dev, idx);
@@ -700,9 +614,6 @@ static void syna_dev_free_input_events(struct syna_tcm *tcm)
 #endif
 	input_sync(input_dev);
 
-#if IS_ENABLED(CONFIG_TOUCHSCREEN_OFFLOAD)
-	}
-#endif
 	syna_pal_mutex_unlock(&tcm->tp_event_mutex);
 
 }
@@ -779,18 +690,11 @@ static void syna_dev_report_input_events(struct syna_tcm *tcm)
 
 		switch (status) {
 		case LIFT:
-#if IS_ENABLED(CONFIG_TOUCHSCREEN_OFFLOAD)
-			tcm->offload.coords[idx].status = COORD_STATUS_INACTIVE;
-			if (!tcm->offload.offload_running) {
-#endif
 #ifdef TYPE_B_PROTOCOL
 			input_mt_slot(input_dev, idx);
 			input_report_abs(input_dev, ABS_MT_PRESSURE, 0);
 			input_mt_report_slot_state(input_dev,
 					MT_TOOL_FINGER, 0);
-#endif
-#if IS_ENABLED(CONFIG_TOUCHSCREEN_OFFLOAD)
-			}
 #endif
 			break;
 		case FINGER:
@@ -832,21 +736,7 @@ static void syna_dev_report_input_events(struct syna_tcm *tcm)
 #ifdef REPORT_FLIP_Y
 			y = tcm->input_dev_params.max_y - y;
 #endif
-#if IS_ENABLED(CONFIG_TOUCHSCREEN_OFFLOAD)
-			tcm->offload.coords[idx].status = COORD_STATUS_FINGER;
-			tcm->offload.coords[idx].x = x;
-			tcm->offload.coords[idx].y = y;
-			tcm->offload.coords[idx].pressure = z;
-#ifdef ENABLE_CUSTOM_TOUCH_ENTITY
-			tcm->offload.coords[idx].major = major;
-			tcm->offload.coords[idx].minor = minor;
-			tcm->offload.coords[idx].rotation = (s16) (((s8) angle) * 2048 / 45);
-#else
-			tcm->offload.coords[idx].major = MAX(wx, wy);
-			tcm->offload.coords[idx].minor = MIN(wx, wy);
-#endif
-			if (!tcm->offload.offload_running) {
-#endif
+
 #ifdef TYPE_B_PROTOCOL
 			input_mt_slot(input_dev, idx);
 			input_mt_report_slot_state(input_dev,
@@ -875,9 +765,7 @@ static void syna_dev_report_input_events(struct syna_tcm *tcm)
 #ifndef TYPE_B_PROTOCOL
 			input_mt_sync(input_dev);
 #endif
-#if IS_ENABLED(CONFIG_TOUCHSCREEN_OFFLOAD)
-			}
-#endif
+
 			LOGD("Finger %d: x = %d, y = %d, z = %d\n", idx, x, y, z);
 			touch_count++;
 			break;
@@ -888,9 +776,6 @@ static void syna_dev_report_input_events(struct syna_tcm *tcm)
 		tcm->prev_obj_status[idx] = object_data[idx].status;
 	}
 
-#if IS_ENABLED(CONFIG_TOUCHSCREEN_OFFLOAD)
-	if (!tcm->offload.offload_running) {
-#endif
 	if (touch_count == 0) {
 		input_report_key(input_dev, BTN_TOUCH, 0);
 		input_report_key(input_dev, BTN_TOOL_FINGER, 0);
@@ -899,17 +784,9 @@ static void syna_dev_report_input_events(struct syna_tcm *tcm)
 #endif
 	}
 
-	input_set_timestamp(input_dev, tcm->coords_timestamp);
+	input_set_timestamp(input_dev, tcm->timestamp);
 	input_sync(input_dev);
 	tcm->touch_count = touch_count;
-
-	syna_update_motion_filter(tcm, touch_count);
-
-#if IS_ENABLED(CONFIG_TOUCHSCREEN_OFFLOAD)
-	} else {
-		tcm->offload_reserved_coords = true;
-	}
-#endif
 
 exit:
 	syna_pal_mutex_unlock(&tcm->tp_event_mutex);
@@ -1115,114 +992,7 @@ exit:
 	return retval;
 }
 
-#if IS_ENABLED(CONFIG_TOUCHSCREEN_OFFLOAD)
-static void syna_offload_set_running(struct syna_tcm *tcm, bool running)
-{
-	if (tcm->offload.offload_running != running)
-		tcm->offload.offload_running = running;
-
-	/*
-	 * Use the configurations set by touch service if it's running.
-	 * Enable the firmware grip and palm if the touch service isn't running.
-	 */
-	tcm->next_enable_fw_grip = running ? !tcm->offload.config.filter_grip : 1;
-	tcm->next_enable_fw_palm = running ? !tcm->offload.config.filter_palm : 1;
-
-	if (tcm->next_enable_fw_grip != tcm->enable_fw_grip && tcm->enable_fw_grip < 2)
-		queue_work(tcm->event_wq, &tcm->set_grip_mode_work);
-
-	if (tcm->next_enable_fw_palm != tcm->enable_fw_palm && tcm->enable_fw_palm < 2)
-		queue_work(tcm->event_wq, &tcm->set_palm_mode_work);
-}
-
-static void syna_offload_report(void *handle,
-				struct TouchOffloadIocReport *report)
-{
-	struct syna_tcm *tcm = (struct syna_tcm *)handle;
-	bool touch_down = 0;
-	int i;
-	int touch_count = 0;
-	int tool_type;
-
-	ATRACE_BEGIN("syna_offload_report");
-
-	syna_pal_mutex_lock(&tcm->tp_event_mutex);
-
-	input_set_timestamp(tcm->input_dev, report->timestamp);
-
-	for (i = 0; i < MAX_COORDS; i++) {
-		if (report->coords[i].status != COORD_STATUS_INACTIVE) {
-			input_mt_slot(tcm->input_dev, i);
-			touch_count++;
-			touch_down = 1;
-			input_report_key(tcm->input_dev, BTN_TOUCH,
-					 touch_down);
-			input_report_key(tcm->input_dev, BTN_TOOL_FINGER,
-					 touch_down);
-			switch (report->coords[i].status) {
-			case COORD_STATUS_EDGE:
-			case COORD_STATUS_PALM:
-			case COORD_STATUS_CANCEL:
-				tool_type = MT_TOOL_PALM;
-				break;
-			case COORD_STATUS_FINGER:
-			default:
-				tool_type = MT_TOOL_FINGER;
-				break;
-			}
-			input_mt_report_slot_state(tcm->input_dev,
-						   tool_type, 1);
-			input_report_abs(tcm->input_dev, ABS_MT_POSITION_X,
-					 report->coords[i].x);
-			input_report_abs(tcm->input_dev, ABS_MT_POSITION_Y,
-					 report->coords[i].y);
-			input_report_abs(tcm->input_dev, ABS_MT_TOUCH_MAJOR,
-					 report->coords[i].major);
-			input_report_abs(tcm->input_dev, ABS_MT_TOUCH_MINOR,
-					 report->coords[i].minor);
-			input_report_abs(tcm->input_dev, ABS_MT_PRESSURE,
-					 report->coords[i].pressure);
-			input_report_abs(tcm->input_dev, ABS_MT_ORIENTATION,
-					 report->coords[i].rotation);
-		} else {
-			input_mt_slot(tcm->input_dev, i);
-			input_report_abs(tcm->input_dev, ABS_MT_PRESSURE, 0);
-			input_mt_report_slot_state(tcm->input_dev,
-						   MT_TOOL_FINGER, 0);
-			input_report_abs(tcm->input_dev, ABS_MT_TRACKING_ID,
-					 -1);
-		}
-	}
-	input_report_key(tcm->input_dev, BTN_TOUCH, touch_down);
-	input_report_key(tcm->input_dev, BTN_TOOL_FINGER, touch_down);
-
-	input_sync(tcm->input_dev);
-	tcm->touch_count = touch_count;
-
-	syna_update_motion_filter(tcm, touch_count);
-
-	syna_pal_mutex_unlock(&tcm->tp_event_mutex);
-
-	ATRACE_END();
-}
-
-static int syna_heatmap_alloc_check(struct syna_tcm *tcm)
-{
-	if (tcm->heatmap_buff)
-	        return 0;
-
-	tcm->heatmap_buff = devm_kzalloc(&tcm->pdev->dev,
-			sizeof(u16) * tcm->tcm_dev->rows * tcm->tcm_dev->cols, GFP_KERNEL);
-	if (!tcm->heatmap_buff) {
-		LOGE("allocate heatmap_buff failed\n");
-		return -ENOMEM;
-	}
-	LOGI("Allocate heatmap memory, rows: %d, cols: %d\n", tcm->tcm_dev->rows,
-	     tcm->tcm_dev->cols);
-
-	return 0;
-}
-
+#if 0
 static int syna_dev_ptflib_decoder(struct syna_tcm *tcm, const u16 *in_array,
 				   const int in_array_size, u16 *out_array,
 				   const int out_array_max_size)
@@ -1266,219 +1036,13 @@ static int syna_dev_ptflib_decoder(struct syna_tcm *tcm, const u16 *in_array,
 
 	return out_array_size;
 }
-
-static void syna_populate_coordinate_channel(struct syna_tcm *tcm,
-					     struct touch_offload_frame *frame,
-					     int channel)
-{
-	int j;
-	u8 active_coords = 0;
-
-	struct TouchOffloadDataCoord *dc =
-		(struct TouchOffloadDataCoord *)frame->channel_data[channel];
-	memset(dc, 0, frame->channel_data_size[channel]);
-	dc->header.channel_type = TOUCH_DATA_TYPE_COORD;
-	dc->header.channel_size = TOUCH_OFFLOAD_FRAME_SIZE_COORD;
-
-	for (j = 0; j < MAX_COORDS; j++) {
-		dc->coords[j].x = tcm->offload.coords[j].x;
-		dc->coords[j].y = tcm->offload.coords[j].y;
-		dc->coords[j].major = tcm->offload.coords[j].major;
-		dc->coords[j].minor = tcm->offload.coords[j].minor;
-		dc->coords[j].pressure = tcm->offload.coords[j].pressure;
-		dc->coords[j].status = tcm->offload.coords[j].status;
-		if (dc->coords[j].status != COORD_STATUS_INACTIVE)
-			active_coords += 1;
-	}
-
-	tcm->touch_offload_active_coords = active_coords;
-}
-
-static void syna_populate_mutual_channel(struct syna_tcm *tcm,
-					 struct touch_offload_frame *frame,
-					 int channel, bool has_heatmap)
-{
-	int i, j;
-	struct TouchOffloadData2d *mutual_strength =
-		(struct TouchOffloadData2d *)frame->channel_data[channel];
-
-	mutual_strength->tx_size = tcm->tcm_dev->rows;
-	mutual_strength->rx_size = tcm->tcm_dev->cols;
-	mutual_strength->header.channel_type = frame->channel_type[channel];
-	mutual_strength->header.channel_size =
-		TOUCH_OFFLOAD_FRAME_SIZE_2D(mutual_strength->rx_size,
-					    mutual_strength->tx_size);
-
-	if (syna_heatmap_alloc_check(tcm) != 0)
-		return;
-
-	if (has_heatmap) {
-		/* for 'heat map' ($c3) report,
-		 * report data has been stored at tcm->event_data.buf;
-		 * while, tcm->event_data.data_length is the size of data
-		 */
-		syna_dev_ptflib_decoder(tcm,
-		    &((u16 *) tcm->event_data.buf)[tcm->tcm_dev->rows + tcm->tcm_dev->cols],
-		    (tcm->event_data.data_length) / 2 - tcm->tcm_dev->rows - tcm->tcm_dev->cols,
-		    tcm->heatmap_buff,
-		    tcm->tcm_dev->rows * tcm->tcm_dev->cols);
-
-		for (i = 0; i < tcm->tcm_dev->cols; i++) {
-			for (j = 0; j < tcm->tcm_dev->rows; j++) {
-				((u16 *) mutual_strength->data)[tcm->tcm_dev->rows * i + j] =
-					tcm->heatmap_buff[tcm->tcm_dev->cols * j + i];
-			}
-		}
-		memcpy(tcm->heatmap_buff, (u16 *) mutual_strength->data,
-			tcm->tcm_dev->cols * tcm->tcm_dev->rows * sizeof(u16));
-	} else {
-		memset(mutual_strength->data, 0,
-			tcm->tcm_dev->cols * tcm->tcm_dev->rows * sizeof(u16));
-	}
-
-#if IS_ENABLED(CONFIG_TOUCHSCREEN_HEATMAP)
-	tcm->heatmap_decoded = true;
-#endif
-}
-
-static void syna_populate_self_channel(struct syna_tcm *tcm,
-				       struct touch_offload_frame *frame,
-				       int channel, bool has_heatmap)
-{
-	int i;
-	struct TouchOffloadData1d *self_strength =
-		(struct TouchOffloadData1d *)frame->channel_data[channel];
-
-	self_strength->tx_size = tcm->tcm_dev->rows;
-	self_strength->rx_size = tcm->tcm_dev->cols;
-	self_strength->header.channel_type = frame->channel_type[channel];
-	self_strength->header.channel_size =
-		TOUCH_OFFLOAD_FRAME_SIZE_1D(self_strength->rx_size,
-					    self_strength->tx_size);
-	if (has_heatmap) {
-		for (i = 0; i < tcm->tcm_dev->rows; i++) {
-			((u16 *) self_strength->data)[i] =
-				((u16 *) tcm->event_data.buf)[tcm->tcm_dev->cols + i];
-		}
-
-		for (i = 0; i < tcm->tcm_dev->cols; i++) {
-			((u16 *) self_strength->data)[tcm->tcm_dev->rows + i] =
-				((u16 *) tcm->event_data.buf)[i];
-		}
-	} else {
-		memset(self_strength->data, 0,
-			(tcm->tcm_dev->cols + tcm->tcm_dev->rows) * sizeof(u16));
-	}
-}
-
-static void syna_populate_frame(struct syna_tcm *tcm, bool has_heatmap)
-{
-	static u64 index;
-	int i;
-	struct touch_offload_frame *frame = tcm->reserved_frame;
-
-	frame->header.index = index++;
-	frame->header.timestamp = tcm->coords_timestamp;
-
-	ATRACE_BEGIN(__func__);
-
-	/* Populate all channels */
-	for (i = 0; i < frame->num_channels; i++) {
-		if (frame->channel_type[i] == TOUCH_DATA_TYPE_COORD) {
-			ATRACE_BEGIN("populate coord");
-			syna_populate_coordinate_channel(tcm, frame, i);
-			ATRACE_END();
-		} else if ((frame->channel_type[i] & TOUCH_SCAN_TYPE_MUTUAL) != 0) {
-			ATRACE_BEGIN("populate mutual data");
-			syna_populate_mutual_channel(tcm, frame, i, has_heatmap);
-			ATRACE_END();
-		} else if ((frame->channel_type[i] & TOUCH_SCAN_TYPE_SELF) != 0) {
-			ATRACE_BEGIN("populate self data");
-			syna_populate_self_channel(tcm, frame, i, has_heatmap);
-			ATRACE_END();
-		}
-	}
-	ATRACE_END();
-}
-
-static void reserve_then_queue_frame(struct syna_tcm *tcm, bool has_heatmap) {
-	int retval;
-
-	/* Skip if no reserved coordinates. */
-	if (!tcm->offload_reserved_coords && tcm->offload.offload_running)
-		return;
-
-	retval = touch_offload_reserve_frame(&tcm->offload, &tcm->reserved_frame);
-	if (retval != 0) {
-		LOGD("Could not reserve a frame: error=%d.\n", retval);
-
-		/* Stop offload when there are no buffers available. */
-		syna_offload_set_running(tcm, false);
-	} else {
-		syna_offload_set_running(tcm, true);
-
-		syna_populate_frame(tcm, has_heatmap);
-
-		retval = touch_offload_queue_frame(&tcm->offload, tcm->reserved_frame);
-		if (retval != 0)
-			LOGE("Failed to queue reserved frame: error=%d.\n", retval);
-
-		tcm->offload_reserved_coords = false;
-	}
-}
-#endif /* CONFIG_TOUCHSCREEN_OFFLOAD */
-
-#if IS_ENABLED(CONFIG_TOUCHSCREEN_HEATMAP)
-static bool v4l2_read_frame(struct v4l2_heatmap *v4l2)
-{
-	bool ret = true;
-	int i, j;
-	struct syna_tcm *tcm =
-		container_of(v4l2, struct syna_tcm, v4l2);
-
-	if (tcm->v4l2.width == tcm->tcm_dev->rows &&
-		tcm->v4l2.height == tcm->tcm_dev->cols) {
-		if (tcm->heatmap_decoded) {
-			memcpy(v4l2->frame, tcm->heatmap_buff,
-			       tcm->v4l2.width * tcm->v4l2.height * sizeof(u16));
-		} else {
-		    if (syna_heatmap_alloc_check(tcm) != 0)
-			return false;
-
-		    /* for 'heat map' ($c3) report,
-		     * report data has been stored at tcm->event_data.buf;
-		     * while, tcm->event_data.data_length is the size of data
-		     */
-		    syna_dev_ptflib_decoder(tcm,
-			&((u16 *) tcm->event_data.buf)[tcm->tcm_dev->rows + tcm->tcm_dev->cols],
-			(tcm->event_data.data_length) / 2 -
-			    tcm->tcm_dev->rows - tcm->tcm_dev->cols,
-			tcm->heatmap_buff, tcm->tcm_dev->rows * tcm->tcm_dev->cols);
-
-		    for (i = 0; i < tcm->tcm_dev->cols; i++) {
-			for (j = 0; j < tcm->tcm_dev->rows; j++) {
-			    ((u16 *) v4l2->frame)[tcm->tcm_dev->rows * i + j] =
-				tcm->heatmap_buff[tcm->tcm_dev->cols * j + i];
-			}
-		    }
-		}
-	} else {
-		LOGE("size mismatched, (%lu, %lu) vs (%u, %u)!\n",
-		tcm->v4l2.width, tcm->v4l2.height,
-		tcm->tcm_dev->rows, tcm->tcm_dev->cols);
-		ret = false;
-	}
-	tcm->heatmap_decoded = false;
-
-	return ret;
-}
 #endif
 
 static irqreturn_t syna_dev_isr(int irq, void *handle)
 {
 	struct syna_tcm *tcm = handle;
 
-	tcm->isr_timestamp = ktime_get();
+	tcm->timestamp = ktime_get();
 
 	return IRQ_WAKE_THREAD;
 }
@@ -1507,8 +1071,6 @@ static irqreturn_t syna_dev_interrupt_thread(int irq, void *data)
 	struct syna_hw_attn_data *attn = &tcm->hw_if->bdata_attn;
 	struct tcm_dev *tcm_dev = tcm->tcm_dev;
 
-	ATRACE_BEGIN(__func__);
-
 	/* It is possible that interrupts were disabled while the handler is
 	 * executing, before acquiring the mutex. If so, simply return.
 	 */
@@ -1531,7 +1093,6 @@ static irqreturn_t syna_dev_interrupt_thread(int irq, void *data)
 		goto exit;
 	}
 #endif
-	ATRACE_BEGIN("get_event_data");
 	/* retrieve the original report date generated by firmware */
 	retval = syna_tcm_get_event_data(tcm->tcm_dev,
 			&code,
@@ -1540,7 +1101,6 @@ static irqreturn_t syna_dev_interrupt_thread(int irq, void *data)
 		LOGE("Fail to get event data\n");
 		goto exit;
 	}
-	ATRACE_END();
 
 #ifdef ENABLE_EXTERNAL_FRAME_PROCESS
 	if (tcm->report_to_queue[code] == EFP_ENABLE) {
@@ -1555,14 +1115,6 @@ static irqreturn_t syna_dev_interrupt_thread(int irq, void *data)
 #endif
 	/* report input event only when receiving a touch report */
 	if (code == REPORT_TOUCH) {
-#if IS_ENABLED(CONFIG_TOUCHSCREEN_OFFLOAD)
-		/* Reserve and queue the frame if last reserved coordinates is pending. */
-		if ((tcm->offload_reserved_coords) && (tcm->offload.offload_running)) {
-			LOGW("Last reserved coordinates was not queued.\n");
-			reserve_then_queue_frame(tcm, false);
-		}
-#endif
-
 		/* parse touch report once received */
 		retval = syna_tcm_parse_touch_report(tcm->tcm_dev,
 				tcm->event_data.buf,
@@ -1572,12 +1124,9 @@ static irqreturn_t syna_dev_interrupt_thread(int irq, void *data)
 			LOGE("Fail to parse touch report\n");
 			goto exit;
 		}
-		tcm->coords_timestamp = tcm->isr_timestamp;
 
 		/* forward the touch event to system */
-		ATRACE_BEGIN("report_input_events");
 		syna_dev_report_input_events(tcm);
-		ATRACE_END();
 	} else if (code == tcm->raw_data_report_code) {
 		if (!tcm->raw_data_buffer) {
 			tcm->raw_data_buffer = kmalloc(
@@ -1608,14 +1157,6 @@ static irqreturn_t syna_dev_interrupt_thread(int irq, void *data)
 		 */
 		LOGD("Heat map data received, size:%d\n",
 			tcm->event_data.data_length);
-#if IS_ENABLED(CONFIG_TOUCHSCREEN_OFFLOAD)
-		reserve_then_queue_frame(tcm, true);
-#endif
-#if IS_ENABLED(CONFIG_TOUCHSCREEN_HEATMAP)
-		ATRACE_BEGIN("heatmap_read");
-		heatmap_read(&tcm->v4l2, ktime_to_ns(tcm->coords_timestamp));
-		ATRACE_END();
-#endif
 		break;
 	case REPORT_FW_STATUS:
 		/* for 'fw status' ($c2) report,
@@ -1635,10 +1176,8 @@ exit:
 	if (force_complete_all)
 		complete_all(&tcm_dev->msg_data.cmd_completion);
 
-	ATRACE_END();
 	return IRQ_HANDLED;
 }
-
 
 /**
  * syna_dev_request_irq()
@@ -2771,62 +2310,6 @@ static int syna_dev_probe(struct platform_device *pdev)
 	init_completion(&tcm->raw_data_completion);
 	complete_all(&tcm->raw_data_completion);
 
-#if IS_ENABLED(CONFIG_TOUCHSCREEN_OFFLOAD)
-	tcm->offload.caps.touch_offload_major_version = TOUCH_OFFLOAD_INTERFACE_MAJOR_VERSION;
-	tcm->offload.caps.touch_offload_minor_version = TOUCH_OFFLOAD_INTERFACE_MINOR_VERSION;
-	tcm->offload.caps.device_id = tcm->hw_if->offload_id;
-	tcm->offload.caps.display_width = tcm->tcm_dev->max_x;
-	tcm->offload.caps.display_height = tcm->tcm_dev->max_y;
-	tcm->offload.caps.tx_size = tcm->tcm_dev->rows;
-	tcm->offload.caps.rx_size = tcm->tcm_dev->cols;
-
-	tcm->offload.caps.bus_type = BUS_TYPE_SPI;
-	tcm->offload.caps.bus_speed_hz = 10000000;
-	tcm->offload.caps.heatmap_size = HEATMAP_SIZE_FULL;
-	tcm->offload.caps.touch_data_types = TOUCH_DATA_TYPE_COORD |
-					     TOUCH_DATA_TYPE_STRENGTH;
-	tcm->offload.caps.touch_scan_types = TOUCH_SCAN_TYPE_MUTUAL |
-					     TOUCH_SCAN_TYPE_SELF;
-	tcm->offload.caps.continuous_reporting = true;
-	tcm->offload.caps.noise_reporting = false;
-	tcm->offload.caps.cancel_reporting = true;
-	tcm->offload.caps.size_reporting = true;
-	tcm->offload.caps.rotation_reporting = true;
-	tcm->offload.caps.filter_grip = true;
-	tcm->offload.caps.filter_palm = true;
-	tcm->offload.caps.num_sensitivity_settings = 1;
-
-	tcm->offload.hcallback = (void *)tcm;
-	tcm->offload.report_cb = syna_offload_report;
-	touch_offload_init(&tcm->offload);
-
-	if (syna_heatmap_alloc_check(tcm) != 0)
-		goto err_connect;
-
-	tcm->touch_offload_active_coords = 0;
-#endif
-
-#if IS_ENABLED(CONFIG_TOUCHSCREEN_HEATMAP)
-	/*
-	 * Heatmap_probe must be called before irq routine is registered,
-	 * because heatmap_read is called from interrupt context.
-	 */
-	tcm->v4l2.parent_dev = &tcm->pdev->dev;
-	tcm->v4l2.input_dev = tcm->input_dev;
-	tcm->v4l2.read_frame = v4l2_read_frame;
-	tcm->v4l2.width = tcm->tcm_dev->rows;
-	tcm->v4l2.height = tcm->tcm_dev->cols;
-	/* 240 Hz operation */
-	tcm->v4l2.timeperframe.numerator = 1;
-	tcm->v4l2.timeperframe.denominator = 240;
-	retval = heatmap_probe(&tcm->v4l2);
-	if (retval < 0)
-		goto err_heatmap_probe;
-#endif
-
-	/* init motion filter mode */
-	tcm->mf_mode = MF_DYNAMIC;
-
 	INIT_WORK(&tcm->motion_filter_work, syna_motion_filter_work);
 	INIT_WORK(&tcm->set_grip_mode_work, syna_set_grip_mode_work);
 	INIT_WORK(&tcm->set_palm_mode_work, syna_set_palm_mode_work);
@@ -2924,14 +2407,6 @@ err_request_irq:
 #if defined(TCM_CONNECT_IN_PROBE)
 	tcm->dev_disconnect(tcm);
 
-#if IS_ENABLED(CONFIG_TOUCHSCREEN_HEATMAP)
-	heatmap_remove(&tcm->v4l2);
-err_heatmap_probe:
-#endif
-#if IS_ENABLED(CONFIG_TOUCHSCREEN_OFFLOAD)
-	touch_offload_cleanup(&tcm->offload);
-#endif
-
 err_connect:
 #endif
 
@@ -3004,14 +2479,6 @@ static int syna_dev_remove(struct platform_device *pdev)
 	/* check the connection statusm, and do disconnection */
 	if (tcm->dev_disconnect(tcm) < 0)
 		LOGE("Fail to do device disconnection\n");
-
-#if IS_ENABLED(CONFIG_TOUCHSCREEN_OFFLOAD)
-	touch_offload_cleanup(&tcm->offload);
-#endif
-
-#if IS_ENABLED(CONFIG_TOUCHSCREEN_HEATMAP)
-	heatmap_remove(&tcm->v4l2);
-#endif
 
 	if (tcm->raw_data_buffer) {
 		kfree(tcm->raw_data_buffer);

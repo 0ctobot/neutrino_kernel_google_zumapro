@@ -44,17 +44,6 @@
 #include "synaptics_touchcom_core_dev.h"
 #include "synaptics_touchcom_func_touch.h"
 
-#if IS_ENABLED(CONFIG_TOUCHSCREEN_OFFLOAD)
-#include <touch_offload.h>
-#include <linux/hrtimer.h>
-#endif
-
-#if IS_ENABLED(CONFIG_TOUCHSCREEN_HEATMAP)
-#include <heatmap.h>
-#endif
-
-#include <trace/hooks/systrace.h>
-
 #define PLATFORM_DRIVER_NAME "synaptics_tcm"
 
 #define TOUCH_INPUT_NAME "synaptics_tcm_touch"
@@ -297,28 +286,6 @@ enum {
 	SYNA_BUS_REF_BUGREPORT		= 0x0020,
 };
 
-/* Motion filter finite state machine (FSM) states
- * MF_FILTERED        - default coordinate filtering
- * MF_UNFILTERED      - unfiltered single-touch coordinates
- * MF_FILTERED_LOCKED - filtered coordinates. Locked until touch is lifted.
- */
-typedef enum {
-	MF_FILTERED		= 0,
-	MF_UNFILTERED		= 1,
-	MF_FILTERED_LOCKED	= 2
-} motion_filter_state_t;
-
-/* Motion filter mode.
- *  MF_OFF    : 0 = Always unfilter.
- *  MF_DYNAMIC: 1 = Dynamic change motion filter.
- *  MF_ON     : 2 = Always filter by touch FW.
- */
-enum MF_MODE {
-    MF_OFF,
-    MF_DYNAMIC,
-    MF_ON,
-};
-
 #if defined(ENABLE_HELPER)
 /**
  * @brief: Tasks for helper
@@ -454,38 +421,12 @@ struct syna_tcm {
 	u32 bus_refmask;
 	struct mutex bus_mutex;
 	ktime_t bugreport_ktime_start;
-	ktime_t isr_timestamp; /* Time that the event was first received from the
+	ktime_t timestamp; /* Time that the event was first received from the
 				* touch IC, acquired during hard interrupt, in
 				* CLOCK_MONOTONIC */
-	ktime_t coords_timestamp;
 
-#if IS_ENABLED(CONFIG_TOUCHSCREEN_OFFLOAD)
-	struct touch_offload_context offload;
-	u16 *heatmap_buff;
-	struct touch_offload_frame *reserved_frame;
-	bool offload_reserved_coords;
-	u8 touch_offload_active_coords;
-#endif
-
-#if IS_ENABLED(CONFIG_TOUCHSCREEN_HEATMAP)
-	bool heatmap_decoded;
-	struct v4l2_heatmap v4l2;
-#endif
-
-	/* Motion filter mode.
-	 *  0 = Always unfilter.
-	 *  1 = Dynamic change motion filter.
-	 *  2 = Always filter by touch FW.
-	 */
-	u8 mf_mode;
 	/* Payload for continuously report. */
 	u16 set_continuously_report;
-	/* Motion filter finite state machine (FSM) state */
-	motion_filter_state_t mf_state;
-	/* Time of initial single-finger touch down. This timestamp is used to
-	 * compute the duration a single finger is touched before it is lifted.
-	 */
-	ktime_t mf_downtime;
 	/* Work for motion filter commands. */
 	struct work_struct motion_filter_work;
 
