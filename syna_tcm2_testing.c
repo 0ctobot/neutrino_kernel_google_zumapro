@@ -578,8 +578,6 @@ static ssize_t syna_testing_pt01_show(struct kobject *kobj,
 		goto exit;
 	}
 
-	syna_set_bus_ref(tcm, SYNA_BUS_REF_SYSFS, true);
-
 	syna_tcm_buf_init(&test_data);
 
 	retval = syna_testing_pt01(tcm, &test_data);
@@ -594,8 +592,6 @@ static ssize_t syna_testing_pt01_show(struct kobject *kobj,
 	count += scnprintf(buf + count, PAGE_SIZE - count, "\n");
 
 	syna_tcm_buf_release(&test_data);
-
-	syna_set_bus_ref(tcm, SYNA_BUS_REF_SYSFS, false);
 exit:
 	return count;
 }
@@ -774,8 +770,6 @@ static ssize_t syna_testing_pt05_show(struct kobject *kobj,
 		goto exit;
 	}
 
-	syna_set_bus_ref(tcm, SYNA_BUS_REF_SYSFS, true);
-
 	syna_tcm_buf_init(&test_data);
 
 	retval = syna_testing_pt05(tcm, &test_data);
@@ -799,8 +793,6 @@ static ssize_t syna_testing_pt05_show(struct kobject *kobj,
 	}
 
 	syna_tcm_buf_release(&test_data);
-
-	syna_set_bus_ref(tcm, SYNA_BUS_REF_SYSFS, false);
 exit:
 	return count;
 }
@@ -877,8 +869,6 @@ static ssize_t syna_testing_pt0a_show(struct kobject *kobj,
 		goto exit;
 	}
 
-	syna_set_bus_ref(tcm, SYNA_BUS_REF_SYSFS, true);
-
 	syna_tcm_buf_init(&test_data);
 
 	retval = syna_testing_pt0a(tcm, &test_data);
@@ -899,8 +889,6 @@ static ssize_t syna_testing_pt0a_show(struct kobject *kobj,
 	}
 
 	syna_tcm_buf_release(&test_data);
-
-	syna_set_bus_ref(tcm, SYNA_BUS_REF_SYSFS, false);
 exit:
 	return count;
 }
@@ -1079,8 +1067,6 @@ static ssize_t syna_testing_pt10_show(struct kobject *kobj,
 		goto exit;
 	}
 
-	syna_set_bus_ref(tcm, SYNA_BUS_REF_SYSFS, true);
-
 	syna_tcm_buf_init(&test_data);
 
 	retval = syna_testing_pt10(tcm, &test_data);
@@ -1104,8 +1090,6 @@ static ssize_t syna_testing_pt10_show(struct kobject *kobj,
 	}
 
 	syna_tcm_buf_release(&test_data);
-
-	syna_set_bus_ref(tcm, SYNA_BUS_REF_SYSFS, false);
 exit:
 	return count;
 }
@@ -1182,8 +1166,6 @@ static ssize_t syna_testing_pt11_show(struct kobject *kobj,
 		goto exit;
 	}
 
-	syna_set_bus_ref(tcm, SYNA_BUS_REF_SYSFS, true);
-
 	syna_tcm_buf_init(&test_data);
 
 	retval = syna_testing_pt11(tcm, &test_data);
@@ -1204,8 +1186,6 @@ static ssize_t syna_testing_pt11_show(struct kobject *kobj,
 	}
 
 	syna_tcm_buf_release(&test_data);
-
-	syna_set_bus_ref(tcm, SYNA_BUS_REF_SYSFS, false);
 exit:
 	return count;
 }
@@ -1282,8 +1262,6 @@ static ssize_t syna_testing_pt12_show(struct kobject *kobj,
 		goto exit;
 	}
 
-	syna_set_bus_ref(tcm, SYNA_BUS_REF_SYSFS, true);
-
 	syna_tcm_buf_init(&test_data);
 
 	retval = syna_testing_pt12(tcm, &test_data);
@@ -1307,8 +1285,6 @@ static ssize_t syna_testing_pt12_show(struct kobject *kobj,
 	count += scnprintf(buf + count, PAGE_SIZE - count, "\n");
 
 	syna_tcm_buf_release(&test_data);
-
-	syna_set_bus_ref(tcm, SYNA_BUS_REF_SYSFS, false);
 exit:
 	return count;
 }
@@ -1385,8 +1361,6 @@ static ssize_t syna_testing_pt16_show(struct kobject *kobj,
 		goto exit;
 	}
 
-	syna_set_bus_ref(tcm, SYNA_BUS_REF_SYSFS, true);
-
 	syna_tcm_buf_init(&test_data);
 
 	retval = syna_testing_pt16(tcm, &test_data);
@@ -1407,8 +1381,6 @@ static ssize_t syna_testing_pt16_show(struct kobject *kobj,
 	}
 
 	syna_tcm_buf_release(&test_data);
-
-	syna_set_bus_ref(tcm, SYNA_BUS_REF_SYSFS, false);
 exit:
 	return count;
 }
@@ -1541,8 +1513,6 @@ static ssize_t syna_testing_pt_moisture_show(struct kobject *kobj,
 		goto exit;
 	}
 
-	syna_set_bus_ref(tcm, SYNA_BUS_REF_SYSFS, true);
-
 	syna_tcm_buf_init(&test_data);
 
 	retval = syna_testing_pt_tag_moisture(tcm, &test_data);
@@ -1566,9 +1536,6 @@ static ssize_t syna_testing_pt_moisture_show(struct kobject *kobj,
 	}
 
 	syna_tcm_buf_release(&test_data);
-
-	syna_set_bus_ref(tcm, SYNA_BUS_REF_SYSFS, false);
-
 exit:
 	return count;
 }

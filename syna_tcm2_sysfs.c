@@ -609,8 +609,6 @@ static ssize_t syna_sysfs_reset_store(struct kobject *kobj,
 
 	syna_pal_mutex_lock(&g_extif_mutex);
 
-	syna_set_bus_ref(tcm, SYNA_BUS_REF_SYSFS, true);
-
 	if (input == 1) {
 		retval = syna_tcm_reset(tcm->tcm_dev);
 		if (retval < 0) {
@@ -652,7 +650,6 @@ static ssize_t syna_sysfs_reset_store(struct kobject *kobj,
 	retval = count;
 
 exit:
-	syna_set_bus_ref(tcm, SYNA_BUS_REF_SYSFS, false);
 	syna_pal_mutex_unlock(&g_extif_mutex);
 	return retval;
 }
@@ -705,8 +702,6 @@ static ssize_t syna_sysfs_scan_mode_store(struct kobject *kobj,
 
 	syna_pal_mutex_lock(&g_extif_mutex);
 
-	syna_set_bus_ref(tcm, SYNA_BUS_REF_SYSFS, true);
-
 	if (hw_if->ops_hw_reset) {
 		hw_if->ops_hw_reset(hw_if);
 	} else {
@@ -749,107 +744,12 @@ static ssize_t syna_sysfs_scan_mode_store(struct kobject *kobj,
 	retval = count;
 
 exit:
-	syna_set_bus_ref(tcm, SYNA_BUS_REF_SYSFS, false);
 	syna_pal_mutex_unlock(&g_extif_mutex);
 	return retval;
 }
 
 static struct kobj_attribute kobj_attr_scan_mode =
 	__ATTR(scan_mode, 0220, NULL, syna_sysfs_scan_mode_store);
-
-/**
- * syna_sysfs_force_active_store()
- *
- * Attribute to set different scan mode.
- * 0x10 - Set SYNA_BUS_REF_FORCE_ACTIVE bit 0.
- * 0x11 - Set SYNA_BUS_REF_FORCE_ACTIVE bit 1.
- * 0x20 - Set SYNA_BUS_REF_BUGREPORT bit 0.
- * 0x21 - Set SYNA_BUS_REF_BUGREPORT bit 1.
- *
- * @param
- *    [ in] kobj:  an instance of kobj
- *    [ in] attr:  an instance of kobj attribute structure
- *    [ in] buf:   string buffer input
- *    [ in] count: size of buffer input
- *
- * @return
- *    on success, return count; otherwise, return error code
- */
-static ssize_t syna_sysfs_force_active_store(struct kobject *kobj,
-		struct kobj_attribute *attr, const char *buf, size_t count)
-{
-	int retval = 0;
-	unsigned char input;
-	struct device *p_dev;
-	struct kobject *p_kobj;
-	struct syna_tcm *tcm;
-	bool active;
-	u32 ref = 0;
-
-	p_kobj = g_sysfs_dir->parent;
-	p_dev = container_of(p_kobj, struct device, kobj);
-	tcm = dev_get_drvdata(p_dev);
-
-	if (kstrtou8(buf, 16, &input))
-		return -EINVAL;
-
-	if (!tcm->is_connected) {
-		LOGW("Device is NOT connected\n");
-		retval = count;
-		goto exit;
-	}
-
-	syna_pal_mutex_lock(&g_extif_mutex);
-
-	switch (input) {
-	case 0x10:
-		ref = SYNA_BUS_REF_FORCE_ACTIVE;
-		active = false;
-		break;
-	case 0x11:
-		ref = SYNA_BUS_REF_FORCE_ACTIVE;
-		active = true;
-		break;
-	case 0x20:
-		ref = SYNA_BUS_REF_BUGREPORT;
-		active = false;
-		tcm->bugreport_ktime_start = 0;
-		break;
-	case 0x21:
-		ref = SYNA_BUS_REF_BUGREPORT;
-		active = true;
-		tcm->bugreport_ktime_start = ktime_get();
-		break;
-	default:
-		LOGE("Invalid input %#x.\n", input);
-		retval = -EINVAL;
-		goto exit;
-	}
-
-	LOGI("Set bus reference bit %#x %s.", ref,
-	     active ? "enable" : "disable");
-
-	if (active)
-		pm_stay_awake(&tcm->pdev->dev);
-	else
-		pm_relax(&tcm->pdev->dev);
-
-	retval = syna_set_bus_ref(tcm, ref, active);
-	if (retval < 0) {
-		LOGE("Set bus reference bit %#x %s failed.", ref,
-				active ? "enable" : "disable");
-		goto exit;
-	}
-
-	retval = count;
-
-exit:
-	syna_pal_mutex_unlock(&g_extif_mutex);
-	return retval;
-}
-
-static struct kobj_attribute kobj_attr_force_active =
-	__ATTR(force_active, 0220, NULL, syna_sysfs_force_active_store);
 
 /**
  * syna_sysfs_get_raw_data_show()
@@ -936,7 +836,6 @@ exit:
 	syna_tcm_set_dynamic_config(tcm->tcm_dev, DC_DISABLE_DOZE, 0, RESP_IN_ATTN);
 	syna_tcm_enable_report(tcm_dev, tcm->raw_data_report_code, false);
 	syna_pal_mutex_unlock(&g_extif_mutex);
-	syna_set_bus_ref(tcm, SYNA_BUS_REF_SYSFS, false);
 	return retval;
 }
 
@@ -971,7 +870,6 @@ static ssize_t syna_sysfs_get_raw_data_store(struct kobject *kobj,
 	if (kstrtou8(buf, 16, &input))
 		return -EINVAL;
 
-	syna_set_bus_ref(tcm, SYNA_BUS_REF_SYSFS, true);
 	syna_pal_mutex_lock(&g_extif_mutex);
 
 	switch (input) {
@@ -1072,7 +970,6 @@ static ssize_t syna_sysfs_high_sensitivity_store(struct kobject *kobj,
 		return -EINVAL;
 	}
 
-	syna_set_bus_ref(tcm, SYNA_BUS_REF_SYSFS, true);
 	syna_pal_mutex_lock(&g_extif_mutex);
 
 	tcm->high_sensitivity_mode = input;
@@ -1088,7 +985,6 @@ static ssize_t syna_sysfs_high_sensitivity_store(struct kobject *kobj,
 	retval = count;
 
 	syna_pal_mutex_unlock(&g_extif_mutex);
-	syna_set_bus_ref(tcm, SYNA_BUS_REF_SYSFS, false);
 	return retval;
 }
 
@@ -1166,7 +1062,6 @@ static ssize_t syna_sysfs_fw_grip_store(struct kobject *kobj,
 		return -EINVAL;
 	}
 
-	syna_set_bus_ref(tcm, SYNA_BUS_REF_SYSFS, true);
 	syna_pal_mutex_lock(&g_extif_mutex);
 
 	tcm->enable_fw_grip = input;
@@ -1181,7 +1076,6 @@ static ssize_t syna_sysfs_fw_grip_store(struct kobject *kobj,
 	retval = count;
 
 	syna_pal_mutex_unlock(&g_extif_mutex);
-	syna_set_bus_ref(tcm, SYNA_BUS_REF_SYSFS, false);
 	return retval;
 }
 
@@ -1259,7 +1153,6 @@ static ssize_t syna_sysfs_fw_palm_store(struct kobject *kobj,
 		return -EINVAL;
 	}
 
-	syna_set_bus_ref(tcm, SYNA_BUS_REF_SYSFS, true);
 	syna_pal_mutex_lock(&g_extif_mutex);
 
 	tcm->enable_fw_palm = input;
@@ -1274,7 +1167,6 @@ static ssize_t syna_sysfs_fw_palm_store(struct kobject *kobj,
 	retval = count;
 
 	syna_pal_mutex_unlock(&g_extif_mutex);
-	syna_set_bus_ref(tcm, SYNA_BUS_REF_SYSFS, false);
 	return retval;
 }
 
@@ -1348,7 +1240,6 @@ static ssize_t syna_sysfs_compression_threshold_store(struct kobject *kobj,
 		return -EINVAL;
 	}
 
-	syna_set_bus_ref(tcm, SYNA_BUS_REF_SYSFS, true);
 	syna_pal_mutex_lock(&g_extif_mutex);
 
 	tcm->hw_if->compression_threhsold = input;
@@ -1362,7 +1253,6 @@ static ssize_t syna_sysfs_compression_threshold_store(struct kobject *kobj,
 	     tcm->hw_if->compression_threhsold);
 
 	syna_pal_mutex_unlock(&g_extif_mutex);
-	syna_set_bus_ref(tcm, SYNA_BUS_REF_SYSFS, false);
 	return retval;
 }
 
@@ -1379,7 +1269,6 @@ static struct attribute *attrs[] = {
 	&kobj_attr_int2.attr,
 	&kobj_attr_reset.attr,
 	&kobj_attr_scan_mode.attr,
-	&kobj_attr_force_active.attr,
 	&kobj_attr_get_raw_data.attr,
 	&kobj_attr_high_sensitivity.attr,
 	&kobj_attr_fw_grip.attr,

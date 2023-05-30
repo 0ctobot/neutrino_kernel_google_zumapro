@@ -274,18 +274,6 @@ enum power_state {
 	LOW_PWR,
 };
 
-/**
-  * @brief: Bits masking for bus reference.
-  */
-enum {
-	SYNA_BUS_REF_SCREEN_ON		= 0x0001,
-	SYNA_BUS_REF_IRQ		= 0x0002,
-	SYNA_BUS_REF_FW_UPDATE		= 0x0004,
-	SYNA_BUS_REF_SYSFS		= 0x0008,
-	SYNA_BUS_REF_FORCE_ACTIVE	= 0x0010,
-	SYNA_BUS_REF_BUGREPORT		= 0x0020,
-};
-
 #if defined(ENABLE_HELPER)
 /**
  * @brief: Tasks for helper
@@ -415,12 +403,8 @@ struct syna_tcm {
 	struct work_struct suspend_work;
 	struct work_struct resume_work;
 	struct workqueue_struct *event_wq;
-	struct completion bus_resumed;
 	struct pinctrl *pinctrl;
 
-	u32 bus_refmask;
-	struct mutex bus_mutex;
-	ktime_t bugreport_ktime_start;
 	ktime_t timestamp; /* Time that the event was first received from the
 				* touch IC, acquired during hard interrupt, in
 				* CLOCK_MONOTONIC */

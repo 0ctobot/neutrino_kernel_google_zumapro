@@ -510,7 +510,7 @@ static inline void syna_pal_completion_free(syna_pal_completion_t *ptr)
  */
 static inline void syna_pal_completion_complete(syna_pal_completion_t *ptr)
 {
-	complete_all((struct completion *)ptr);
+	complete((struct completion *)ptr);
 }
 /**
  * syna_pal_completion_reset()
