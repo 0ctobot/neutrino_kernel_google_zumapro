@@ -31,6 +31,7 @@
 #if IS_ENABLED(CONFIG_GS_S2MPU)
 #include <soc/google/s2mpu.h>
 #endif
+#include <misc/logbuffer.h>
 #endif
 #include "modem_v1.h"
 
@@ -235,6 +236,12 @@ enum link_state {
 	LINK_STATE_OFFLINE = 0,
 	LINK_STATE_IPC,
 	LINK_STATE_CP_CRASH
+};
+
+enum link_up_mode {
+	GEN1_BOOTING,
+	GEN3_BOOTING,
+	GEN3_ONLINE,
 };
 
 struct cp_power_stats {
@@ -700,6 +707,7 @@ struct modem_ctl {
 	bool pcie_pm_resume_wait;
 	int pcie_pm_resume_gpio_val;
 	bool device_reboot;
+	bool trigger_crash;
 
 #if IS_ENABLED(CONFIG_CPIF_AP_SUSPEND_DURING_VOICE_CALL)
 	bool pcie_voice_call_on;
@@ -743,7 +751,13 @@ struct modem_ctl {
 #endif
 
 	struct cp_power_stats cp_power_stats;
+	struct mutex cp_crash_lock;
+	spinlock_t cp_active_lock;
 	spinlock_t power_stats_lock;
+#if defined(CPIF_WAKEPKT_SET_MARK)
+	atomic_t mark_skb_wakeup;
+#endif
+	struct logbuffer *log;
 };
 
 static inline bool cp_offline(struct modem_ctl *mc)

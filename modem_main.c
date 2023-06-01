@@ -779,6 +779,12 @@ static int cpif_probe(struct platform_device *pdev)
 		goto fail;
 	}
 
+	modemctl->log = logbuffer_register("cpif");
+	if (IS_ERR_OR_NULL(modemctl->log)) {
+		mif_err("Failed to register logbuffer!\n");
+		modemctl->log = NULL;
+	}
+
 	/* get the s5910 node pointer */
 	modemctl->s5910_dev = NULL;
 	if (dev->of_node) {
@@ -931,6 +937,9 @@ static int modem_suspend(struct device *pdev)
 	if (mc->ops.suspend)
 		mc->ops.suspend(mc);
 
+#if defined(CPIF_WAKEPKT_SET_MARK)
+	atomic_set(&mc->mark_skb_wakeup, 1);
+#endif
 	set_wakeup_packet_log(true);
 
 	return 0;

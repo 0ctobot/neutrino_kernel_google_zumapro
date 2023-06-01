@@ -756,7 +756,7 @@ int sipc5_init_io_device(struct io_device *iod, struct mem_link_device *mld)
 
 	case IODEV_NET:
 #if IS_ENABLED(CONFIG_MODEM_IF_QOS)
-		txqs = 2;
+		txqs = mld->pktproc_ul.num_queue;
 #endif
 #if IS_ENABLED(CONFIG_CP_PKTPROC)
 		rxqs = mld->pktproc.num_queue;
