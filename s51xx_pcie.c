@@ -358,7 +358,7 @@ static void s51xx_pcie_event_cb(struct exynos_pcie_notify *noti)
 		} else {
 			mif_err("[%d] force crash !!!\n", mc->pcie_linkdown_retry_cnt);
 			exynos_pcie_rc_dump_all_status(mc->pcie_ch_num);
-			s5100_force_crash_exit_ext();
+			s5100_force_crash_exit_ext(CRASH_REASON_PCIE_LINKDOWN_ERROR);
 		}
 	} else if (event & EXYNOS_PCIE_EVENT_CPL_TIMEOUT) {
 		mif_err("s51xx CPL_TIMEOUT notification callback function!!!\n");
@@ -370,7 +370,7 @@ static void s51xx_pcie_event_cb(struct exynos_pcie_notify *noti)
 		} else {
 			mif_err("[%d] force crash !!!\n", mc->pcie_cto_retry_cnt);
 			exynos_pcie_rc_dump_all_status(mc->pcie_ch_num);
-			s5100_force_crash_exit_ext();
+			s5100_force_crash_exit_ext(CRASH_REASON_PCIE_CPL_TIMEOUT_ERROR);
 		}
 	}
 }

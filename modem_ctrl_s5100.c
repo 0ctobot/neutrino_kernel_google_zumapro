@@ -1444,8 +1444,11 @@ static int trigger_cp_crash(struct modem_ctl *mc)
 	return 0;
 }
 
-int s5100_force_crash_exit_ext(void)
+int s5100_force_crash_exit_ext(enum crash_type type)
 {
+	struct link_device *ld = get_current_link(g_mc->bootd);
+	ld->crash_reason.type = type;
+
 	if (g_mc)
 		g_mc->ops.trigger_cp_crash(g_mc);
 
@@ -1454,7 +1457,7 @@ int s5100_force_crash_exit_ext(void)
 
 int modem_force_crash_exit_ext(void)
 {
-	return s5100_force_crash_exit_ext();
+	return s5100_force_crash_exit_ext(CRASH_REASON_MIF_FORCED);
 }
 EXPORT_SYMBOL(modem_force_crash_exit_ext);
 
@@ -1641,7 +1644,7 @@ exit:
 	spin_unlock_irqrestore(&mc->pcie_tx_lock, flags);
 
 	if (unlikely(force_crash))
-		s5100_force_crash_exit_ext();
+		s5100_force_crash_exit_ext(CRASH_REASON_PCIE_DOORBELL_FAILURE_POWEROFF);
 
 	return 0;
 }
@@ -1752,7 +1755,7 @@ int s5100_poweron_pcie(struct modem_ctl *mc, enum link_up_mode mode)
 						 mld->intval_ap2cp_pcie_link_ack) != 0) {
 			/* DBG */
 			mif_err("DBG: s5100pcie_send_doorbell_int() func. is failed !!!\n");
-			s5100_force_crash_exit_ext();
+			s5100_force_crash_exit_ext(CRASH_REASON_PCIE_DOORBELL_FAILURE_POWERON);
 		}
 	}
 
@@ -1781,7 +1784,7 @@ exit:
 	spin_unlock_irqrestore(&mc->pcie_tx_lock, flags);
 
 	if (unlikely(force_crash))
-		s5100_force_crash_exit_ext();
+		s5100_force_crash_exit_ext(CRASH_REASON_PCIE_DOORBELL_FAILURE_POWERON);
 
 	return 0;
 }
