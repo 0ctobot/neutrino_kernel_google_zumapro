@@ -168,6 +168,26 @@ static int syna_dev_enable_lowpwr_gesture(struct syna_tcm *tcm, bool en)
 	return retval;
 }
 
+#if IS_ENABLED(CONFIG_GOOG_TOUCH_INTERFACE)
+static int gti_default_handler(void *private_data, enum gti_cmd_type cmd_type,
+	struct gti_union_cmd_data *cmd)
+{
+	int ret = 0;
+
+	switch (cmd_type) {
+	case GTI_CMD_NOTIFY_DISPLAY_STATE:
+	case GTI_CMD_NOTIFY_DISPLAY_VREFRESH:
+		ret = -EOPNOTSUPP;
+		break;
+	default:
+		ret = -ESRCH;
+		break;
+	}
+
+	return ret;
+}
+#endif
+
 /**
  * syna_dev_set_heatmap_mode()
  *
@@ -591,6 +611,7 @@ static int syna_dev_parse_custom_gesture_cb(const unsigned char code,
  * @return
  *    none.
  */
+#if !IS_ENABLED(CONFIG_GOOG_TOUCH_INTERFACE)
 static void syna_dev_free_input_events(struct syna_tcm *tcm)
 {
 	struct input_dev *input_dev = tcm->input_dev;
@@ -618,8 +639,8 @@ static void syna_dev_free_input_events(struct syna_tcm *tcm)
 	input_sync(input_dev);
 
 	syna_pal_mutex_unlock(&tcm->tp_event_mutex);
-
 }
+#endif
 
 /**
  * syna_dev_report_input_events()
@@ -660,7 +681,11 @@ static void syna_dev_report_input_events(struct syna_tcm *tcm)
 	if (input_dev == NULL)
 		return;
 
+#if IS_ENABLED(CONFIG_GOOG_TOUCH_INTERFACE)
+	goog_input_lock(tcm->gti);
+#else
 	syna_pal_mutex_lock(&tcm->tp_event_mutex);
+#endif
 
 	object_data = &tcm->tp_data.object_data[0];
 
@@ -670,11 +695,17 @@ static void syna_dev_report_input_events(struct syna_tcm *tcm)
 		if (touch_data->gesture_id) {
 			LOGD("Gesture detected, id:%d\n",
 				touch_data->gesture_id);
-
+#if IS_ENABLED(CONFIG_GOOG_TOUCH_INTERFACE)
+			goog_input_report_key(tcm->gti, input_dev, KEY_WAKEUP, 1);
+			goog_input_sync(tcm->gti, input_dev);
+			goog_input_report_key(tcm->gti, input_dev, KEY_WAKEUP, 0);
+			goog_input_sync(tcm->gti, input_dev);
+#else
 			input_report_key(input_dev, KEY_WAKEUP, 1);
 			input_sync(input_dev);
 			input_report_key(input_dev, KEY_WAKEUP, 0);
 			input_sync(input_dev);
+#endif
 		}
 	}
 #endif
@@ -693,11 +724,18 @@ static void syna_dev_report_input_events(struct syna_tcm *tcm)
 
 		switch (status) {
 		case LIFT:
+#if IS_ENABLED(CONFIG_GOOG_TOUCH_INTERFACE)
+			goog_input_mt_slot(tcm->gti, input_dev, idx);
+			goog_input_report_abs(tcm->gti, input_dev, ABS_MT_PRESSURE, 0);
+			goog_input_mt_report_slot_state(tcm->gti, input_dev,
+					MT_TOOL_FINGER, 0);
+#else
 #ifdef TYPE_B_PROTOCOL
 			input_mt_slot(input_dev, idx);
 			input_report_abs(input_dev, ABS_MT_PRESSURE, 0);
 			input_mt_report_slot_state(input_dev,
 					MT_TOOL_FINGER, 0);
+#endif
 #endif
 			break;
 		case FINGER:
@@ -740,6 +778,26 @@ static void syna_dev_report_input_events(struct syna_tcm *tcm)
 			y = tcm->input_dev_params.max_y - y;
 #endif
 
+#if IS_ENABLED(CONFIG_GOOG_TOUCH_INTERFACE)
+			goog_input_mt_slot(tcm->gti, input_dev, idx);
+			goog_input_mt_report_slot_state(tcm->gti, input_dev, MT_TOOL_FINGER, 1);
+			goog_input_report_key(tcm->gti, input_dev, BTN_TOUCH, 1);
+			goog_input_report_key(tcm->gti, input_dev, BTN_TOOL_FINGER, 1);
+			goog_input_report_abs(tcm->gti, input_dev, ABS_MT_POSITION_X, x);
+			goog_input_report_abs(tcm->gti, input_dev, ABS_MT_POSITION_Y, y);
+			goog_input_report_abs(tcm->gti, input_dev, ABS_MT_PRESSURE, z);
+#ifdef ENABLE_CUSTOM_TOUCH_ENTITY
+			goog_input_report_abs(tcm->gti, input_dev, ABS_MT_TOUCH_MAJOR, major);
+			goog_input_report_abs(tcm->gti, input_dev, ABS_MT_TOUCH_MINOR, minor);
+			goog_input_report_abs(tcm->gti, input_dev,
+					ABS_MT_ORIENTATION, (s16) (((s8) angle) * 2048 / 45));
+#else
+			goog_input_report_abs(tcm->gti, input_dev,
+					ABS_MT_TOUCH_MAJOR, MAX(wx, wy));
+			goog_input_report_abs(tcm->gti, input_dev,
+					ABS_MT_TOUCH_MINOR, MIN(wx, wy));
+#endif
+#else
 #ifdef TYPE_B_PROTOCOL
 			input_mt_slot(input_dev, idx);
 			input_mt_report_slot_state(input_dev,
@@ -768,6 +826,7 @@ static void syna_dev_report_input_events(struct syna_tcm *tcm)
 #ifndef TYPE_B_PROTOCOL
 			input_mt_sync(input_dev);
 #endif
+#endif
 
 			LOGD("Finger %d: x = %d, y = %d, z = %d\n", idx, x, y, z);
 			touch_count++;
@@ -779,6 +838,15 @@ static void syna_dev_report_input_events(struct syna_tcm *tcm)
 		tcm->prev_obj_status[idx] = object_data[idx].status;
 	}
 
+#if IS_ENABLED(CONFIG_GOOG_TOUCH_INTERFACE)
+	if (touch_count == 0) {
+		goog_input_report_key(tcm->gti, input_dev, BTN_TOUCH, 0);
+		goog_input_report_key(tcm->gti, input_dev, BTN_TOOL_FINGER, 0);
+	}
+
+	goog_input_set_timestamp(tcm->gti, input_dev, tcm->timestamp);
+	goog_input_sync(tcm->gti, input_dev);
+#else
 	if (touch_count == 0) {
 		input_report_key(input_dev, BTN_TOUCH, 0);
 		input_report_key(input_dev, BTN_TOOL_FINGER, 0);
@@ -789,11 +857,15 @@ static void syna_dev_report_input_events(struct syna_tcm *tcm)
 
 	input_set_timestamp(input_dev, tcm->timestamp);
 	input_sync(input_dev);
+#endif
 	tcm->touch_count = touch_count;
 
 exit:
+#if IS_ENABLED(CONFIG_GOOG_TOUCH_INTERFACE)
+	goog_input_unlock(tcm->gti);
+#else
 	syna_pal_mutex_unlock(&tcm->tp_event_mutex);
-
+#endif
 }
 
 /**
@@ -973,9 +1045,14 @@ static int syna_dev_set_up_input_device(struct syna_tcm *tcm)
 		return 0;
 	}
 
+#if IS_ENABLED(CONFIG_GOOG_TOUCH_INTERFACE)
+	if (tcm->gti)
+		goog_input_lock(tcm->gti);
+#else
 	syna_dev_free_input_events(tcm);
 
 	syna_pal_mutex_lock(&tcm->tp_event_mutex);
+#endif
 
 	retval = syna_dev_check_input_params(tcm);
 	if (retval == 0)
@@ -991,7 +1068,12 @@ static int syna_dev_set_up_input_device(struct syna_tcm *tcm)
 	}
 
 exit:
+#if IS_ENABLED(CONFIG_GOOG_TOUCH_INTERFACE)
+	if (tcm->gti)
+		goog_input_unlock(tcm->gti);
+#else
 	syna_pal_mutex_unlock(&tcm->tp_event_mutex);
+#endif
 
 	return retval;
 }
@@ -1543,6 +1625,7 @@ static int syna_pinctrl_configure(struct syna_tcm *tcm, bool enable)
 	return 0;
 }
 
+#if IS_ENABLED(CONFIG_GOOG_TOUCH_INTERFACE)
 /**
  * Report a finger down event on the long press gesture area then immediately
  * report a cancel event(MT_TOOL_PALM).
@@ -1551,7 +1634,7 @@ static void syna_report_cancel_event(struct syna_tcm *tcm)
 {
 	LOGI("Report cancel event for UDFPS");
 
-	syna_pal_mutex_lock(&tcm->tp_event_mutex);
+	goog_input_lock(tcm->gti);
 
 	/* Finger down on UDFPS area. */
 	input_mt_slot(tcm->input_dev, 0);
@@ -1581,7 +1664,7 @@ static void syna_report_cancel_event(struct syna_tcm *tcm)
 	input_report_key(tcm->input_dev, BTN_TOUCH, 0);
 	input_sync(tcm->input_dev);
 
-	syna_pal_mutex_unlock(&tcm->tp_event_mutex);
+	goog_input_unlock(tcm->gti);
 }
 
 static void syna_check_finger_status(struct syna_tcm *tcm)
@@ -1633,6 +1716,7 @@ static void syna_check_finger_status(struct syna_tcm *tcm)
 		}
 	}
 }
+#endif
 
 /**
  * syna_dev_resume()
@@ -1666,11 +1750,15 @@ static int syna_dev_resume(struct device *dev)
 
 	syna_pinctrl_configure(tcm, true);
 
+#if IS_ENABLED(CONFIG_GOOG_TOUCH_INTERFACE)
 	if (hw_if->udfps_x != 0 && hw_if->udfps_y != 0)
 		syna_check_finger_status(tcm);
+#endif
 
+#if !IS_ENABLED(CONFIG_GOOG_TOUCH_INTERFACE)
 	/* clear all input events  */
 	syna_dev_free_input_events(tcm);
+#endif
 
 #ifdef RESET_ON_RESUME
 	LOGI("Do reset on resume\n");
@@ -1773,8 +1861,10 @@ static int syna_dev_suspend(struct device *dev)
 	if (tcm->hw_if->dynamic_report_rate)
 		cancel_delayed_work_sync(&tcm->set_report_rate_work);
 
+#if !IS_ENABLED(CONFIG_GOOG_TOUCH_INTERFACE)
 	/* clear all input events  */
 	syna_dev_free_input_events(tcm);
+#endif
 
 #ifdef POWER_ALIVE_AT_SUSPEND
 	/* enter power saved mode if power is not off */
@@ -2180,6 +2270,9 @@ static int syna_dev_probe(struct platform_device *pdev)
 #if defined(USE_DRM_PANEL_NOTIFIER)
 	struct device *dev;
 #endif
+#if IS_ENABLED(CONFIG_GOOG_TOUCH_INTERFACE)
+	struct gti_optional_configuration *options;
+#endif
 
 	hw_if = pdev->dev.platform_data;
 	if (!hw_if) {
@@ -2215,7 +2308,9 @@ static int syna_dev_probe(struct platform_device *pdev)
 
 	syna_tcm_buf_init(&tcm->event_data);
 
+#if !IS_ENABLED(CONFIG_GOOG_TOUCH_INTERFACE)
 	syna_pal_mutex_alloc(&tcm->tp_event_mutex);
+#endif
 
 #ifdef USE_CUSTOM_TOUCH_REPORT_CONFIG
 	tcm->has_custom_tp_config = true;
@@ -2281,7 +2376,9 @@ static int syna_dev_probe(struct platform_device *pdev)
 #else
 		LOGE("Fail to connect to the device\n");
 		retval = -EPROBE_DEFER;
+#if !IS_ENABLED(CONFIG_GOOG_TOUCH_INTERFACE)
 		syna_pal_mutex_free(&tcm->tp_event_mutex);
+#endif
 		goto err_connect;
 #endif
 	}
@@ -2297,6 +2394,12 @@ static int syna_dev_probe(struct platform_device *pdev)
 
 	tcm->touch_report_rate_config = CONFIG_HIGH_REPORT_RATE;
 	INIT_DELAYED_WORK(&tcm->set_report_rate_work, syna_set_report_rate_work);
+
+#if IS_ENABLED(CONFIG_GOOG_TOUCH_INTERFACE)
+	options = devm_kzalloc(&pdev->dev, sizeof(struct gti_optional_configuration), GFP_KERNEL);
+	tcm->gti = goog_touch_interface_probe(
+		tcm, &pdev->dev, tcm->input_dev, gti_default_handler, options);
+#endif
 
 	retval = syna_dev_request_irq(tcm);
 	if (retval < 0) {
@@ -2326,7 +2429,9 @@ static int syna_dev_probe(struct platform_device *pdev)
 	retval = syna_cdev_create(tcm, pdev);
 	if (retval < 0) {
 		LOGE("Fail to create the device sysfs\n");
+#if !IS_ENABLED(CONFIG_GOOG_TOUCH_INTERFACE)
 		syna_pal_mutex_free(&tcm->tp_event_mutex);
+#endif
 		goto err_create_cdev;
 	}
 #endif
@@ -2392,7 +2497,9 @@ err_connect:
 		destroy_workqueue(tcm->event_wq);
 err_alloc_workqueue:
 	syna_tcm_buf_release(&tcm->event_data);
+#if !IS_ENABLED(CONFIG_GOOG_TOUCH_INTERFACE)
 	syna_pal_mutex_free(&tcm->tp_event_mutex);
+#endif
 err_allocate_cdev:
 	syna_pal_mem_free((void *)tcm);
 
@@ -2466,7 +2573,9 @@ static int syna_dev_remove(struct platform_device *pdev)
 
 	syna_tcm_buf_release(&tcm->event_data);
 
+#if !IS_ENABLED(CONFIG_GOOG_TOUCH_INTERFACE)
 	syna_pal_mutex_free(&tcm->tp_event_mutex);
+#endif
 
 	/* remove the allocated tcm device */
 	syna_tcm_remove_device(tcm->tcm_dev);
