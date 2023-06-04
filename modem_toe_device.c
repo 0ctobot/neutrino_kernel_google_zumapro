@@ -33,7 +33,7 @@ void toe_set_iod_clat_netdev(struct io_device *iod, void *args)
 			dev_put(iod->clat_ndev);
 
 		if (ndev)
-			ndev->features |= NETIF_F_GRO_FRAGLIST;
+			ndev->features |= NETIF_F_GRO_UDP_FWD;
 		iod->clat_ndev = ndev;
 		spin_unlock_irqrestore(&iod->clat_lock, flags);
 
