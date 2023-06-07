@@ -113,13 +113,6 @@ static void cp2ap_wakeup_work(struct work_struct *work)
 	if (mc->phone_state == STATE_CRASH_EXIT)
 		return;
 
-	mutex_lock(&mc->cp_crash_lock);
-
-	if (mc->trigger_crash) {
-		mutex_unlock(&mc->cp_crash_lock);
-		return;
-	}
-
 	cp2ap_wakeup_time = ktime_get_boottime();
 
 	spin_lock_irqsave(&mc->power_stats_lock, flags);
@@ -131,9 +124,7 @@ static void cp2ap_wakeup_work(struct work_struct *work)
 	mc->cp_power_stats.suspended = false;
 	spin_unlock_irqrestore(&mc->power_stats_lock, flags);
 
-	s5100_poweron_pcie(mc, GEN3_ONLINE);
-
-	mutex_unlock(&mc->cp_crash_lock);
+	s5100_poweron_pcie(mc, false);
 }
 
 static void cp2ap_suspend_work(struct work_struct *work)
@@ -147,8 +138,6 @@ static void cp2ap_suspend_work(struct work_struct *work)
 
 	cp2ap_suspend_time = ktime_get_boottime();
 
-	mutex_lock(&mc->cp_crash_lock);
-
 	spin_lock_irqsave(&mc->power_stats_lock, flags);
 	if (!mc->cp_power_stats.suspended) {
 		mc->cp_power_stats.last_entry_timestamp_usec = ktime_to_us(cp2ap_suspend_time);
@@ -158,8 +147,6 @@ static void cp2ap_suspend_work(struct work_struct *work)
 	spin_unlock_irqrestore(&mc->power_stats_lock, flags);
 
 	s5100_poweroff_pcie(mc, false);
-
-	mutex_unlock(&mc->cp_crash_lock);
 }
 
 static ssize_t power_stats_show(struct device *dev,
@@ -304,9 +291,6 @@ static irqreturn_t cp_active_handler(int irq, void *data)
 	int cp_active;
 	enum modem_state old_state;
 	enum modem_state new_state;
-	unsigned long flags;
-
-	spin_lock_irqsave(&mc->cp_active_lock, flags);
 
 	if (mc == NULL) {
 		mif_err_limited("modem_ctl is NOT initialized - IGNORING interrupt\n");
@@ -333,7 +317,6 @@ static irqreturn_t cp_active_handler(int irq, void *data)
 	if (cp_active == 1) {
 		mif_err("ERROR - cp_active is not low, state:%s cp_active:%d\n",
 				cp_state_str(mc->phone_state), cp_active);
-		spin_unlock_irqrestore(&mc->cp_active_lock, flags);
 		return IRQ_HANDLED;
 	}
 
@@ -363,8 +346,6 @@ static irqreturn_t cp_active_handler(int irq, void *data)
 	atomic_set(&mld->forced_cp_crash, 0);
 
 irq_done:
-	spin_unlock_irqrestore(&mc->cp_active_lock, flags);
-
 	mif_disable_irq(&mc->cp_gpio_irq[CP_GPIO_IRQ_CP2AP_CP_ACTIVE]);
 
 	return IRQ_HANDLED;
@@ -667,7 +648,6 @@ static int register_pcie(struct link_device *ld)
 	static int is_registered;
 	struct mem_link_device *mld = to_mem_link_device(ld);
 	u32 cp_num = ld->mdm_data->cp_num;
-	bool boot_on;
 
 #if IS_ENABLED(CONFIG_GS_S2MPU)
 	u32 shmem_idx;
@@ -727,12 +707,7 @@ static int register_pcie(struct link_device *ld)
 
 	msleep(200);
 
-	if (mld->attrs & LINK_ATTR_XMIT_BTDLR_PCIE)
-		boot_on = GEN1_BOOTING;
-	else
-		boot_on = GEN3_BOOTING;
-
-	s5100_poweron_pcie(mc, boot_on);
+	s5100_poweron_pcie(mc, !!(mld->attrs & LINK_ATTR_XMIT_BTDLR_PCIE));
 
 	if (is_registered == 0) {
 		/* initialize the pci_dev for modem_ctl */
@@ -1236,7 +1211,7 @@ static int start_normal_boot(struct modem_ctl *mc)
 		if (ret < 0)
 			goto status_error;
 
-		s5100_poweron_pcie(mc, GEN3_BOOTING);
+		s5100_poweron_pcie(mc, false);
 	} else {
 		ret = check_cp_status(mc, 200, false);
 		if (ret < 0)
@@ -1299,7 +1274,6 @@ static int complete_normal_boot(struct modem_ctl *mc)
 	print_mc_state(mc);
 
 	mc->device_reboot = false;
-	mc->trigger_crash = false;
 
 	change_modem_state(mc, STATE_ONLINE);
 
@@ -1441,11 +1415,6 @@ static int trigger_cp_crash_internal(struct modem_ctl *mc)
 	struct mem_link_device *mld = to_mem_link_device(ld);
 	u32 crash_type;
 
-	mutex_lock(&mc->cp_crash_lock);
-	/* wait if CP crash when PCIe linkup*/
-	mc->trigger_crash = true;
-	mutex_unlock(&mc->cp_crash_lock);
-
 	if (ld->crash_reason.type == CRASH_REASON_NONE)
 		ld->crash_reason.type = CRASH_REASON_MIF_FORCED;
 	crash_type = ld->crash_reason.type;
@@ -1474,8 +1443,6 @@ static int trigger_cp_crash_internal(struct modem_ctl *mc)
 #else
 		mif_gpio_set_value(&mc->cp_gpio[CP_GPIO_AP2CP_DUMP_NOTI], 1, 0);
 #endif
-		mif_disable_irq(&mc->cp_gpio_irq[CP_GPIO_IRQ_CP2AP_WAKEUP]);
-		drain_workqueue(mc->wakeup_wq);
 	} else {
 		mif_err("do not need to set dump_noti\n");
 	}
@@ -1484,7 +1451,6 @@ static int trigger_cp_crash_internal(struct modem_ctl *mc)
 
 exit:
 	mif_err("---\n");
-
 	return 0;
 }
 
@@ -1569,7 +1535,7 @@ static int start_dump_boot(struct modem_ctl *mc)
 		if (err < 0)
 			goto status_error;
 
-		s5100_poweron_pcie(mc, GEN3_BOOTING);
+		s5100_poweron_pcie(mc, false);
 	} else {
 		err = check_cp_status(mc, 200, false);
 		if (err < 0)
@@ -1791,19 +1757,12 @@ exit:
 	return 0;
 }
 
-int s5100_poweron_pcie(struct modem_ctl *mc, enum link_up_mode mode)
+int s5100_poweron_pcie(struct modem_ctl *mc, bool boot_on)
 {
 	struct link_device *ld;
 	struct mem_link_device *mld;
 	bool force_crash = false;
 	unsigned long flags;
-	unsigned long flags2;
-	bool boot_on;
-
-	if (mode == GEN1_BOOTING)
-		boot_on = true;
-	else
-		boot_on = false;
 
 	if (mc == NULL) {
 		mif_err("Skip pci power on: mc is NULL\n");
@@ -1813,15 +1772,6 @@ int s5100_poweron_pcie(struct modem_ctl *mc, enum link_up_mode mode)
 	ld = get_current_link(mc->iod);
 	mld = to_mem_link_device(ld);
 
-	spin_lock_irqsave(&mc->cp_active_lock, flags2);
-	/* wait if cp_active_handler run*/
-	spin_unlock_irqrestore(&mc->cp_active_lock, flags2);
-
-	if (mc->phone_state != STATE_ONLINE && mode == GEN3_ONLINE) {
-		mif_info("Skip pci power on: abnormal power on when cp crash\n");
-		return 0;
-	}
-
 	if (mc->phone_state == STATE_OFFLINE) {
 		mif_info("Skip pci power on: phone_state is OFFLINE\n");
 		return 0;
@@ -1829,7 +1779,7 @@ int s5100_poweron_pcie(struct modem_ctl *mc, enum link_up_mode mode)
 
 	mutex_lock(&mc->pcie_onoff_lock);
 	mutex_lock(&mc->pcie_check_lock);
-	mif_debug("+++ mode: %d\n", mode);
+	mif_debug("+++\n");
 	if (mc->pcie_powered_on &&
 			(s51xx_check_pcie_link_status(mc->pcie_ch_num) != 0)) {
 		mif_info("Skip pci power on: already powered on\n");
@@ -2278,8 +2228,6 @@ int s5100_init_modemctl_device(struct modem_ctl *mc, struct modem_data *pdata)
 	spin_lock_init(&mc->pcie_tx_lock);
 	spin_lock_init(&mc->pcie_pm_lock);
 	spin_lock_init(&mc->power_stats_lock);
-	spin_lock_init(&mc->cp_active_lock);
-	mutex_init(&mc->cp_crash_lock);
 #if IS_ENABLED(CONFIG_LINK_DEVICE_PCIE_GPIO_WA)
 	atomic_set(&mc->dump_toggle_issued, 0);
 #endif
