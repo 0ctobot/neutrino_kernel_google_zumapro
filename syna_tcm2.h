@@ -420,8 +420,6 @@ struct syna_tcm {
 	u8 reflash_count;
 	bool force_reflash;
 
-	struct work_struct suspend_work;
-	struct work_struct resume_work;
 	struct workqueue_struct *event_wq;
 	struct pinctrl *pinctrl;
 

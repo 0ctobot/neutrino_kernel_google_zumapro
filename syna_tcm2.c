@@ -101,6 +101,10 @@ static unsigned char custom_touch_format[] = {
 	struct drm_panel *active_panel;
 #endif
 
+#if IS_ENABLED(CONFIG_PM) || IS_ENABLED(CONFIG_GOOG_TOUCH_INTERFACE)
+static const struct dev_pm_ops syna_dev_pm_ops;
+#endif
+
 /**
  * syna_dev_enable_lowpwr_gesture()
  *
@@ -2030,20 +2034,6 @@ static int syna_dev_fb_notifier_cb(struct notifier_block *nb,
 }
 #endif
 
-static void syna_suspend_work(struct work_struct *work)
-{
-	struct syna_tcm *tcm = container_of(work, struct syna_tcm, suspend_work);
-
-	syna_dev_suspend(&tcm->pdev->dev);
-}
-
-static void syna_resume_work(struct work_struct *work)
-{
-	struct syna_tcm *tcm = container_of(work, struct syna_tcm, resume_work);
-
-	syna_dev_resume(&tcm->pdev->dev);
-}
-
 /**
  * syna_dev_disconnect()
  *
@@ -2363,9 +2353,6 @@ static int syna_dev_probe(struct platform_device *pdev)
 		goto err_alloc_workqueue;
 	}
 
-	INIT_WORK(&tcm->suspend_work, syna_suspend_work);
-	INIT_WORK(&tcm->resume_work, syna_resume_work);
-
 #if defined(TCM_CONNECT_IN_PROBE)
 	/* connect to target device */
 	retval = tcm->dev_connect(tcm);
@@ -2396,9 +2383,16 @@ static int syna_dev_probe(struct platform_device *pdev)
 	INIT_DELAYED_WORK(&tcm->set_report_rate_work, syna_set_report_rate_work);
 
 #if IS_ENABLED(CONFIG_GOOG_TOUCH_INTERFACE)
+	pdev->dev.of_node = pdev->dev.parent->of_node;
 	options = devm_kzalloc(&pdev->dev, sizeof(struct gti_optional_configuration), GFP_KERNEL);
 	tcm->gti = goog_touch_interface_probe(
 		tcm, &pdev->dev, tcm->input_dev, gti_default_handler, options);
+
+	retval = goog_pm_register_notification(tcm->gti, &syna_dev_pm_ops);
+	if (retval < 0) {
+		LOGE("Failed to register gti pm");
+		goto err_request_irq;
+	}
 #endif
 
 	retval = syna_dev_request_irq(tcm);
@@ -2531,8 +2525,6 @@ static int syna_dev_remove(struct platform_device *pdev)
 	destroy_workqueue(tcm->helper.workqueue);
 #endif
 
-	cancel_work_sync(&tcm->suspend_work);
-	cancel_work_sync(&tcm->resume_work);
 	cancel_work_sync(&tcm->motion_filter_work);
 	cancel_work_sync(&tcm->set_grip_mode_work);
 	cancel_work_sync(&tcm->set_palm_mode_work);
@@ -2605,9 +2597,9 @@ static void syna_dev_shutdown(struct platform_device *pdev)
 /**
  * Declare a TouchComm platform device
  */
-#ifdef CONFIG_PM
+#if IS_ENABLED(CONFIG_PM) || IS_ENABLED(CONFIG_GOOG_TOUCH_INTERFACE)
 static const struct dev_pm_ops syna_dev_pm_ops = {
-#if !defined(ENABLE_DISP_NOTIFIER)
+#if !defined(ENABLE_DISP_NOTIFIER) || IS_ENABLED(CONFIG_GOOG_TOUCH_INTERFACE)
 	.suspend = syna_dev_suspend,
 	.resume = syna_dev_resume,
 #endif
@@ -2618,7 +2610,7 @@ static struct platform_driver syna_dev_driver = {
 	.driver = {
 		.name = PLATFORM_DRIVER_NAME,
 		.owner = THIS_MODULE,
-#ifdef CONFIG_PM
+#if IS_ENABLED(CONFIG_PM) && !IS_ENABLED(CONFIG_GOOG_TOUCH_INTERFACE)
 		.pm = &syna_dev_pm_ops,
 #endif
 	},
