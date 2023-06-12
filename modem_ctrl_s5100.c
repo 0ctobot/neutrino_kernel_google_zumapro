@@ -192,10 +192,58 @@ static ssize_t power_stats_show(struct device *dev,
 	return count;
 }
 
+#define MAX_PCIE_EVENT_HISTORY 10
+static int pcie_linkdown_history[MAX_PCIE_EVENT_HISTORY];
+static int pcie_linkdown_count;
+static int pcie_cto_history[MAX_PCIE_EVENT_HISTORY];
+static int pcie_cto_count;
+static ssize_t pcie_event_stats_show(struct device *dev,
+		struct device_attribute *attr, char *buf)
+{
+	struct modem_ctl *mc = dev_get_drvdata(dev);
+	ssize_t count = 0, i = 0;
+
+	count += scnprintf(&buf[count], PAGE_SIZE - count,
+		"Total linkdown retries: %d\n",
+		mc->pcie_linkdown_retry_cnt_all);
+	count += scnprintf(&buf[count], PAGE_SIZE - count,
+		"Total CPL timeout retries: %d\n",
+		mc->pcie_cto_retry_cnt_all);
+	count += scnprintf(&buf[count], PAGE_SIZE - count,
+		"Previous linkdown retries: %d\n",
+		mc->pcie_linkdown_retry_cnt);
+	count += scnprintf(&buf[count], PAGE_SIZE - count,
+		"Previous CPL timeout retries: %d\n",
+		mc->pcie_cto_retry_cnt);
+	count += scnprintf(&buf[count], PAGE_SIZE - count,
+		"Previous %d linkdown retries:",
+		MAX_PCIE_EVENT_HISTORY);
+	for (i = 0; i < MAX_PCIE_EVENT_HISTORY; i++) {
+		count += scnprintf(&buf[count], PAGE_SIZE - count, " %d",
+			pcie_linkdown_history[i]);
+	}
+	count += scnprintf(&buf[count], PAGE_SIZE - count,
+		"\nTotal linkdown retries recorded: %d\n",
+		pcie_linkdown_count);
+	count += scnprintf(&buf[count], PAGE_SIZE - count,
+		"Previous %d CPL timeout retries:", MAX_PCIE_EVENT_HISTORY);
+	for (i = 0; i < MAX_PCIE_EVENT_HISTORY; i++) {
+		count += scnprintf(&buf[count], PAGE_SIZE - count, " %d",
+			pcie_cto_history[i]);
+	}
+	count += scnprintf(&buf[count], PAGE_SIZE - count,
+			"\nTotal CPL timeout retries recorded: %d\n",
+			pcie_cto_count);
+
+	return count;
+}
+
 static DEVICE_ATTR_RO(power_stats);
+static DEVICE_ATTR_RO(pcie_event_stats);
 
 static struct attribute *modem_attrs[] = {
 	&dev_attr_power_stats.attr,
+	&dev_attr_pcie_event_stats.attr,
 	NULL,
 };
 
@@ -1528,11 +1576,15 @@ static int s5100_poweroff_pcie(struct modem_ctl *mc, bool force_off)
 	/* recovery status is not valid after PCI link down requests from CP */
 	if (mc->pcie_linkdown_retry_cnt > 0) {
 		mif_info("clear linkdown_retry_cnt(%d)..!!!\n", mc->pcie_linkdown_retry_cnt);
+		pcie_linkdown_history[pcie_linkdown_count++ \
+			% MAX_PCIE_EVENT_HISTORY] = mc->pcie_linkdown_retry_cnt;
 		mc->pcie_linkdown_retry_cnt = 0;
 	}
 
 	if (mc->pcie_cto_retry_cnt > 0) {
 		mif_info("clear cto_retry_cnt(%d)..!!!\n", mc->pcie_cto_retry_cnt);
+		pcie_cto_history[pcie_cto_count++ % MAX_PCIE_EVENT_HISTORY] \
+			= mc->pcie_cto_retry_cnt;
 		mc->pcie_cto_retry_cnt = 0;
 	}
 
