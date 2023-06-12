@@ -2,6 +2,17 @@
 
 load("//build/kernel/kleaf:kernel.bzl", "kernel_module")
 
+filegroup(
+    name = "syna_touch.kconfig",
+    srcs = glob([
+        "Kconfig",
+    ]),
+    visibility = [
+        "//private/devices/google:__subpackages__",
+        "//private/google-modules/soc/gs:__pkg__",
+    ],
+)
+
 kernel_module(
     name = "syna_touch",
     srcs = glob([
@@ -9,8 +20,8 @@ kernel_module(
         "**/*.h",
         "Kbuild",
     ]) + [
-        "//private/google-modules/display:headers",
-        "//private/google-modules/display/include:headers",
+        "//private/google-modules/display/samsung:headers",
+        "//private/google-modules/display/samsung/include:headers",
         "//private/google-modules/soc/gs:gs_soc_headers",
         "//private/google-modules/touch/common:headers",
     ],
