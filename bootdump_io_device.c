@@ -289,7 +289,6 @@ static long bootdump_ioctl(struct file *filp, unsigned int cmd, unsigned long ar
 			}
 			return mc->ops.start_dump_boot(mc);
 
-#if IS_ENABLED(CONFIG_SEC_MODEM_S5400)
 		case CP_BOOT_MODE_NORMAL_BL1:
 			mif_info("%s: bl1 boot mode\n", iod->name);
 			if (!mc->ops.start_normal_boot_bl1) {
@@ -321,7 +320,6 @@ static long bootdump_ioctl(struct file *filp, unsigned int cmd, unsigned long ar
 				return -EINVAL;
 			}
 			return mc->ops.start_dump_boot_bootloader(mc);
-#endif
 
 		default:
 			mif_err("boot_mode is invalid:%d\n", mode.idx);

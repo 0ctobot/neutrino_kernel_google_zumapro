@@ -216,11 +216,5 @@ config CP_THERMAL
 	  Enables support for reporting CP temperature sensor data to
 	  kernel thermal framework.
 
-config SEC_MODEM_S5400
-	tristate "Enable S5400 feature"
-	default n
-	help
-	  Enable S5400 feature
-
 endmenu
 endif

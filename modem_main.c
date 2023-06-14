@@ -111,6 +111,10 @@ static struct modem_ctl *create_modemctl_device(struct platform_device *pdev,
 	modemctl->dev = dev;
 	modemctl->name = pdata->name;
 	modemctl->mdm_data = pdata;
+	if (!strncmp(modemctl->name, "s5400", 5))
+		modemctl->variant = MODEM_SEC_5400;
+	else
+		modemctl->variant = MODEM_SEC_5300;
 
 	modemctl->msd = msd;
 

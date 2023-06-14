@@ -75,7 +75,8 @@ int s51xx_pcie_request_msi_int(struct pci_dev *pdev, int int_num);
 void __iomem *s51xx_pcie_get_doorbell_address(void);
 int s51xx_pcie_send_doorbell_int(struct pci_dev *pdev, int int_num);
 void s51xx_pcie_save_state(struct pci_dev *pdev);
-void s51xx_pcie_restore_state(struct pci_dev *pdev, bool boot_on);
+void s51xx_pcie_restore_state(struct pci_dev *pdev, bool boot_on,
+		enum modem_variant variant);
 int s51xx_check_pcie_link_status(int ch_num);
 void s51xx_pcie_l1ss_ctrl(int enable, int ch_num);
 void disable_msi_int(struct pci_dev *pdev);

@@ -966,16 +966,14 @@ static int power_shutdown_cp(struct modem_ctl *mc)
 		s5910_shutdown_sequence(mc->s5910_dev);
 	}
 
-#if IS_ENABLED(CONFIG_SEC_MODEM_S5400)
-	exynos_pcie_poweroff(mc->pcie_ch_num);
-#endif
+	if (mc->variant == MODEM_SEC_5400)
+		exynos_pcie_poweroff(mc->pcie_ch_num);
 
 	gpio_power_off_cp(mc);
 	print_mc_state(mc);
 
-#if !IS_ENABLED(CONFIG_SEC_MODEM_S5400)
-	pcie_clean_dislink(mc);
-#endif
+	if (mc->variant != MODEM_SEC_5400)
+		pcie_clean_dislink(mc);
 
 exit:
 	mif_err("---\n");
@@ -1128,7 +1126,8 @@ static int check_cp_status(struct modem_ctl *mc, unsigned int count, bool check_
 		if (check_msi) {
 			val = (int)ioread32(mld->msi_reg_base +
 				offsetof(struct msi_reg_type, boot_stage));
-			if (val == BOOT_STAGE_DONE_MASK) {
+			if (((mc->variant == MODEM_SEC_5400) && (val == BOOT_STAGE_5400_DONE_MASK)) ||
+			    ((mc->variant == MODEM_SEC_5300) && (val == BOOT_STAGE_5300_DONE_MASK))) {
 				check_done = true;
 				break;
 			}
@@ -1156,7 +1155,6 @@ static int check_cp_status(struct modem_ctl *mc, unsigned int count, bool check_
 	return 0;
 }
 
-#if IS_ENABLED(CONFIG_SEC_MODEM_S5400)
 static int check_boot_status(struct modem_ctl *mc, unsigned int count, bool check_bl1)
 {
 	struct link_device *ld = get_current_link(mc->bootd);
@@ -1171,7 +1169,7 @@ static int check_boot_status(struct modem_ctl *mc, unsigned int count, bool chec
 
 		val = (int)ioread32(mld->msi_reg_base +
 			offsetof(struct msi_reg_type, boot_stage));
-		if (val == (check_bl1 ? BOOT_STAGE_BL1_DOWNLOAD_DONE_MASK : BOOT_STAGE_DONE_MASK)) {
+		if (val == (check_bl1 ? BOOT_STAGE_BL1_DOWNLOAD_DONE_MASK : BOOT_STAGE_5400_DONE_MASK)) {
 			check_done = true;
 			break;
 		}
@@ -1190,7 +1188,6 @@ static int check_boot_status(struct modem_ctl *mc, unsigned int count, bool chec
 
 	return 0;
 }
-#endif
 
 static int set_cp_rom_boot_img(struct mem_link_device *mld)
 {
@@ -1394,7 +1391,6 @@ exit:
 	return err;
 }
 
-#if IS_ENABLED(CONFIG_SEC_MODEM_S5400)
 static int start_normal_boot_bl1(struct modem_ctl *mc)
 {
 	struct link_device *ld = get_current_link(mc->bootd);
@@ -1504,7 +1500,6 @@ status_error:
 	mif_info("---\n");
 	return 0;
 }
-#endif
 
 static int trigger_cp_crash_internal(struct modem_ctl *mc)
 {
@@ -1653,7 +1648,6 @@ status_error:
 	return err;
 }
 
-#if IS_ENABLED(CONFIG_SEC_MODEM_S5400)
 static int start_dump_boot_bl1(struct modem_ctl *mc)
 {
 	struct link_device *ld = get_current_link(mc->bootd);
@@ -1741,7 +1735,6 @@ status_error:
 	mif_err("---\n");
 	return ret;
 }
-#endif
 
 static int s5100_poweroff_pcie(struct modem_ctl *mc, bool force_off)
 {
@@ -1928,7 +1921,7 @@ int s5100_poweron_pcie(struct modem_ctl *mc, bool boot_on)
 	mc->pcie_powered_on = true;
 
 	if (mc->s51xx_pdev != NULL) {
-		s51xx_pcie_restore_state(mc->s51xx_pdev, boot_on);
+		s51xx_pcie_restore_state(mc->s51xx_pdev, boot_on, mc->variant);
 
 		/* DBG: check MSI sfr setting values */
 		print_msi_register(mc->s51xx_pdev);
@@ -2143,12 +2136,10 @@ static void s5100_get_ops(struct modem_ctl *mc)
 
 	mc->ops.start_normal_boot = start_normal_boot;
 	mc->ops.complete_normal_boot = complete_normal_boot;
-#if IS_ENABLED(CONFIG_SEC_MODEM_S5400)
 	mc->ops.start_normal_boot_bl1 = start_normal_boot_bl1;
 	mc->ops.start_normal_boot_bootloader = start_normal_boot_bootloader;
 	mc->ops.start_dump_boot_bl1 = start_dump_boot_bl1;
 	mc->ops.start_dump_boot_bootloader = start_dump_boot_bootloader;
-#endif
 
 	mc->ops.start_dump_boot = start_dump_boot;
 	mc->ops.trigger_cp_crash = trigger_cp_crash;
