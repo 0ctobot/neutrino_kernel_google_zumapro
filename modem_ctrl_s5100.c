@@ -28,6 +28,7 @@
 
 #include <linux/exynos-pci-ctrl.h>
 #include <linux/shm_ipc.h>
+#include <dt-bindings/pci/pci.h>
 
 #include "modem_notifier.h"
 #include "modem_prj.h"
@@ -178,10 +179,58 @@ static ssize_t power_stats_show(struct device *dev,
 	return count;
 }
 
+#define MAX_PCIE_EVENT_HISTORY 10
+static int pcie_linkdown_history[MAX_PCIE_EVENT_HISTORY];
+static int pcie_linkdown_count;
+static int pcie_cto_history[MAX_PCIE_EVENT_HISTORY];
+static int pcie_cto_count;
+static ssize_t pcie_event_stats_show(struct device *dev,
+		struct device_attribute *attr, char *buf)
+{
+	struct modem_ctl *mc = dev_get_drvdata(dev);
+	ssize_t count = 0, i = 0;
+
+	count += scnprintf(&buf[count], PAGE_SIZE - count,
+		"Total linkdown retries: %d\n",
+		mc->pcie_linkdown_retry_cnt_all);
+	count += scnprintf(&buf[count], PAGE_SIZE - count,
+		"Total CPL timeout retries: %d\n",
+		mc->pcie_cto_retry_cnt_all);
+	count += scnprintf(&buf[count], PAGE_SIZE - count,
+		"Previous linkdown retries: %d\n",
+		mc->pcie_linkdown_retry_cnt);
+	count += scnprintf(&buf[count], PAGE_SIZE - count,
+		"Previous CPL timeout retries: %d\n",
+		mc->pcie_cto_retry_cnt);
+	count += scnprintf(&buf[count], PAGE_SIZE - count,
+		"Previous %d linkdown retries:",
+		MAX_PCIE_EVENT_HISTORY);
+	for (i = 0; i < MAX_PCIE_EVENT_HISTORY; i++) {
+		count += scnprintf(&buf[count], PAGE_SIZE - count, " %d",
+			pcie_linkdown_history[i]);
+	}
+	count += scnprintf(&buf[count], PAGE_SIZE - count,
+		"\nTotal linkdown retries recorded: %d\n",
+		pcie_linkdown_count);
+	count += scnprintf(&buf[count], PAGE_SIZE - count,
+		"Previous %d CPL timeout retries:", MAX_PCIE_EVENT_HISTORY);
+	for (i = 0; i < MAX_PCIE_EVENT_HISTORY; i++) {
+		count += scnprintf(&buf[count], PAGE_SIZE - count, " %d",
+			pcie_cto_history[i]);
+	}
+	count += scnprintf(&buf[count], PAGE_SIZE - count,
+			"\nTotal CPL timeout retries recorded: %d\n",
+			pcie_cto_count);
+
+	return count;
+}
+
 static DEVICE_ATTR_RO(power_stats);
+static DEVICE_ATTR_RO(pcie_event_stats);
 
 static struct attribute *modem_attrs[] = {
 	&dev_attr_power_stats.attr,
+	&dev_attr_pcie_event_stats.attr,
 	NULL,
 };
 
@@ -773,11 +822,55 @@ static void gpio_power_offon_cp(struct modem_ctl *mc)
 static void gpio_power_wreset_cp(struct modem_ctl *mc)
 {
 #if !IS_ENABLED(CONFIG_CP_WRESET_WA)
-	mif_gpio_set_value(&mc->cp_gpio[CP_GPIO_AP2CP_CP_WRST_N], 0, 50);
-	mif_gpio_set_value(&mc->cp_gpio[CP_GPIO_AP2CP_PM_WRST_N], 0, 50);
-	mif_gpio_set_value(&mc->cp_gpio[CP_GPIO_AP2CP_CP_WRST_N], 1, 50);
-	mif_gpio_set_value(&mc->cp_gpio[CP_GPIO_AP2CP_PM_WRST_N], 1, 0);
+	int i = 0, val;
+
+	mif_info("warm reset sequence start\n");
+	val = mif_gpio_get_value(&mc->cp_gpio[CP_GPIO_CP2AP_CP_WRST_N],
+		false);
+	if (!val)
+		mif_err("cp2ap_cp_wrst level is low before warm reset\n");
+
+	mif_gpio_set_value(&mc->cp_gpio[CP_GPIO_AP2CP_PM_WRST_N], 1, 5);
+	mif_gpio_set_value(&mc->cp_gpio[CP_GPIO_AP2CP_CP_WRST_N], 0,
+		val ? 0 : 1);
+
+	while (i++ < 20) {
+		if (!mif_gpio_get_value(&mc->cp_gpio[CP_GPIO_CP2AP_CP_WRST_N],
+				false))
+			break;
+		mif_info("Wait for cp2ap_cp_wrst pulled to low\n");
+		usleep_range(1000, 1100);
+	}
+
+	mif_gpio_set_value(&mc->cp_gpio[CP_GPIO_AP2CP_PM_WRST_N], 0, 5);
+	mif_gpio_set_value(&mc->cp_gpio[CP_GPIO_AP2CP_CP_WRST_N], 1, 45);
+
+	mif_info("warm reset sequence end\n");
 #endif
+}
+
+static void clear_boot_stage(struct modem_ctl *mc)
+{
+	struct link_device *ld = get_current_link(mc->iod);
+	struct mem_link_device *mld = to_mem_link_device(ld);
+	int val;
+
+	if (mld->attrs & LINK_ATTR_XMIT_BTDLR_PCIE) {
+		if (!mld->msi_reg_base) {
+			u32 cp_num = ld->mdm_data->cp_num;
+			mld->msi_reg_base = cp_shmem_get_region(cp_num, SHMEM_MSI);
+			if (!mld->msi_reg_base) {
+				mif_err("Failed to get valid msi reg base.\n");
+				return;
+			}
+		}
+
+		iowrite32(0, mld->msi_reg_base +
+			offsetof(struct msi_reg_type, boot_stage));
+		val = ioread32(mld->msi_reg_base +
+			offsetof(struct msi_reg_type, boot_stage));
+		mif_info("Clear boot_stage == 0x%X\n", val);
+	}
 }
 
 static int power_on_cp(struct modem_ctl *mc)
@@ -787,6 +880,8 @@ static int power_on_cp(struct modem_ctl *mc)
 	struct mem_link_device *mld = to_mem_link_device(ld);
 
 	mif_info("%s: +++\n", mc->name);
+
+	clear_boot_stage(mc);
 
 	mif_disable_irq(&mc->cp_gpio_irq[CP_GPIO_IRQ_CP2AP_CP_ACTIVE]);
 	mif_disable_irq(&mc->cp_gpio_irq[CP_GPIO_IRQ_CP2AP_WAKEUP]);
@@ -894,6 +989,8 @@ static int power_reset_dump_cp(struct modem_ctl *mc, bool silent)
 	struct mem_link_device *mld = to_mem_link_device(ld);
 
 	mif_info("%s: +++\n", mc->name);
+
+	clear_boot_stage(mc);
 
 	if (ld->sbd_ipc && hrtimer_active(&mld->sbd_print_timer))
 		hrtimer_cancel(&mld->sbd_print_timer);
@@ -1689,11 +1786,15 @@ static int s5100_poweroff_pcie(struct modem_ctl *mc, bool force_off)
 	/* recovery status is not valid after PCI link down requests from CP */
 	if (mc->pcie_linkdown_retry_cnt > 0) {
 		mif_info("clear linkdown_retry_cnt(%d)..!!!\n", mc->pcie_linkdown_retry_cnt);
+		pcie_linkdown_history[pcie_linkdown_count++ \
+			% MAX_PCIE_EVENT_HISTORY] = mc->pcie_linkdown_retry_cnt;
 		mc->pcie_linkdown_retry_cnt = 0;
 	}
 
 	if (mc->pcie_cto_retry_cnt > 0) {
 		mif_info("clear cto_retry_cnt(%d)..!!!\n", mc->pcie_cto_retry_cnt);
+		pcie_cto_history[pcie_cto_count++ % MAX_PCIE_EVENT_HISTORY] \
+			= mc->pcie_cto_retry_cnt;
 		mc->pcie_cto_retry_cnt = 0;
 	}
 
@@ -1744,10 +1845,8 @@ exit:
 			if (s51xx_pcie_send_doorbell_int(mc->s51xx_pdev,
 						mld->intval_ap2cp_msg) != 0)
 				force_crash = true;
-		} else {
-			mdelay(1);
+		} else
 			s5100_try_gpio_cp_wakeup(mc);
-		}
 	}
 	spin_unlock_irqrestore(&mc->pcie_tx_lock, flags);
 
@@ -1814,8 +1913,17 @@ int s5100_poweron_pcie(struct modem_ctl *mc, bool boot_on)
 	if (exynos_pcie_rc_get_cpl_timeout_state(mc->pcie_ch_num))
 		exynos_pcie_set_ready_cto_recovery(mc->pcie_ch_num);
 
-	if (exynos_pcie_poweron(mc->pcie_ch_num, (boot_on ? 1 : 3)) != 0)
+	if (exynos_pcie_poweron(mc->pcie_ch_num,
+			(boot_on ? LINK_SPEED_GEN1 : LINK_SPEED_GEN3)) != 0) {
+		if (boot_on) {
+			mif_err("PCIe gen1 linkup with CP ROM failed.\n");
+			logbuffer_log(mc->log, "PCIe gen1 linkup with CP ROM failed.");
+		}
 		goto exit;
+	}
+
+	if (boot_on)
+		mif_info("PCIe gen1 linkup with CP ROM succeed.\n");
 
 	mc->pcie_powered_on = true;
 
@@ -2063,6 +2171,7 @@ static int s5100_get_pdata(struct modem_ctl *mc, struct modem_data *pdata)
 	mc->cp_gpio[CP_GPIO_AP2CP_AP_ACTIVE].label = "AP2CP_AP_ACTIVE";
 #if !IS_ENABLED(CONFIG_CP_WRESET_WA)
 	mc->cp_gpio[CP_GPIO_AP2CP_CP_WRST_N].label = "AP2CP_CP_WRST_N";
+	mc->cp_gpio[CP_GPIO_CP2AP_CP_WRST_N].label = "CP2AP_CP_WRST_N";
 	mc->cp_gpio[CP_GPIO_AP2CP_PM_WRST_N].label = "AP2CP_PM_WRST_N";
 #endif
 	mc->cp_gpio[CP_GPIO_CP2AP_PS_HOLD].label = "CP2AP_PS_HOLD";
@@ -2077,6 +2186,7 @@ static int s5100_get_pdata(struct modem_ctl *mc, struct modem_data *pdata)
 	mc->cp_gpio[CP_GPIO_AP2CP_AP_ACTIVE].node_name = "gpio_ap2cp_pda_active";
 #if !IS_ENABLED(CONFIG_CP_WRESET_WA)
 	mc->cp_gpio[CP_GPIO_AP2CP_CP_WRST_N].node_name = "gpio_ap2cp_cp_wrst_n";
+	mc->cp_gpio[CP_GPIO_CP2AP_CP_WRST_N].node_name = "gpio_cp2ap_cp_wrst_n";
 	mc->cp_gpio[CP_GPIO_AP2CP_PM_WRST_N].node_name = "gpio_ap2cp_pm_wrst_n";
 #endif
 	mc->cp_gpio[CP_GPIO_CP2AP_PS_HOLD].node_name = "gpio_cp2ap_cp_ps_hold";

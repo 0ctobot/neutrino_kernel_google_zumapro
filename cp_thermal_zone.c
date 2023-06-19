@@ -46,7 +46,7 @@ static ssize_t cp_temp_store(struct device *dev, struct device_attribute *attr, 
 		return -EINVAL;
 	}
 
-	if (index > temp_manager->num_sensors) {
+	if (index >= temp_manager->num_sensors) {
 		dev_err(dev, "Invalid CP temperature sensor index - %d", index);
 		return -EINVAL;
 	}
