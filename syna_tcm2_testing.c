@@ -311,12 +311,13 @@ end_of_lower_bound_limit:
  *    [ in] rows: number of rows
  *    [ in] cols: number of cols
  *    [ in] direction_x: appoint the gap direction x
+ *    [ in] percentage: true for gap percentage, false for gap value.
  *
  * @return
  *    on success, 0; otherwise, negative value on error.
  */
 static int syna_testing_calculate_gap_frame(short *in, short *out,
-		int rows, int cols, bool direction_x)
+		int rows, int cols, bool direction_x, bool percentage)
 {
 	int i, j, idx;
 	short val_1, val_2;
@@ -337,10 +338,14 @@ static int syna_testing_calculate_gap_frame(short *in, short *out,
 			for (j = 0; j < cols; j++) {
 				val_1 = in[i * cols + j];
 				val_2 = in[(i-1) * cols + j];
-				if (val_2 == 0)
-					out[idx++] = 0;
-				else
-					out[idx++] = (abs(val_1 - val_2)) * 100 / val_2;
+				if (percentage) {
+					if (val_2 == 0)
+						out[idx++] = 0;
+					else
+						out[idx++] = (abs(val_1 - val_2)) * 100 / val_2;
+				} else {
+					out[idx++] = abs(val_1 - val_2);
+				}
 			}
 		}
 	} else {
@@ -348,10 +353,14 @@ static int syna_testing_calculate_gap_frame(short *in, short *out,
 			for (j = 1; j < cols; j++) {
 				val_1 = in[i * cols + j];
 				val_2 = in[i * cols + (j-1)];
-				if (val_2 == 0)
-					out[idx++] = 0;
-				else
-					out[idx++] = (abs(val_1 - val_2)) * 100 / val_2;
+				if (percentage) {
+					if (val_2 == 0)
+						out[idx++] = 0;
+					else
+						out[idx++] = (abs(val_1 - val_2)) * 100 / val_2;
+				} else {
+					out[idx++] = abs(val_1 - val_2);
+				}
 			}
 			out[idx++] = 0;
 		}
@@ -645,11 +654,10 @@ exit:
  * @return
  *    on success, 0; otherwise, negative value on error.
  */
-static int syna_testing_pt05_gap(struct syna_tcm *tcm)
+static int syna_testing_pt05_gap(struct syna_tcm *tcm, struct tcm_buffer *test_data)
 {
 	int retval;
 	bool result = false;
-	struct tcm_buffer test_data;
 	int rows = tcm->tcm_dev->rows;
 	int cols = tcm->tcm_dev->cols;
 	short *data_ptr = NULL;
@@ -657,8 +665,6 @@ static int syna_testing_pt05_gap(struct syna_tcm *tcm)
 	short *gap_frame_x = NULL;
 	short *gap_frame_y = NULL;
 	int i, j, idx;
-
-	syna_tcm_buf_init(&test_data);
 
 	LOGI("Start testing\n");
 
@@ -684,16 +690,7 @@ static int syna_testing_pt05_gap(struct syna_tcm *tcm)
 		goto exit;
 	}
 
-	retval = syna_tcm_run_production_test(tcm->tcm_dev,
-			TEST_PID05_FULL_RAW_CAP,
-			&test_data);
-	if (retval < 0) {
-		LOGE("Fail to run test %d\n", TEST_PID05_FULL_RAW_CAP);
-		result = false;
-		goto exit;
-	}
-
-	data_ptr = (short *)&test_data.buf[0];
+	data_ptr = (short *)&test_data->buf[0];
 	for (i = 0; i < rows; i++) {
 		for (j = 0; j < cols; j++) {
 			frame[i * cols + j] = *data_ptr;
@@ -702,7 +699,7 @@ static int syna_testing_pt05_gap(struct syna_tcm *tcm)
 	}
 
 	retval = syna_testing_calculate_gap_frame(frame,
-			gap_frame_x, rows, cols, true);
+			gap_frame_x, rows, cols, true, true);
 	if (retval < 0) {
 		LOGE("Fail to get the gap frame x\n");
 		result = false;
@@ -710,7 +707,7 @@ static int syna_testing_pt05_gap(struct syna_tcm *tcm)
 	}
 
 	retval = syna_testing_calculate_gap_frame(frame,
-			gap_frame_y, rows, cols, false);
+			gap_frame_y, rows, cols, false, true);
 	if (retval < 0) {
 		LOGE("Fail to get the gap frame y\n");
 		result = false;
@@ -745,8 +742,6 @@ exit:
 	if (frame)
 		syna_pal_mem_free(frame);
 
-	syna_tcm_buf_release(&test_data);
-
 	return ((result) ? 0 : -1);
 }
 
@@ -767,7 +762,7 @@ exit:
 static ssize_t syna_testing_pt05_show(struct kobject *kobj,
 		struct kobj_attribute *attr, char *buf)
 {
-	int retval, i, j;
+	int retval, retval_gap, i, j;
 	short *data_ptr = NULL;
 	unsigned int count = 0;
 	struct syna_tcm *tcm = g_tcm_ptr;
@@ -785,8 +780,11 @@ static ssize_t syna_testing_pt05_show(struct kobject *kobj,
 
 	retval = syna_testing_pt05(tcm, &test_data);
 
+	retval_gap = syna_testing_pt05_gap(tcm, &test_data);
+
 	count += scnprintf(buf, PAGE_SIZE,
-			"TEST PT$05: %s\n", (retval < 0) ? "fail" : "pass");
+			"TEST PT$05: %s\n",
+			(retval < 0) || (retval_gap < 0) ? "fail" : "pass");
 
 	count += scnprintf(buf + count, PAGE_SIZE - count, "%d %d\n",
 			tcm->tcm_dev->cols, tcm->tcm_dev->rows);
@@ -961,11 +959,10 @@ exit:
  * @return
  *    on success, 0; otherwise, negative value on error.
  */
-static int syna_testing_pt10_gap(struct syna_tcm *tcm)
+static int syna_testing_pt10_gap(struct syna_tcm *tcm, struct tcm_buffer *test_data)
 {
 	int retval;
 	bool result = false;
-	struct tcm_buffer test_data;
 	int rows = tcm->tcm_dev->rows;
 	int cols = tcm->tcm_dev->cols;
 	short *data_ptr = NULL;
@@ -973,8 +970,6 @@ static int syna_testing_pt10_gap(struct syna_tcm *tcm)
 	short *gap_frame_x = NULL;
 	short *gap_frame_y = NULL;
 	int i, j, idx;
-
-	syna_tcm_buf_init(&test_data);
 
 	LOGI("Start testing\n");
 
@@ -1000,16 +995,7 @@ static int syna_testing_pt10_gap(struct syna_tcm *tcm)
 		goto exit;
 	}
 
-	retval = syna_tcm_run_production_test(tcm->tcm_dev,
-			TEST_PID16_SENSOR_SPEED,
-			&test_data);
-	if (retval < 0) {
-		LOGE("Fail to run test %d\n", TEST_PID16_SENSOR_SPEED);
-		result = false;
-		goto exit;
-	}
-
-	data_ptr = (short *)&test_data.buf[0];
+	data_ptr = (short *)&test_data->buf[0];
 	for (i = 0; i < rows; i++) {
 		for (j = 0; j < cols; j++) {
 			frame[i * cols + j] = *data_ptr;
@@ -1018,7 +1004,7 @@ static int syna_testing_pt10_gap(struct syna_tcm *tcm)
 	}
 
 	retval = syna_testing_calculate_gap_frame(frame,
-			gap_frame_x, rows, cols, true);
+			gap_frame_x, rows, cols, true, false);
 	if (retval < 0) {
 		LOGE("Fail to get the gap frame x\n");
 		result = false;
@@ -1026,7 +1012,7 @@ static int syna_testing_pt10_gap(struct syna_tcm *tcm)
 	}
 
 	retval = syna_testing_calculate_gap_frame(frame,
-			gap_frame_y, rows, cols, false);
+			gap_frame_y, rows, cols, false, false);
 	if (retval < 0) {
 		LOGE("Fail to get the gap frame y\n");
 		result = false;
@@ -1061,8 +1047,6 @@ exit:
 	if (frame)
 		syna_pal_mem_free(frame);
 
-	syna_tcm_buf_release(&test_data);
-
 	return ((result) ? 0 : -1);
 }
 
@@ -1083,7 +1067,7 @@ exit:
 static ssize_t syna_testing_pt10_show(struct kobject *kobj,
 		struct kobj_attribute *attr, char *buf)
 {
-	int retval, i, j;
+	int retval, retval_gap, i, j;
 	short *data_ptr = NULL;
 	unsigned int count = 0;
 	struct syna_tcm *tcm = g_tcm_ptr;
@@ -1101,8 +1085,11 @@ static ssize_t syna_testing_pt10_show(struct kobject *kobj,
 
 	retval = syna_testing_pt10(tcm, &test_data);
 
+	retval_gap = syna_testing_pt10_gap(tcm, &test_data);
+
 	count += scnprintf(buf, PAGE_SIZE,
-			"TEST PT$10: %s\n", (retval < 0) ? "fail" : "pass");
+			"TEST PT$10: %s\n",
+			(retval < 0) || (retval_gap < 0) ? "fail" : "pass");
 
 	count += scnprintf(buf + count, PAGE_SIZE - count, "%d %d\n",
 			tcm->tcm_dev->cols, tcm->tcm_dev->rows);
@@ -1589,84 +1576,6 @@ exit:
 static struct kobj_attribute kobj_attr_pt_tag_moisture =
 	__ATTR(pt_moisture, 0444, syna_testing_pt_moisture_show, NULL);
 
-/**
- * syna_testing_pt05_gap_show()
- *
- * Attribute to show the result of PT05 GAP test to the console.
- *
- * @param
- *    [ in] kobj:  an instance of kobj
- *    [ in] attr:  an instance of kobj attribute structure
- *    [out] buf:  string buffer shown on console
- *
- * @return
- *    on success, number of characters being output;
- *    otherwise, negative value on error.
- */
-static ssize_t syna_testing_pt05_gap_show(struct kobject *kobj,
-		struct kobj_attribute *attr, char *buf)
-{
-	int retval;
-	unsigned int count = 0;
-	struct syna_tcm *tcm = g_tcm_ptr;
-
-	if (!tcm->is_connected) {
-		count = snprintf(buf, PAGE_SIZE,
-				"Device is NOT connected\n");
-		goto exit;
-	}
-
-	retval = syna_testing_pt05_gap(tcm);
-
-	count = snprintf(buf, PAGE_SIZE,
-			"TEST PT$05 GAP : %s\n", (retval < 0) ? "fail" : "pass");
-
-exit:
-	return count;
-}
-
-static struct kobj_attribute kobj_attr_pt05_gap =
-	__ATTR(pt05_gap, 0444, syna_testing_pt05_gap_show, NULL);
-
-/**
- * syna_testing_pt10_gap_show()
- *
- * Attribute to show the result of PT10 GAP test to the console.
- *
- * @param
- *    [ in] kobj:  an instance of kobj
- *    [ in] attr:  an instance of kobj attribute structure
- *    [out] buf:  string buffer shown on console
- *
- * @return
- *    on success, number of characters being output;
- *    otherwise, negative value on error.
- */
-static ssize_t syna_testing_pt10_gap_show(struct kobject *kobj,
-		struct kobj_attribute *attr, char *buf)
-{
-	int retval;
-	unsigned int count = 0;
-	struct syna_tcm *tcm = g_tcm_ptr;
-
-	if (!tcm->is_connected) {
-		count = snprintf(buf, PAGE_SIZE,
-				"Device is NOT connected\n");
-		goto exit;
-	}
-
-	retval = syna_testing_pt10_gap(tcm);
-
-	count = snprintf(buf, PAGE_SIZE,
-			"TEST PT$10 GAP : %s\n", (retval < 0) ? "fail" : "pass");
-
-exit:
-	return count;
-}
-
-static struct kobj_attribute kobj_attr_pt10_gap =
-	__ATTR(pt10_gap, 0444, syna_testing_pt10_gap_show, NULL);
-
 /*
  * declaration of sysfs attributes
  */
@@ -1680,8 +1589,6 @@ static struct attribute *attrs[] = {
 	&kobj_attr_pt12.attr,
 	&kobj_attr_pt16.attr,
 	&kobj_attr_pt_tag_moisture.attr,
-	&kobj_attr_pt05_gap.attr,
-	&kobj_attr_pt10_gap.attr,
 	NULL,
 };
 
