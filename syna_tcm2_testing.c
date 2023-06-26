@@ -301,6 +301,67 @@ end_of_lower_bound_limit:
 }
 
 /**
+ * syna_testing_calculate_gap_frame()
+ *
+ * Sample code to calculate the GAP frame for the test
+ *
+ * @param
+ *    [ in] in: input frame
+ *    [out] out: output frame
+ *    [ in] rows: number of rows
+ *    [ in] cols: number of cols
+ *    [ in] direction_x: appoint the gap direction x
+ *
+ * @return
+ *    on success, 0; otherwise, negative value on error.
+ */
+static int syna_testing_calculate_gap_frame(short *in, short *out,
+		int rows, int cols, bool direction_x)
+{
+	int i, j, idx;
+	short val_1, val_2;
+
+	if (!in || !out) {
+		LOGE("Invalid frame to calculate\n");
+		return -1;
+	}
+
+	if (rows * cols <= 0) {
+		LOGE("Invalid parameter of rows and cols\n");
+		return -1;
+	}
+
+	idx = 0;
+	if (direction_x) {
+		for (i = 1; i < rows; i++) {
+			for (j = 0; j < cols; j++) {
+				val_1 = in[i * cols + j];
+				val_2 = in[(i-1) * cols + j];
+				if (val_2 == 0)
+					out[idx++] = 0;
+				else
+					out[idx++] = (abs(val_1 - val_2)) * 100 / val_2;
+			}
+		}
+	} else {
+		for (i = 0; i < rows; i++) {
+			for (j = 1; j < cols; j++) {
+				val_1 = in[i * cols + j];
+				val_2 = in[i * cols + (j-1)];
+				if (val_2 == 0)
+					out[idx++] = 0;
+				else
+					out[idx++] = (abs(val_1 - val_2)) * 100 / val_2;
+			}
+			out[idx++] = 0;
+		}
+	}
+
+
+	return 0;
+}
+
+/**
  * syna_testing_device_id()
  *
  * Sample code to ensure the device id is expected
@@ -574,6 +635,122 @@ exit:
 }
 
 /**
+ * syna_testing_pt05_gap()
+ *
+ * Sample code to implement GAP test based on PT05
+ *
+ * @param
+ *    [ in] tcm: the driver handle
+ *
+ * @return
+ *    on success, 0; otherwise, negative value on error.
+ */
+static int syna_testing_pt05_gap(struct syna_tcm *tcm)
+{
+	int retval;
+	bool result = false;
+	struct tcm_buffer test_data;
+	int rows = tcm->tcm_dev->rows;
+	int cols = tcm->tcm_dev->cols;
+	short *data_ptr = NULL;
+	short *frame = NULL;
+	short *gap_frame_x = NULL;
+	short *gap_frame_y = NULL;
+	int i, j, idx;
+
+	syna_tcm_buf_init(&test_data);
+
+	LOGI("Start testing\n");
+
+	frame = syna_pal_mem_alloc(rows * cols, sizeof(short));
+	if (!frame) {
+		LOGE("Fail to allocate image for gap test\n");
+		result = false;
+		frame = NULL;
+		goto exit;
+	}
+	gap_frame_x = syna_pal_mem_alloc(rows * cols, sizeof(short));
+	if (!gap_frame_x) {
+		LOGE("Fail to allocate gap image x for gap test\n");
+		result = false;
+		gap_frame_x = NULL;
+		goto exit;
+	}
+	gap_frame_y = syna_pal_mem_alloc(rows * cols, sizeof(short));
+	if (!gap_frame_y) {
+		LOGE("Fail to allocate gap image y for gap test\n");
+		result = false;
+		gap_frame_y = NULL;
+		goto exit;
+	}
+
+	retval = syna_tcm_run_production_test(tcm->tcm_dev,
+			TEST_PID05_FULL_RAW_CAP,
+			&test_data);
+	if (retval < 0) {
+		LOGE("Fail to run test %d\n", TEST_PID05_FULL_RAW_CAP);
+		result = false;
+		goto exit;
+	}
+
+	data_ptr = (short *)&test_data.buf[0];
+	for (i = 0; i < rows; i++) {
+		for (j = 0; j < cols; j++) {
+			frame[i * cols + j] = *data_ptr;
+			data_ptr++;
+		}
+	}
+
+	retval = syna_testing_calculate_gap_frame(frame,
+			gap_frame_x, rows, cols, true);
+	if (retval < 0) {
+		LOGE("Fail to get the gap frame x\n");
+		result = false;
+		goto exit;
+	}
+
+	retval = syna_testing_calculate_gap_frame(frame,
+			gap_frame_y, rows, cols, false);
+	if (retval < 0) {
+		LOGE("Fail to get the gap frame y\n");
+		result = false;
+		goto exit;
+	}
+
+	/* compare to the limits */
+	result = true;
+	for (i = 0; i < rows - 1; i++) {
+		for (j = 0; j < cols; j++) {
+			idx = i * cols + j;
+			if (gap_frame_x[idx] > pt05_gap_x_limits[idx]) {
+				LOGE("Fail on gapX (%2d,%2d)=%5d, max:%4d\n",
+					i, j, gap_frame_x[idx], pt05_gap_x_limits[idx]);
+				result = false;
+			}
+			if (gap_frame_y[idx] > pt05_gap_y_limits[idx]) {
+				LOGE("Fail on gapY (%2d,%2d)=%5d, max:%4d\n",
+					i, j, gap_frame_y[idx], pt05_gap_y_limits[idx]);
+				result = false;
+			}
+		}
+	}
+
+exit:
+	LOGI("Result = %s\n", (result)?"pass":"fail");
+
+	if (gap_frame_x)
+		syna_pal_mem_free(gap_frame_x);
+	if (gap_frame_y)
+		syna_pal_mem_free(gap_frame_y);
+	if (frame)
+		syna_pal_mem_free(frame);
+
+	syna_tcm_buf_release(&test_data);
+
+	return ((result) ? 0 : -1);
+}
+
+/**
  * syna_testing_pt05_show()
  *
  * Attribute to show the result of PT05 test to the console.
@@ -769,6 +946,122 @@ static int syna_testing_pt10(struct syna_tcm *tcm, struct tcm_buffer *test_data)
 
 exit:
 	LOGI("Result = %s\n", (result)?"pass":"fail");
+
+	return ((result) ? 0 : -1);
+}
+
+/**
+ * syna_testing_pt10_gap()
+ *
+ * Sample code to implement GAP test based on PT10
+ *
+ * @param
+ *    [ in] tcm: the driver handle
+ *
+ * @return
+ *    on success, 0; otherwise, negative value on error.
+ */
+static int syna_testing_pt10_gap(struct syna_tcm *tcm)
+{
+	int retval;
+	bool result = false;
+	struct tcm_buffer test_data;
+	int rows = tcm->tcm_dev->rows;
+	int cols = tcm->tcm_dev->cols;
+	short *data_ptr = NULL;
+	short *frame = NULL;
+	short *gap_frame_x = NULL;
+	short *gap_frame_y = NULL;
+	int i, j, idx;
+
+	syna_tcm_buf_init(&test_data);
+
+	LOGI("Start testing\n");
+
+	frame = syna_pal_mem_alloc(rows * cols, sizeof(short));
+	if (!frame) {
+		LOGE("Fail to allocate image for gap test\n");
+		result = false;
+		frame = NULL;
+		goto exit;
+	}
+	gap_frame_x = syna_pal_mem_alloc(rows * cols, sizeof(short));
+	if (!gap_frame_x) {
+		LOGE("Fail to allocate gap image x for gap test\n");
+		result = false;
+		gap_frame_x = NULL;
+		goto exit;
+	}
+	gap_frame_y = syna_pal_mem_alloc(rows * cols, sizeof(short));
+	if (!gap_frame_y) {
+		LOGE("Fail to allocate gap image y for gap test\n");
+		result = false;
+		gap_frame_y = NULL;
+		goto exit;
+	}
+
+	retval = syna_tcm_run_production_test(tcm->tcm_dev,
+			TEST_PID16_SENSOR_SPEED,
+			&test_data);
+	if (retval < 0) {
+		LOGE("Fail to run test %d\n", TEST_PID16_SENSOR_SPEED);
+		result = false;
+		goto exit;
+	}
+
+	data_ptr = (short *)&test_data.buf[0];
+	for (i = 0; i < rows; i++) {
+		for (j = 0; j < cols; j++) {
+			frame[i * cols + j] = *data_ptr;
+			data_ptr++;
+		}
+	}
+
+	retval = syna_testing_calculate_gap_frame(frame,
+			gap_frame_x, rows, cols, true);
+	if (retval < 0) {
+		LOGE("Fail to get the gap frame x\n");
+		result = false;
+		goto exit;
+	}
+
+	retval = syna_testing_calculate_gap_frame(frame,
+			gap_frame_y, rows, cols, false);
+	if (retval < 0) {
+		LOGE("Fail to get the gap frame y\n");
+		result = false;
+		goto exit;
+	}
+
+	/* compare to the limits */
+	result = true;
+	for (i = 0; i < rows - 1; i++) {
+		for (j = 0; j < cols; j++) {
+			idx = i * cols + j;
+			if (gap_frame_x[idx] > pt10_gap_x_limits[idx]) {
+				LOGE("Fail on gapX (%2d,%2d)=%5d, max:%4d\n",
+					i, j, gap_frame_x[idx], pt10_gap_x_limits[idx]);
+				result = false;
+			}
+			if (gap_frame_y[idx] > pt10_gap_y_limits[idx]) {
+				LOGE("Fail on gapY (%2d,%2d)=%5d, max:%4d\n",
+					i, j, gap_frame_y[idx], pt10_gap_y_limits[idx]);
+				result = false;
+			}
+		}
+	}
+
+exit:
+	LOGI("Result = %s\n", (result)?"pass":"fail");
+
+	if (gap_frame_x)
+		syna_pal_mem_free(gap_frame_x);
+	if (gap_frame_y)
+		syna_pal_mem_free(gap_frame_y);
+	if (frame)
+		syna_pal_mem_free(frame);
+
+	syna_tcm_buf_release(&test_data);
 
 	return ((result) ? 0 : -1);
 }
@@ -1296,6 +1589,84 @@ exit:
 static struct kobj_attribute kobj_attr_pt_tag_moisture =
 	__ATTR(pt_moisture, 0444, syna_testing_pt_moisture_show, NULL);
 
+/**
+ * syna_testing_pt05_gap_show()
+ *
+ * Attribute to show the result of PT05 GAP test to the console.
+ *
+ * @param
+ *    [ in] kobj:  an instance of kobj
+ *    [ in] attr:  an instance of kobj attribute structure
+ *    [out] buf:  string buffer shown on console
+ *
+ * @return
+ *    on success, number of characters being output;
+ *    otherwise, negative value on error.
+ */
+static ssize_t syna_testing_pt05_gap_show(struct kobject *kobj,
+		struct kobj_attribute *attr, char *buf)
+{
+	int retval;
+	unsigned int count = 0;
+	struct syna_tcm *tcm = g_tcm_ptr;
+
+	if (!tcm->is_connected) {
+		count = snprintf(buf, PAGE_SIZE,
+				"Device is NOT connected\n");
+		goto exit;
+	}
+
+	retval = syna_testing_pt05_gap(tcm);
+
+	count = snprintf(buf, PAGE_SIZE,
+			"TEST PT$05 GAP : %s\n", (retval < 0) ? "fail" : "pass");
+
+exit:
+	return count;
+}
+
+static struct kobj_attribute kobj_attr_pt05_gap =
+	__ATTR(pt05_gap, 0444, syna_testing_pt05_gap_show, NULL);
+
+/**
+ * syna_testing_pt10_gap_show()
+ *
+ * Attribute to show the result of PT10 GAP test to the console.
+ *
+ * @param
+ *    [ in] kobj:  an instance of kobj
+ *    [ in] attr:  an instance of kobj attribute structure
+ *    [out] buf:  string buffer shown on console
+ *
+ * @return
+ *    on success, number of characters being output;
+ *    otherwise, negative value on error.
+ */
+static ssize_t syna_testing_pt10_gap_show(struct kobject *kobj,
+		struct kobj_attribute *attr, char *buf)
+{
+	int retval;
+	unsigned int count = 0;
+	struct syna_tcm *tcm = g_tcm_ptr;
+
+	if (!tcm->is_connected) {
+		count = snprintf(buf, PAGE_SIZE,
+				"Device is NOT connected\n");
+		goto exit;
+	}
+
+	retval = syna_testing_pt10_gap(tcm);
+
+	count = snprintf(buf, PAGE_SIZE,
+			"TEST PT$10 GAP : %s\n", (retval < 0) ? "fail" : "pass");
+
+exit:
+	return count;
+}
+
+static struct kobj_attribute kobj_attr_pt10_gap =
+	__ATTR(pt10_gap, 0444, syna_testing_pt10_gap_show, NULL);
+
 /*
  * declaration of sysfs attributes
  */
@@ -1309,6 +1680,8 @@ static struct attribute *attrs[] = {
 	&kobj_attr_pt12.attr,
 	&kobj_attr_pt16.attr,
 	&kobj_attr_pt_tag_moisture.attr,
+	&kobj_attr_pt05_gap.attr,
+	&kobj_attr_pt10_gap.attr,
 	NULL,
 };
 
