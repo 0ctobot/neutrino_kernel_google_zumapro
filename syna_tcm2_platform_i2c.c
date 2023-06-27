@@ -39,6 +39,7 @@
 #include <linux/i2c.h>
 
 #include "syna_tcm2.h"
+#include "syna_tcm2_cdev.h"
 #include "syna_tcm2_platform.h"
 
 #define I2C_MODULE_NAME "synaptics_tcm_i2c"
@@ -69,28 +70,6 @@ struct device *syna_request_managed_device(void)
 }
 #endif
 
-/**
- * syna_i2c_hw_reset()
- *
- * Toggle the hardware gpio pin to perform the chip reset
- *
- * @param
- *    [ in] hw_if: the handle of hw interface
- *
- * @return
- *     none.
- */
-static void syna_i2c_hw_reset(struct syna_hw_interface *hw_if)
-{
-	struct syna_hw_rst_data *rst = &hw_if->bdata_rst;
-
-	if (rst->reset_gpio >= 0) {
-		gpio_set_value(rst->reset_gpio, rst->reset_on_state);
-		syna_pal_sleep_ms(rst->reset_active_ms);
-		gpio_set_value(rst->reset_gpio, !rst->reset_on_state);
-		syna_pal_sleep_ms(rst->reset_delay_ms);
-	}
-}
 
 /**
  * syna_i2c_request_gpio()
@@ -118,6 +97,11 @@ static int syna_i2c_request_gpio(int gpio, bool config, int dir,
 		return -ENODEV;
 	}
 #endif
+
+	if (gpio < 0) {
+		LOGE("Invalid gpio pin\n");
+		return -EINVAL;
+	}
 
 	if (config) {
 		retval = scnprintf(label, 16, "tcm_gpio_%d\n", gpio);
@@ -152,9 +136,35 @@ static int syna_i2c_request_gpio(int gpio, bool config, int dir,
 
 	return 0;
 }
-
 /**
- * syna_i2c_config_gpio()
+ * syna_i2c_free_gpios()
+ *
+ * Release the GPIOs requested previously
+ *
+ * @param
+ *    [ in] hw_if: the handle of hw interface
+ *
+ * @return
+ *    on success, 0; otherwise, negative value on error.
+ */
+static int syna_i2c_free_gpios(struct syna_hw_interface *hw_if)
+{
+	struct syna_hw_attn_data *attn = &hw_if->bdata_attn;
+	struct syna_hw_rst_data *rst = &hw_if->bdata_rst;
+	struct syna_hw_bus_data *bus = &hw_if->bdata_io;
+
+	/* release gpios */
+	if (rst->reset_gpio > 0)
+		syna_i2c_request_gpio(rst->reset_gpio, false, 0, 0, NULL);
+	if (attn->irq_gpio > 0)
+		syna_i2c_request_gpio(attn->irq_gpio, false, 0, 0, NULL);
+	if (bus->switch_gpio > 0)
+		syna_i2c_request_gpio(bus->switch_gpio, false, 0, 0, NULL);
+
+	return 0;
+}
+/**
+ * syna_i2c_config_gpios()
  *
  * Initialize the GPIOs defined in device tree
  *
@@ -164,18 +174,17 @@ static int syna_i2c_request_gpio(int gpio, bool config, int dir,
  * @return
  *    on success, 0; otherwise, negative value on error.
  */
-static int syna_i2c_config_gpio(struct syna_hw_interface *hw_if)
+static int syna_i2c_config_gpios(struct syna_hw_interface *hw_if)
 {
 	int retval;
 	static char str_irq_gpio[32] = {0};
 	static char str_rst_gpio[32] = {0};
-	static char str_vdd_gpio[32] = {0};
-	static char str_avdd_gpio[32] = {0};
+	static char str_io_switch_gpio[32] = {0};
 	struct syna_hw_attn_data *attn = &hw_if->bdata_attn;
-	struct syna_hw_pwr_data *pwr = &hw_if->bdata_pwr;
 	struct syna_hw_rst_data *rst = &hw_if->bdata_rst;
+	struct syna_hw_bus_data *bus = &hw_if->bdata_io;
 
-	if (attn->irq_gpio >= 0) {
+	if (attn->irq_gpio > 0) {
 		retval = syna_i2c_request_gpio(attn->irq_gpio,
 				true, 0, 0, str_irq_gpio);
 		if (retval < 0) {
@@ -185,7 +194,7 @@ static int syna_i2c_config_gpio(struct syna_hw_interface *hw_if)
 		}
 	}
 
-	if (rst->reset_gpio >= 0) {
+	if (rst->reset_gpio > 0) {
 		retval = syna_i2c_request_gpio(rst->reset_gpio,
 				true, 1, !rst->reset_on_state,
 				str_rst_gpio);
@@ -196,33 +205,20 @@ static int syna_i2c_config_gpio(struct syna_hw_interface *hw_if)
 		}
 	}
 
-	if (pwr->vdd_gpio >= 0) {
-		retval = syna_i2c_request_gpio(pwr->vdd_gpio,
-				true, 1, !pwr->power_on_state,
-				str_vdd_gpio);
+	if (bus->switch_gpio > 0) {
+		retval = syna_i2c_request_gpio(bus->switch_gpio,
+				true, 1, bus->switch_state,
+				str_io_switch_gpio);
 		if (retval < 0) {
-			LOGE("Fail to configure vdd GPIO %d\n",
-				pwr->vdd_gpio);
-			goto err_set_gpio_vdd;
+			LOGE("Fail to configure switch GPIO %d\n",
+				bus->switch_gpio);
+			goto err_set_gpio_switch;
 		}
 	}
 
-	if (pwr->avdd_gpio >= 0) {
-		retval = syna_i2c_request_gpio(pwr->avdd_gpio,
-				true, 1, !pwr->power_on_state,
-				str_avdd_gpio);
-		if (retval < 0) {
-			LOGE("Fail to configure avdd GPIO %d\n",
-				pwr->avdd_gpio);
-			goto err_set_gpio_avdd;
-		}
-	}
 	return 0;
 
-err_set_gpio_avdd:
-	if (pwr->vdd_gpio >= 0)
-		syna_i2c_request_gpio(pwr->vdd_gpio, false, 0, 0, NULL);
-err_set_gpio_vdd:
+err_set_gpio_switch:
 	if (rst->reset_gpio >= 0)
 		syna_i2c_request_gpio(rst->reset_gpio, false, 0, 0, NULL);
 err_set_gpio_reset:
@@ -230,6 +226,382 @@ err_set_gpio_reset:
 		syna_i2c_request_gpio(attn->irq_gpio, false, 0, 0, NULL);
 err_set_gpio_irq:
 	return retval;
+}
+
+/**
+ * syna_i2c_parse_dt()
+ *
+ * Parse and obtain board specific data from the device tree source file.
+ * Keep the data in structure syna_tcm_hw_data for later using.
+ *
+ * @param
+ *    [ in] hw_if: the handle of hw interface
+ *    [ in] dev: device model
+ *
+ * @return
+ *    on success, 0; otherwise, negative value on error.
+ */
+#ifdef CONFIG_OF
+static int syna_i2c_parse_dt(struct syna_hw_interface *hw_if,
+		struct device *dev)
+{
+	int retval;
+	u32 value;
+	struct property *prop;
+	struct device_node *np = dev->of_node;
+	const char *name;
+	struct syna_hw_attn_data *attn = &hw_if->bdata_attn;
+	struct syna_hw_pwr_data *pwr = &hw_if->bdata_pwr;
+	struct syna_hw_rst_data *rst = &hw_if->bdata_rst;
+	struct syna_hw_bus_data *bus = &hw_if->bdata_io;
+
+	prop = of_find_property(np, "synaptics,irq-gpio", NULL);
+	if (prop && prop->length) {
+		attn->irq_gpio = of_get_named_gpio_flags(np,
+				"synaptics,irq-gpio", 0,
+				(enum of_gpio_flags *)&attn->irq_flags);
+	} else {
+		attn->irq_gpio = -1;
+	}
+
+	retval = of_property_read_u32(np, "synaptics,irq-on-state", &value);
+	if (retval < 0)
+		attn->irq_on_state = 0;
+	else
+		attn->irq_on_state = value;
+
+	prop = of_find_property(np, "synaptics,power-supply", NULL);
+	if (prop && prop->length) {
+		retval = of_property_read_u32(np, "synaptics,power-supply",
+				&value);
+		if (retval < 0) {
+			LOGE("Fail to read power-supply property\n");
+			return retval;
+		}
+
+		pwr->psu = value;
+
+	} else {
+		pwr->psu = (int)PSU_REGULATOR;
+	}
+
+	retval = of_property_read_string(np, "synaptics,avdd-name", &name);
+	if (retval < 0)
+		pwr->avdd_reg_name = NULL;
+	else
+		pwr->avdd_reg_name = name;
+
+	retval = of_property_read_string(np, "synaptics,vdd-name", &name);
+	if (retval < 0)
+		pwr->vdd_reg_name = NULL;
+	else
+		pwr->vdd_reg_name = name;
+
+	prop = of_find_property(np, "synaptics,vdd-gpio", NULL);
+	if (prop && prop->length) {
+		pwr->vdd_gpio = of_get_named_gpio_flags(np,
+				"synaptics,vdd-gpio", 0, NULL);
+	} else {
+		pwr->vdd_gpio = -1;
+	}
+
+	prop = of_find_property(np, "synaptics,avdd-gpio", NULL);
+	if (prop && prop->length) {
+		pwr->avdd_gpio = of_get_named_gpio_flags(np,
+				"synaptics,avdd-gpio", 0, NULL);
+	} else {
+		pwr->avdd_gpio = -1;
+	}
+
+	prop = of_find_property(np, "synaptics,power-on-state", NULL);
+	if (prop && prop->length) {
+		retval = of_property_read_u32(np, "synaptics,power-on-state",
+				&value);
+		if (retval < 0) {
+			LOGE("Fail to read power-on-state property\n");
+			return retval;
+		}
+
+		pwr->power_on_state = value;
+
+	} else {
+		pwr->power_on_state = 0;
+	}
+
+	prop = of_find_property(np, "synaptics,power-delay-ms", NULL);
+	if (prop && prop->length) {
+		retval = of_property_read_u32(np, "synaptics,power-delay-ms",
+				&value);
+		if (retval < 0) {
+			LOGE("Fail to read power-delay-ms property\n");
+			return retval;
+		}
+
+		pwr->power_delay_ms = value;
+
+	} else {
+		pwr->power_delay_ms = 0;
+	}
+
+	prop = of_find_property(np, "synaptics,reset-gpio", NULL);
+	if (prop && prop->length) {
+		rst->reset_gpio = of_get_named_gpio_flags(np,
+				"synaptics,reset-gpio", 0, NULL);
+	} else {
+		rst->reset_gpio = -1;
+	}
+
+	prop = of_find_property(np, "synaptics,reset-on-state", NULL);
+	if (prop && prop->length) {
+		retval = of_property_read_u32(np, "synaptics,reset-on-state",
+				&value);
+		if (retval < 0) {
+			LOGE("Fail to read reset-on-state property\n");
+			return retval;
+		}
+
+		rst->reset_on_state = value;
+
+	} else {
+		rst->reset_on_state = 0;
+	}
+
+	prop = of_find_property(np, "synaptics,reset-active-ms", NULL);
+	if (prop && prop->length) {
+		retval = of_property_read_u32(np, "synaptics,reset-active-ms",
+				&value);
+		if (retval < 0) {
+			LOGE("Fail to read reset-active-ms property\n");
+			return retval;
+		}
+
+		rst->reset_active_ms = value;
+
+	} else {
+		rst->reset_active_ms = 0;
+	}
+
+	prop = of_find_property(np, "synaptics,reset-delay-ms", NULL);
+	if (prop && prop->length) {
+		retval = of_property_read_u32(np, "synaptics,reset-delay-ms",
+				&value);
+		if (retval < 0) {
+			LOGE("Fail to read reset-delay-ms property\n");
+			return retval;
+		}
+
+		rst->reset_delay_ms = value;
+
+	} else {
+		rst->reset_delay_ms = 0;
+	}
+
+	prop = of_find_property(np, "synaptics,io-switch-gpio", NULL);
+	if (prop && prop->length) {
+		bus->switch_gpio = of_get_named_gpio_flags(np,
+				"synaptics,io-switch-gpio", 0, NULL);
+	} else {
+		bus->switch_gpio = -1;
+	}
+
+	prop = of_find_property(np, "synaptics,io-switch", NULL);
+	if (prop && prop->length) {
+		retval = of_property_read_u32(np, "synaptics,io-switch",
+				&value);
+		if (retval < 0) {
+			LOGE("Fail to read io-switch property\n");
+			return retval;
+		}
+
+		bus->switch_state = value;
+
+	} else {
+		bus->switch_state = 1;
+	}
+
+	return 0;
+}
+#endif
+
+/**
+ * syna_i2c_read()
+ *
+ * TouchCom over I2C uses the normal I2C addressing and transaction direction
+ * mechanisms to select the device and retrieve the data.
+ *
+ * @param
+ *    [ in] hw_if:   the handle of hw interface
+ *    [out] rd_data: buffer for storing data retrieved from device
+ *    [ in] rd_len: number of bytes retrieved from device
+ *
+ * @return
+ *    on success, 0; otherwise, negative value on error.
+ */
+static int syna_i2c_read(struct syna_hw_interface *hw_if,
+		unsigned char *rd_data, unsigned int rd_len)
+{
+	int retval;
+	unsigned int attempt;
+	struct i2c_msg msg;
+	struct i2c_client *i2c = hw_if->pdev;
+	struct syna_hw_bus_data *bus = &hw_if->bdata_io;
+
+	if (!i2c) {
+		LOGE("Invalid bus io device\n");
+		return -ENXIO;
+	}
+
+	syna_pal_mutex_lock(&bus->io_mutex);
+
+	if ((rd_len & 0xffff) == 0xffff) {
+		LOGE("Invalid read length 0x%X\n", (rd_len & 0xffff));
+		retval = -EINVAL;
+		goto exit;
+	}
+
+	msg.addr = i2c->addr;
+	msg.flags = I2C_M_RD;
+	msg.len = rd_len;
+	msg.buf = rd_data;
+
+	for (attempt = 0; attempt < XFER_ATTEMPTS; attempt++) {
+		retval = i2c_transfer(i2c->adapter, &msg, 1);
+		if (retval == 1) {
+			retval = rd_len;
+			goto exit;
+		}
+		LOGE("Transfer attempt %d failed\n", attempt + 1);
+
+		if (attempt + 1 == XFER_ATTEMPTS) {
+			retval = -EIO;
+			goto exit;
+		}
+
+		syna_pal_sleep_ms(20);
+	}
+
+exit:
+	syna_pal_mutex_unlock(&bus->io_mutex);
+
+	return retval;
+}
+
+/**
+ * syna_i2c_write()
+ *
+ * TouchCom over I2C uses the normal I2C addressing and transaction direction
+ * mechanisms to select the device and send the data to the device.
+ *
+ * @param
+ *    [ in] hw_if:   the handle of hw interface
+ *    [ in] wr_data: written data
+ *    [ in] wr_len: length of written data in bytes
+ *
+ * @return
+ *    on success, 0; otherwise, negative value on error.
+ */
+static int syna_i2c_write(struct syna_hw_interface *hw_if,
+		unsigned char *wr_data, unsigned int wr_len)
+{
+	int retval;
+	unsigned int attempt;
+	struct i2c_msg msg;
+	struct i2c_client *i2c = hw_if->pdev;
+	struct syna_hw_bus_data *bus = &hw_if->bdata_io;
+
+	if (!i2c) {
+		LOGE("Invalid bus io device\n");
+		return -ENXIO;
+	}
+
+	syna_pal_mutex_lock(&bus->io_mutex);
+
+	if ((wr_len & 0xffff) == 0xffff) {
+		LOGE("Invalid write length 0x%X\n", (wr_len & 0xffff));
+		retval = -EINVAL;
+		goto exit;
+	}
+
+	msg.addr = i2c->addr;
+	msg.flags = 0;
+	msg.len = wr_len;
+	msg.buf = wr_data;
+
+	for (attempt = 0; attempt < XFER_ATTEMPTS; attempt++) {
+		retval = i2c_transfer(i2c->adapter, &msg, 1);
+		if (retval == 1) {
+			retval = wr_len;
+			goto exit;
+		}
+		LOGE("Transfer attempt %d failed\n", attempt + 1);
+
+		if (attempt + 1 == XFER_ATTEMPTS) {
+			retval = -EIO;
+			goto exit;
+		}
+
+		syna_pal_sleep_ms(20);
+	}
+
+exit:
+	syna_pal_mutex_unlock(&bus->io_mutex);
+
+	return retval;
+}
+
+/**
+ * syna_i2c_hw_reset()
+ *
+ * Toggle the hardware gpio pin to perform the chip reset
+ *
+ * @param
+ *    [ in] hw_if: the handle of hw interface
+ *
+ * @return
+ *     none.
+ */
+static void syna_i2c_hw_reset(struct syna_hw_interface *hw_if)
+{
+	struct syna_hw_rst_data *rst = &hw_if->bdata_rst;
+
+	if (rst->reset_gpio == 0)
+		return;
+
+	LOGD("Prepare to toggle reset, hold:%d delay:%d\n",
+		rst->reset_active_ms, rst->reset_delay_ms);
+
+	gpio_set_value(rst->reset_gpio, (rst->reset_on_state & 0x01));
+	syna_pal_sleep_ms(rst->reset_active_ms);
+	gpio_set_value(rst->reset_gpio, ((!rst->reset_on_state) & 0x01));
+	syna_pal_sleep_ms(rst->reset_delay_ms);
+}
+
+
+/**
+ * syna_i2c_enable_pwr_gpio()
+ *
+ * Helper to enable power supply through GPIO
+ *
+ * @param
+ *    [ in] hw_if: the handle of hw interface
+ *    [ in] en:    '1' for enabling, and '0' for disabling
+ *
+ * @return
+ *    none
+ */
+static int syna_i2c_enable_pwr_gpio(struct syna_hw_interface *hw_if,
+		bool en)
+{
+	struct syna_hw_pwr_data *pwr = &hw_if->bdata_pwr;
+	int state = (en) ? pwr->power_on_state : !pwr->power_on_state;
+
+	if (pwr->avdd_gpio > 0)
+		gpio_set_value(pwr->avdd_gpio, state);
+
+	if (pwr->vdd_gpio > 0)
+		gpio_set_value(pwr->vdd_gpio, state);
+
+	return 0;
 }
 
 /**
@@ -271,7 +643,6 @@ static int syna_i2c_enable_regulator(struct syna_hw_interface *hw_if,
 			LOGE("Fail to enable avdd regulator\n");
 			goto disable_avdd_reg;
 		}
-		syna_pal_sleep_ms(pwr->power_on_delay_ms);
 	}
 
 	return 0;
@@ -286,6 +657,45 @@ disable_avdd_reg:
 
 exit:
 	return retval;
+}
+
+/**
+ * syna_i2c_power_on()
+ *
+ * Power on touch controller through regulators or gpios for PWM
+ *
+ * @param
+ *    [ in] hw_if: the handle of hw interface
+ *    [ in] en:    '1' for powering on, and '0' for powering off
+ *
+ * @return
+ *    on success, 0; otherwise, negative value on error.
+ */
+static int syna_i2c_power_on(struct syna_hw_interface *hw_if,
+		bool en)
+{
+	int retval;
+	struct syna_hw_pwr_data *pwr = &hw_if->bdata_pwr;
+
+	LOGD("Prepare to power %s device through %s ...\n",
+		(en) ? "on" : "off",
+		(pwr->psu == PSU_REGULATOR) ? "regulator" : "gpio control");
+
+	if (pwr->psu == PSU_REGULATOR)
+		retval = syna_i2c_enable_regulator(hw_if, en);
+	else
+		retval = syna_i2c_enable_pwr_gpio(hw_if, en);
+
+	if (retval < 0) {
+		LOGE("Fail to power %s device\n", (en) ? "on" : "off");
+		return retval;
+	}
+
+	syna_pal_sleep_ms(pwr->power_delay_ms);
+
+	LOGI("Device power %s\n", (en) ? "on" : "off");
+
+	return 0;
 }
 
 /**
@@ -363,6 +773,89 @@ exit:
 }
 
 /**
+ * syna_i2c_config_psu()
+ *
+ * Initialize the power supply unit
+ *
+ * @param
+ *    [ in] hw_if: the handle of hw interface
+ *
+ * @return
+ *    on success, 0; otherwise, negative value on error.
+ */
+static int syna_i2c_config_psu(struct syna_hw_interface *hw_if)
+{
+	int retval;
+	static char str_vdd_gpio[32] = {0};
+	static char str_avdd_gpio[32] = {0};
+	struct syna_hw_pwr_data *pwr = &hw_if->bdata_pwr;
+
+	if (pwr->psu != PSU_REGULATOR) {
+		/* set up power gpio */
+		if (pwr->vdd_gpio > 0) {
+			retval = syna_i2c_request_gpio(pwr->vdd_gpio,
+					true, 1, !pwr->power_on_state,
+					str_vdd_gpio);
+			if (retval < 0) {
+				LOGE("Fail to configure vdd GPIO %d\n",
+					pwr->vdd_gpio);
+				return retval;
+			}
+		}
+
+		if (pwr->avdd_gpio > 0) {
+			retval = syna_i2c_request_gpio(pwr->avdd_gpio,
+					true, 1, !pwr->power_on_state,
+					str_avdd_gpio);
+			if (retval < 0) {
+				LOGE("Fail to configure avdd GPIO %d\n",
+					pwr->avdd_gpio);
+
+				syna_i2c_request_gpio(pwr->vdd_gpio,
+					false, 0, 0, NULL);
+				return retval;
+			}
+		}
+	} else {
+		/* set up regulator */
+		retval = syna_i2c_get_regulator(hw_if, true);
+		if (retval < 0) {
+			LOGE("Fail to configure regulators\n");
+			return retval;
+		}
+	}
+
+	return 0;
+}
+
+/**
+ * syna_i2c_release_psu()
+ *
+ * Release the power supply unit
+ *
+ * @param
+ *    [ in] hw_if: the handle of hw interface
+ *
+ * @return
+ *    on success, 0; otherwise, negative value on error.
+ */
+static int syna_i2c_release_psu(struct syna_hw_interface *hw_if)
+{
+	struct syna_hw_pwr_data *pwr = &hw_if->bdata_pwr;
+
+	if (pwr->psu != PSU_GPIO) {
+		if (pwr->avdd_gpio > 0)
+			syna_i2c_request_gpio(pwr->avdd_gpio, false, 0, 0, NULL);
+		if (pwr->vdd_gpio > 0)
+			syna_i2c_request_gpio(pwr->vdd_gpio, false, 0, 0, NULL);
+	} else {
+		syna_i2c_get_regulator(hw_if, false);
+	}
+
+	return 0;
+}
+
+/**
  * syna_i2c_enable_irq()
  *
  * Enable or disable the handling of interrupt
@@ -388,7 +881,7 @@ static int syna_i2c_enable_irq(struct syna_hw_interface *hw_if,
 	/* enable the handling of interrupt */
 	if (en) {
 		if (attn->irq_enabled) {
-			LOGI("Interrupt already enabled\n");
+			LOGD("Interrupt already enabled\n");
 			retval = 0;
 			goto exit;
 		}
@@ -396,12 +889,12 @@ static int syna_i2c_enable_irq(struct syna_hw_interface *hw_if,
 		enable_irq(attn->irq_id);
 		attn->irq_enabled = true;
 
-		LOGD("irq enabled\n");
+		LOGD("Interrupt enabled\n");
 	}
 	/* disable the handling of interrupt */
 	else {
 		if (!attn->irq_enabled) {
-			LOGI("Interrupt already disabled\n");
+			LOGD("Interrupt already disabled\n");
 			retval = 0;
 			goto exit;
 		}
@@ -409,7 +902,7 @@ static int syna_i2c_enable_irq(struct syna_hw_interface *hw_if,
 		disable_irq_nosync(attn->irq_id);
 		attn->irq_enabled = false;
 
-		LOGD("irq disabled\n");
+		LOGD("Interrupt disabled\n");
 	}
 
 exit:
@@ -417,278 +910,6 @@ exit:
 
 	return retval;
 }
-
-
-/**
- * syna_i2c_parse_dt()
- *
- * Parse and obtain board specific data from the device tree source file.
- * Keep the data in structure syna_tcm_hw_data for later using.
- *
- * @param
- *    [ in] hw_if: the handle of hw interface
- *    [ in] dev: device model
- *
- * @return
- *    on success, 0; otherwise, negative value on error.
- */
-#ifdef CONFIG_OF
-static int syna_i2c_parse_dt(struct syna_hw_interface *hw_if,
-		struct device *dev)
-{
-	int retval;
-	u32 value;
-	struct property *prop;
-	struct device_node *np = dev->of_node;
-	const char *name;
-	struct syna_hw_attn_data *attn = &hw_if->bdata_attn;
-	struct syna_hw_pwr_data *pwr = &hw_if->bdata_pwr;
-	struct syna_hw_rst_data *rst = &hw_if->bdata_rst;
-
-	prop = of_find_property(np, "synaptics,irq-gpio", NULL);
-	if (prop && prop->length) {
-		attn->irq_gpio = of_get_named_gpio_flags(np,
-				"synaptics,irq-gpio", 0,
-				(enum of_gpio_flags *)&attn->irq_flags);
-	} else {
-		attn->irq_gpio = -1;
-	}
-
-	retval = of_property_read_u32(np, "synaptics,irq-on-state", &value);
-	if (retval < 0)
-		attn->irq_on_state = 0;
-	else
-		attn->irq_on_state = value;
-
-	retval = of_property_read_string(np, "synaptics,avdd-name", &name);
-	if (retval < 0)
-		pwr->avdd_reg_name = NULL;
-	else
-		pwr->avdd_reg_name = name;
-
-	retval = of_property_read_string(np, "synaptics,vdd-name", &name);
-	if (retval < 0)
-		pwr->vdd_reg_name = NULL;
-	else
-		pwr->vdd_reg_name = name;
-
-	prop = of_find_property(np, "synaptics,vdd-gpio", NULL);
-	if (prop && prop->length) {
-		pwr->vdd_gpio = of_get_named_gpio_flags(np,
-				"synaptics,vdd-gpio", 0, NULL);
-	} else {
-		pwr->vdd_gpio = -1;
-	}
-
-	prop = of_find_property(np, "synaptics,avdd-gpio", NULL);
-	if (prop && prop->length) {
-		pwr->avdd_gpio = of_get_named_gpio_flags(np,
-				"synaptics,avdd-gpio", 0, NULL);
-	} else {
-		pwr->avdd_gpio = -1;
-	}
-
-	prop = of_find_property(np, "synaptics,power-on-state", NULL);
-	if (prop && prop->length) {
-		retval = of_property_read_u32(np, "synaptics,power-on-state",
-				&value);
-		if (retval < 0) {
-			LOGE("Fail to read power-on-state property\n");
-			return retval;
-		}
-
-		pwr->power_on_state = value;
-
-	} else {
-		pwr->power_on_state = 0;
-	}
-
-	prop = of_find_property(np, "synaptics,power-delay-ms", NULL);
-	if (prop && prop->length) {
-		retval = of_property_read_u32(np, "synaptics,power-delay-ms",
-				&value);
-		if (retval < 0) {
-			LOGE("Fail to read power-delay-ms property\n");
-			return retval;
-		}
-
-		pwr->power_on_delay_ms = value;
-
-	} else {
-		pwr->power_on_delay_ms = 0;
-	}
-
-	prop = of_find_property(np, "synaptics,reset-gpio", NULL);
-	if (prop && prop->length) {
-		rst->reset_gpio = of_get_named_gpio_flags(np,
-				"synaptics,reset-gpio", 0, NULL);
-	} else {
-		rst->reset_gpio = -1;
-	}
-
-	prop = of_find_property(np, "synaptics,reset-on-state", NULL);
-	if (prop && prop->length) {
-		retval = of_property_read_u32(np, "synaptics,reset-on-state",
-				&value);
-		if (retval < 0) {
-			LOGE("Fail to read reset-on-state property\n");
-			return retval;
-		}
-
-		rst->reset_on_state = value;
-
-	} else {
-		rst->reset_on_state = 0;
-	}
-
-	prop = of_find_property(np, "synaptics,reset-active-ms", NULL);
-	if (prop && prop->length) {
-		retval = of_property_read_u32(np, "synaptics,reset-active-ms",
-				&value);
-		if (retval < 0) {
-			LOGE("Fail to read reset-active-ms property\n");
-			return retval;
-		}
-
-		rst->reset_active_ms = value;
-
-	} else {
-		rst->reset_active_ms = 0;
-	}
-
-	prop = of_find_property(np, "synaptics,reset-delay-ms", NULL);
-	if (prop && prop->length) {
-		retval = of_property_read_u32(np, "synaptics,reset-delay-ms",
-				&value);
-		if (retval < 0) {
-			LOGE("Fail to read reset-delay-ms property\n");
-			return retval;
-		}
-
-		rst->reset_delay_ms = value;
-
-	} else {
-		rst->reset_delay_ms = 0;
-	}
-
-	return 0;
-}
-#endif
-
-
-/**
- * syna_i2c_read()
- *
- * TouchCom over I2C uses the normal I2C addressing and transaction direction
- * mechanisms to select the device and retrieve the data.
- *
- * @param
- *    [ in] hw_if:   the handle of hw interface
- *    [out] rd_data: buffer for storing data retrieved from device
- *    [ in] rd_len: number of bytes retrieved from device
- *
- * @return
- *    on success, 0; otherwise, negative value on error.
- */
-static int syna_i2c_read(struct syna_hw_interface *hw_if,
-		unsigned char *rd_data, unsigned int rd_len)
-{
-	int retval;
-	unsigned int attempt;
-	struct i2c_msg msg;
-	struct i2c_client *i2c = hw_if->pdev;
-	struct syna_hw_bus_data *bus = &hw_if->bdata_io;
-
-	if (!i2c) {
-		LOGE("Invalid bus io device\n");
-		return -EINVAL;
-	}
-
-	syna_pal_mutex_lock(&bus->io_mutex);
-
-	msg.addr = i2c->addr;
-	msg.flags = I2C_M_RD;
-	msg.len = rd_len;
-	msg.buf = rd_data;
-
-	for (attempt = 0; attempt < XFER_ATTEMPTS; attempt++) {
-		if (i2c_transfer(i2c->adapter, &msg, 1) == 1) {
-			retval = rd_len;
-			goto exit;
-		}
-		LOGE("Transfer attempt %d failed\n", attempt + 1);
-
-		if (attempt + 1 == XFER_ATTEMPTS) {
-			retval = -EIO;
-			goto exit;
-		}
-
-		syna_pal_sleep_ms(20);
-	}
-
-exit:
-	syna_pal_mutex_unlock(&bus->io_mutex);
-
-	return retval;
-}
-
-/**
- * syna_i2c_write()
- *
- * TouchCom over I2C uses the normal I2C addressing and transaction direction
- * mechanisms to select the device and send the data to the device.
- *
- * @param
- *    [ in] hw_if:   the handle of hw interface
- *    [ in] wr_data: written data
- *    [ in] wr_len: length of written data in bytes
- *
- * @return
- *    on success, 0; otherwise, negative value on error.
- */
-static int syna_i2c_write(struct syna_hw_interface *hw_if,
-		unsigned char *wr_data, unsigned int wr_len)
-{
-	int retval;
-	unsigned int attempt;
-	struct i2c_msg msg;
-	struct i2c_client *i2c = hw_if->pdev;
-	struct syna_hw_bus_data *bus = &hw_if->bdata_io;
-
-	if (!i2c) {
-		LOGE("Invalid bus io device\n");
-		return -EINVAL;
-	}
-
-	syna_pal_mutex_lock(&bus->io_mutex);
-
-	msg.addr = i2c->addr;
-	msg.flags = 0;
-	msg.len = wr_len;
-	msg.buf = wr_data;
-
-	for (attempt = 0; attempt < XFER_ATTEMPTS; attempt++) {
-		if (i2c_transfer(i2c->adapter, &msg, 1) == 1) {
-			retval = wr_len;
-			goto exit;
-		}
-		LOGE("Transfer attempt %d failed\n", attempt + 1);
-
-		if (attempt + 1 == XFER_ATTEMPTS) {
-			retval = -EIO;
-			goto exit;
-		}
-
-		syna_pal_sleep_ms(20);
-	}
-
-exit:
-	syna_pal_mutex_unlock(&bus->io_mutex);
-
-	return retval;
-}
-
-
 /**
  * syna_hw_interface
  *
@@ -712,9 +933,9 @@ static struct syna_hw_interface syna_i2c_hw_if = {
 	},
 	.bdata_pwr = {
 		.power_on_state = 1,
-		.power_on_delay_ms = 200,
+		.power_delay_ms = 200,
 	},
-	.ops_power_on = syna_i2c_enable_regulator,
+	.ops_power_on = syna_i2c_power_on,
 	.ops_hw_reset = syna_i2c_hw_reset,
 	.ops_read_data = syna_i2c_read,
 	.ops_write_data = syna_i2c_write,
@@ -744,7 +965,7 @@ static int syna_i2c_probe(struct i2c_client *i2c,
 	syna_i2c_device = platform_device_alloc(PLATFORM_DRIVER_NAME, 0);
 	if (!syna_i2c_device) {
 		LOGE("Fail to allocate platform device\n");
-		return _ENODEV;
+		return -ENOMEM;
 	}
 
 #ifdef CONFIG_OF
@@ -754,24 +975,29 @@ static int syna_i2c_probe(struct i2c_client *i2c,
 	syna_pal_mutex_alloc(&attn->irq_en_mutex);
 	syna_pal_mutex_alloc(&bus->io_mutex);
 
-
 	/* keep the i/o device */
 	syna_i2c_hw_if.pdev = i2c;
 
 	syna_i2c_device->dev.parent = &i2c->dev;
 	syna_i2c_device->dev.platform_data = &syna_i2c_hw_if;
 
-	/* enable the regulators */
-	retval = syna_i2c_get_regulator(&syna_i2c_hw_if, true);
-	if (retval < 0)
+	/* initialize power unit */
+	retval = syna_i2c_config_psu(&syna_i2c_hw_if);
+	if (retval < 0) {
+		LOGE("Fail to config power unit\n");
 		return retval;
+	}
 
 	/* initialize the gpio pins */
-	retval = syna_i2c_config_gpio(&syna_i2c_hw_if);
+	retval = syna_i2c_config_gpios(&syna_i2c_hw_if);
 	if (retval < 0) {
 		LOGE("Fail to config gpio\n");
 		return retval;
 	}
+
+	/* do i/o switch if defined */
+	if (bus->switch_gpio > 0)
+		gpio_set_value(bus->switch_gpio, bus->switch_state);
 
 	/* register the i2c platform device */
 	retval = platform_device_add(syna_i2c_device);
@@ -797,23 +1023,15 @@ static int syna_i2c_probe(struct i2c_client *i2c,
 static int syna_i2c_remove(struct i2c_client *i2c)
 {
 	struct syna_hw_attn_data *attn = &syna_i2c_hw_if.bdata_attn;
-	struct syna_hw_pwr_data *pwr = &syna_i2c_hw_if.bdata_pwr;
-	struct syna_hw_rst_data *rst = &syna_i2c_hw_if.bdata_rst;
 	struct syna_hw_bus_data *bus = &syna_i2c_hw_if.bdata_io;
 
-	/* disable gpios */
-	if (pwr->avdd_gpio >= 0)
-		syna_i2c_request_gpio(pwr->avdd_gpio, false, 0, 0, NULL);
-	if (pwr->vdd_gpio >= 0)
-		syna_i2c_request_gpio(pwr->vdd_gpio, false, 0, 0, NULL);
-	if (rst->reset_gpio >= 0)
-		syna_i2c_request_gpio(rst->reset_gpio, false, 0, 0, NULL);
-	if (attn->irq_gpio >= 0)
-		syna_i2c_request_gpio(attn->irq_gpio, false, 0, 0, NULL);
+	/* release gpios */
+	syna_i2c_free_gpios(&syna_i2c_hw_if);
 
-	/* disable the regulators */
-	syna_i2c_get_regulator(&syna_i2c_hw_if, false);
+	/* release power unit */
+	syna_i2c_release_psu(&syna_i2c_hw_if);
 
+	/* release mutex */
 	syna_pal_mutex_free(&attn->irq_en_mutex);
 	syna_pal_mutex_free(&bus->io_mutex);
 

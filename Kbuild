@@ -21,6 +21,7 @@ syna_touch-objs += \
 			$(TCM_CORE)synaptics_touchcom_func_touch.o \
 			$(TCM_CORE)synaptics_touchcom_func_reflash.o \
 			$(TCM_CORE)synaptics_touchcom_func_romboot.o \
+			syna_tcm2_cdev.o \
 			syna_tcm2_platform_spi.o \
 			syna_tcm2_sysfs.o \
 			syna_tcm2_testing.o

@@ -51,6 +51,16 @@
 #define RD_CHUNK_SIZE (512)
 #define WR_CHUNK_SIZE (512)
 
+/**
+ * @section: Type of power supply
+ *
+ * The below enumerates the type of power supply
+ */
+enum power_supply {
+	PSU_REGULATOR = 0,
+	PSU_GPIO,
+	PSU_PWR_MODULES,
+};
 
 /**
  * @section: Defined Hardware-Specific Data
@@ -88,6 +98,9 @@ struct syna_hw_bus_data {
 	unsigned int spi_block_delay_us;
 	/* mutex to protect the i/o, if needed */
 	syna_pal_mutex_t io_mutex;
+	/* parameters for io switch, if needed */
+	int switch_gpio;
+	int switch_state;
 };
 
 /* The hardware data especially for ATTN signal */
@@ -113,11 +126,13 @@ struct syna_hw_rst_data {
 
 /* The hardware data especially for power control */
 struct syna_hw_pwr_data {
+	int psu;
 	/* parameters */
 	int vdd_gpio;
 	int avdd_gpio;
 	int power_on_state;
-	unsigned int power_on_delay_ms;
+	unsigned int power_delay_ms;
+
 	/* voltage */
 	unsigned int vdd;
 	unsigned int vled;
@@ -154,24 +169,54 @@ struct syna_hw_interface {
 	int udfps_y;
 	bool dynamic_report_rate;
 
+	/* Operation to read data from bus
+	 *
+	 * This is an essential operation; otherwise, the communication
+	 * will not be created.
+	 *
+	 * @param
+	 *    [ in] hw_if:   the handle of hw interface
+	 *    [out] rd_data: buffer for storing data retrieved
+	 *    [ in] rd_len:  length of reading data in bytes
+	 *
+	 * @return
+	 *    0 or positive value on success; otherwise, on error.
+	 */
+	int (*ops_read_data)(struct syna_hw_interface *hw_if,
+			unsigned char *rd_data, unsigned int rd_len);
+
+	/* Operation to write data to bus
+	 *
+	 * This is an essential operation; otherwise, the communication
+	 * will not be created.
+	 *
+	 * @param
+	 *    [ in] hw_if:   the handle of hw interface
+	 *    [ in] wr_data: written data
+	 *    [ in] wr_len:  length of written data in bytes
+	 *
+	 * @return
+	 *    0 or positive value on success; otherwise, on error.
+	 */
+	int (*ops_write_data)(struct syna_hw_interface *hw_if,
+			unsigned char *wr_data, unsigned int wr_len);
+
 	/* Operation to do power on/off, if supported
 	 *
 	 * This is an optional operation.
 	 *
-	 * Implementation should request that the power device be
-	 * enabled with the output at the proper voltage.
+	 * Implementation should set up the proper power rails to the device.
 	 *
 	 * Assign the pointer NULL if power supply module is not controllable.
 	 *
 	 * @param
 	 *    [ in] hw_if: the handle of hw interface
-	 *    [ in] en:    '1' for powering on, and '0' for powering off
+	 *    [ in] on:    '1' to power-on, and '0' to power-off
 	 *
 	 * @return
 	 *    0 on success; otherwise, on error.
 	 */
-	int (*ops_power_on)(struct syna_hw_interface *hw_if,
-			bool en);
+	int (*ops_power_on)(struct syna_hw_interface *hw_if, bool on);
 
 	/* Operation to perform the hardware reset, if supported
 	 *
@@ -189,55 +234,6 @@ struct syna_hw_interface {
 	 */
 	void (*ops_hw_reset)(struct syna_hw_interface *hw_if);
 
-	/* Operation to set up the bus connection
-	 *
-	 * This is an optional operation to add in the extra configuration
-	 * before doing connection.
-	 *
-	 * Assign the pointer NULL if this operation is not required.
-	 *
-	 * @param
-	 *    [ in] hw_if:   the handle of hw interface
-	 *    [ in] config:  parameters to change
-	 *
-	 * @return
-	 *    0 or positive value on success; otherwise, on error.
-	 */
-	int (*ops_bus_setup)(struct syna_hw_interface *hw_if,
-			struct syna_hw_bus_data *config);
-
-	/* Operation to read the bare data from bus
-	 *
-	 * This is an essential operation; otherwise, the communication
-	 * will not be created.
-	 *
-	 * @param
-	 *    [ in] hw_if:   the handle of hw interface
-	 *    [out] rd_data: buffer for storing data retrieved
-	 *    [ in] rd_len:  length of reading data in bytes
-	 *
-	 * @return
-	 *    0 or positive value on success; otherwise, on error.
-	 */
-	int (*ops_read_data)(struct syna_hw_interface *hw_if,
-			unsigned char *rd_data, unsigned int rd_len);
-
-	/* Operation to write the bare data to bus
-	 *
-	 * This is an essential operation; otherwise, the communication
-	 * will not be created.
-	 *
-	 * @param
-	 *    [ in] hw_if:   the handle of hw interface
-	 *    [ in] wr_data: written data
-	 *    [ in] wr_len:  length of written data in bytes
-	 *
-	 * @return
-	 *    0 or positive value on success; otherwise, on error.
-	 */
-	int (*ops_write_data)(struct syna_hw_interface *hw_if,
-			unsigned char *wr_data, unsigned int wr_len);
-
 	/* Operation to enable/disable the irq, if supported
 	 *
 	 * This is an optional operation. Providing this operation could
@@ -254,8 +250,7 @@ struct syna_hw_interface {
 	 * @return
 	 *    0 on success; otherwise, on error.
 	 */
-	int (*ops_enable_irq)(struct syna_hw_interface *hw_if,
-			bool en);
+	int (*ops_enable_irq)(struct syna_hw_interface *hw_if, bool en);
 
 	/* Operation to wait for the signal of interrupt, if supported
 	 *

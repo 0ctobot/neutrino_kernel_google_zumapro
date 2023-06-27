@@ -85,18 +85,19 @@ static int syna_tcm_romboot_send_command(struct tcm_dev *tcm_dev,
 
 	if (!tcm_dev) {
 		LOGE("Invalid tcm device handle\n");
-		return _EINVAL;
+		return -ERR_INVAL;
 	}
 
 	if (out_size < sizeof(struct flash_param)) {
 		LOGE("Invalid size of out data, %d, min. size:%d\n",
 			out_size, (int)sizeof(struct flash_param));
-		return _EINVAL;
+		return -ERR_INVAL;
 	}
 
 	retval = tcm_dev->write_message(tcm_dev,
 			CMD_SPI_MASTER_WRITE_THEN_READ_EXTENDED,
 			out,
+			out_size,
 			out_size,
 			&resp_code,
 			delay_ms_resp);
@@ -158,7 +159,7 @@ static int syna_tcm_romboot_multichip_send_command(struct tcm_dev *tcm_dev,
 
 	if (!tcm_dev) {
 		LOGE("Invalid tcm device handle\n");
-		return _EINVAL;
+		return -ERR_INVAL;
 	}
 
 	syna_pal_mem_set((void *)&flash_param, 0x00, sizeof(flash_param));
@@ -178,7 +179,7 @@ static int syna_tcm_romboot_multichip_send_command(struct tcm_dev *tcm_dev,
 	payld_buf = syna_pal_mem_alloc(payld_size, sizeof(unsigned char));
 	if (!payld_buf) {
 		LOGE("Fail to allocate buffer to store flash command\n");
-		return _ENOMEM;
+		return -ERR_NOMEM;
 	}
 
 	if (flash_param.command != 0x00) {
@@ -252,13 +253,13 @@ static int syna_tcm_romboot_multichip_get_resp(struct tcm_dev *tcm_dev,
 
 	if (!tcm_dev) {
 		LOGE("Invalid tcm device handle\n");
-		return _EINVAL;
+		return -ERR_INVAL;
 	}
 
 	if (resp && (resp_size < length)) {
 		LOGE("Invalid buffer size, len:%d, size:%d\n",
 			length, resp_size);
-		return _EINVAL;
+		return -ERR_INVAL;
 	}
 
 	xfer_len = length + 2;
@@ -266,7 +267,7 @@ static int syna_tcm_romboot_multichip_get_resp(struct tcm_dev *tcm_dev,
 	tmp_buf = syna_pal_mem_alloc(xfer_len, sizeof(unsigned char));
 	if (!tmp_buf) {
 		LOGE("Fail to allocate tmp_buf\n");
-		return _ENOMEM;
+		return -ERR_NOMEM;
 	}
 
 	retval = syna_tcm_romboot_multichip_send_command(tcm_dev,
@@ -316,7 +317,7 @@ static int syna_tcm_romboot_multichip_get_status(struct tcm_dev *tcm_dev,
 
 	if (!tcm_dev) {
 		LOGE("Invalid tcm device handle\n");
-		return _EINVAL;
+		return -ERR_INVAL;
 	}
 
 	syna_pal_sleep_ms(delay_ms);
@@ -343,7 +344,7 @@ static int syna_tcm_romboot_multichip_get_status(struct tcm_dev *tcm_dev,
 		} else {
 			LOGE("Invalid resp, %02x %02x %02x\n",
 				resp[0], resp[1], resp[2]);
-			retval = _EIO;
+			retval = -ERR_TCMMSG;
 			goto exit;
 		}
 
@@ -351,7 +352,7 @@ static int syna_tcm_romboot_multichip_get_status(struct tcm_dev *tcm_dev,
 
 	if (timeout >= 500) {
 		LOGE("Timeout to get the status\n");
-		retval = _EIO;
+		retval = -ERR_TIMEDOUT;
 	}
 exit:
 	return retval;
@@ -391,7 +392,7 @@ static int syna_tcm_romboot_multichip_write_flash(struct tcm_dev *tcm_dev,
 
 	if (!tcm_dev) {
 		LOGE("Invalid tcm device handle\n");
-		return _EINVAL;
+		return -ERR_INVAL;
 	}
 
 	w_length = tcm_dev->max_wr_size - 16;
@@ -470,7 +471,7 @@ static int syna_tcm_romboot_multichip_write_flash(struct tcm_dev *tcm_dev,
 		if (resp_code != STATUS_OK) {
 			LOGE("Invalid response of command %x\n",
 				CMD_WRITE_FLASH);
-			retval = _EIO;
+			retval = -ERR_TCMMSG;
 			goto exit;
 		}
 
@@ -499,7 +500,7 @@ exit:
  *
  * @param
  *    [ in] tcm_dev:        the device handle
- *    [ in] romboot_data:   data blob for remboot
+ *    [ in] romboot_data:   data blob for ROMBOOT
  *    [ in] address:        the address in flash memory to read
  *    [ in] size:           size of data to write
  *    [ in] erase_delay_ms: the delay time to get the resp from mass erase
@@ -566,7 +567,7 @@ static int syna_tcm_romboot_multichip_erase_flash(struct tcm_dev *tcm_dev,
 
 	if (resp_code != STATUS_OK) {
 		LOGE("Invalid response of command %x\n", CMD_WRITE_FLASH);
-		retval = _EIO;
+		retval = -ERR_TCMMSG;
 		return retval;
 	}
 
@@ -596,7 +597,7 @@ static int syna_tcm_romboot_multichip_get_boot_info(struct tcm_dev *tcm_dev,
 
 	if (!tcm_dev) {
 		LOGE("Invalid tcm device handle\n");
-		return _EINVAL;
+		return -ERR_INVAL;
 	}
 
 	retval = syna_tcm_romboot_multichip_send_command(tcm_dev,
@@ -618,7 +619,7 @@ static int syna_tcm_romboot_multichip_get_boot_info(struct tcm_dev *tcm_dev,
 
 	if (resp_code != STATUS_OK) {
 		LOGE("Invalid response of command %x\n", CMD_GET_BOOT_INFO);
-		retval = _EIO;
+		retval = -ERR_TCMMSG;
 		return retval;
 	}
 
@@ -661,12 +662,12 @@ static int syna_tcm_romboot_preparation(struct tcm_dev *tcm_dev,
 
 	if (!tcm_dev) {
 		LOGE("Invalid tcm device handle\n");
-		return _EINVAL;
+		return -ERR_INVAL;
 	}
 
 	if (!romboot_data) {
 		LOGE("Invalid romboot data blob\n");
-		return _EINVAL;
+		return -ERR_INVAL;
 	}
 
 	LOGI("Set up preparation, multi-chip: %s\n",
@@ -710,7 +711,7 @@ static int syna_tcm_romboot_preparation(struct tcm_dev *tcm_dev,
 
 	if (!IS_ROM_BOOTLOADER_MODE(tcm_dev->dev_mode)) {
 		LOGE("Device not in romboot mode\n");
-		return _EINVAL;
+		return -ERR_INVAL;
 	}
 
 	if (!is_multichip)
@@ -748,19 +749,19 @@ static int syna_tcm_romboot_preparation(struct tcm_dev *tcm_dev,
 	if (romboot_data->write_block_size > (wr_chunk - 9)) {
 		LOGE("Write block size, %d, greater than chunk space, %d\n",
 			romboot_data->write_block_size, (wr_chunk - 9));
-		return _EINVAL;
+		return -ERR_INVAL;
 	}
 
 	if (romboot_data->write_block_size == 0) {
 		LOGE("Invalid write block size %d\n",
 			romboot_data->write_block_size);
-		return _EINVAL;
+		return -ERR_INVAL;
 	}
 
 	if (romboot_data->page_size == 0) {
 		LOGE("Invalid erase page size %d\n",
 			romboot_data->page_size);
-		return _EINVAL;
+		return -ERR_INVAL;
 	}
 
 	return 0;
@@ -795,7 +796,7 @@ static int syna_tcm_romboot_jedec_send_command(struct tcm_dev *tcm_dev,
 
 	if (!tcm_dev) {
 		LOGE("Invalid tcm device handle\n");
-		return _EINVAL;
+		return -ERR_INVAL;
 	}
 
 	syna_pal_mem_set((void *)&flash_param, 0x00, sizeof(flash_param));
@@ -820,7 +821,7 @@ static int syna_tcm_romboot_jedec_send_command(struct tcm_dev *tcm_dev,
 	payld_buf = syna_pal_mem_alloc(payld_size, sizeof(unsigned char));
 	if (!payld_buf) {
 		LOGE("Fail to allocate buffer to store flash command\n");
-		return _ENOMEM;
+		return -ERR_NOMEM;
 	}
 
 	retval = syna_pal_mem_cpy(payld_buf, payld_size,
@@ -879,7 +880,7 @@ static int syna_tcm_romboot_jedec_get_status(struct tcm_dev *tcm_dev,
 
 	if (!tcm_dev) {
 		LOGE("Invalid tcm device handle\n");
-		return _EINVAL;
+		return -ERR_INVAL;
 	}
 
 	for (idx = 0; idx < STATUS_CHECK_RETRY; idx++) {
@@ -903,7 +904,7 @@ static int syna_tcm_romboot_jedec_get_status(struct tcm_dev *tcm_dev,
 	}
 
 	if (status)
-		retval = _EIO;
+		retval = -ERR_TCMMSG;
 	else
 		retval = status;
 
@@ -929,7 +930,7 @@ static int syna_tcm_romboot_jedec_erase_flash(struct tcm_dev *tcm_dev,
 
 	if (!tcm_dev) {
 		LOGE("Invalid tcm device handle\n");
-		return _EINVAL;
+		return -ERR_INVAL;
 	}
 
 	retval = syna_tcm_romboot_jedec_send_command(tcm_dev,
@@ -992,12 +993,12 @@ static int syna_tcm_romboot_jedec_write_flash(struct tcm_dev *tcm_dev,
 
 	if (!tcm_dev) {
 		LOGE("Invalid tcm device handle\n");
-		return _EINVAL;
+		return -ERR_INVAL;
 	}
 
 	if ((!data) || (data_size == 0)) {
 		LOGE("Invalid image data, no data available\n");
-		return _EINVAL;
+		return -ERR_INVAL;
 	}
 
 	remaining_length = data_size;
@@ -1077,7 +1078,7 @@ exit:
  * @param
  * @param
  *    [ in] tcm_dev:         the device handle
- *    [ in] romboot_data:    data blob for remboot
+ *    [ in] romboot_data:    data blob for ROMBOOT
  *    [ in] blk:             the block in flash memory to erase
  *    [ in] delay_ms:        delay time to get the response
  *    [ in] is_multichip:    use multi-chip command packet instead
@@ -1093,7 +1094,7 @@ static int syna_tcm_romboot_erase_flash(struct tcm_dev *tcm_dev,
 	int retval;
 
 	if (!tcm_dev || !romboot_data || !blk)
-		return _EINVAL;
+		return -ERR_INVAL;
 
 	if (is_multichip)
 		retval = syna_tcm_romboot_multichip_erase_flash(tcm_dev,
@@ -1113,7 +1114,7 @@ static int syna_tcm_romboot_erase_flash(struct tcm_dev *tcm_dev,
  *
  * @param
  *    [ in] tcm_dev:         the device handle
- *    [ in] romboot_data:    data blob for remboot
+ *    [ in] romboot_data:    data blob for ROMBOOT
  *    [ in] blk:             the block in flash memory to update
  *    [ in] delay_ms:        a short delay time in millisecond to wait for
  *                           the completion of flash access
@@ -1130,7 +1131,7 @@ static int syna_tcm_romboot_write_flash(struct tcm_dev *tcm_dev,
 	int retval;
 
 	if (!tcm_dev || !romboot_data || !blk)
-		return _EINVAL;
+		return -ERR_INVAL;
 
 	if (is_multichip)
 		retval = syna_tcm_romboot_multichip_write_flash(tcm_dev,
@@ -1181,12 +1182,12 @@ int syna_tcm_romboot_do_ihex_update(struct tcm_dev *tcm_dev,
 
 	if (!tcm_dev) {
 		LOGE("Invalid tcm device handle\n");
-		return _EINVAL;
+		return -ERR_INVAL;
 	}
 
 	if ((!ihex) || (ihex_size == 0)) {
 		LOGE("Invalid ihex data\n");
-		return _EINVAL;
+		return -ERR_INVAL;
 	}
 
 	if (flash_size == 0)
@@ -1197,7 +1198,7 @@ int syna_tcm_romboot_do_ihex_update(struct tcm_dev *tcm_dev,
 	if (!romboot_data) {
 		LOGE("Fail to allocate romboot data blob\n");
 
-		return _ENOMEM;
+		return -ERR_NOMEM;
 	}
 
 	romboot_data->bdata = ihex;
@@ -1213,7 +1214,7 @@ int syna_tcm_romboot_do_ihex_update(struct tcm_dev *tcm_dev,
 		LOGE("Fail to allocate buffer for ihex data\n");
 		syna_pal_mem_free((void *)romboot_data);
 
-		return _ENOMEM;
+		return -ERR_NOMEM;
 	}
 
 	ihex_info->bin_size = flash_size;
@@ -1231,7 +1232,7 @@ int syna_tcm_romboot_do_ihex_update(struct tcm_dev *tcm_dev,
 	}
 
 	if (!is_multichip) {
-		header = (unsigned short *)ihex_info->block[0].data;
+		header = (unsigned short *)ihex_info->bin;
 		if (*header != BINARY_FILE_MAGIC_VALUE) {
 			LOGE("Incorrect image header 0x%04X\n", *header);
 			goto exit;
@@ -1251,31 +1252,37 @@ int syna_tcm_romboot_do_ihex_update(struct tcm_dev *tcm_dev,
 
 	ATOMIC_SET(tcm_dev->firmware_flashing, 1);
 
-	for (idx = 0; idx < IHEX_MAX_BLOCKS; idx++) {
-
-		block = &ihex_info->block[idx];
-
-		if (!block->available)
-			continue;
-
-		if (block->size == 0)
-			continue;
-
-		/* for single-chip, mass erase will affect the
-		 * entire flash memory, so it just takes once
-		 */
-		if ((idx != 0) && (!is_multichip))
-			break;
-
+	/* for single-chip, mass erase will affect the
+	 * entire flash memory, so it just takes once
+	 */
+	if (!is_multichip) {
+		block = &ihex_info->block[0];
 		retval = syna_tcm_romboot_erase_flash(tcm_dev,
+			romboot_data,
+			block,
+			erase_delay_ms,
+			false);
+	} else {
+		/* for multi-chip, do erase based on the areas being
+		 * used in the ihex file
+		 */
+		for (idx = 0; idx < IHEX_MAX_BLOCKS; idx++) {
+			block = &ihex_info->block[idx];
+			if (!block->available)
+				continue;
+			if (block->size == 0)
+				continue;
+
+			retval = syna_tcm_romboot_erase_flash(tcm_dev,
 				romboot_data,
 				block,
 				erase_delay_ms,
 				is_multichip);
-		if (retval < 0) {
-			LOGE("Fail to erase flash\n");
-			goto reset;
 		}
+	}
+	if (retval < 0) {
+		LOGE("Fail to erase flash\n");
+		goto reset;
 	}
 
 	LOGN("Flash erased\n");
@@ -1370,12 +1377,12 @@ int syna_tcm_romboot_do_multichip_reflash(struct tcm_dev *tcm_dev,
 
 	if (!tcm_dev) {
 		LOGE("Invalid tcm device handle\n");
-		return _EINVAL;
+		return -ERR_INVAL;
 	}
 
 	if ((!image) || (image_size == 0)) {
 		LOGE("Invalid image data\n");
-		return _EINVAL;
+		return -ERR_INVAL;
 	}
 
 	romboot_data = syna_pal_mem_alloc(1,
@@ -1383,7 +1390,7 @@ int syna_tcm_romboot_do_multichip_reflash(struct tcm_dev *tcm_dev,
 	if (!romboot_data) {
 		LOGE("Fail to allocate romboot data blob\n");
 
-		return _ENOMEM;
+		return -ERR_NOMEM;
 	}
 
 	LOGN("Prepare to do reflash\n");
@@ -1398,14 +1405,14 @@ int syna_tcm_romboot_do_multichip_reflash(struct tcm_dev *tcm_dev,
 	retval = syna_tcm_parse_fw_image(image, &romboot_data->image_info);
 	if (retval < 0) {
 		LOGE("Fail to parse firmware image\n");
-		retval = _EINVAL;
+		retval = -ERR_INVAL;
 		goto exit;
 	}
 
 	block = &romboot_data->image_info.data[AREA_APP_CONFIG];
 	if (block->size < sizeof(struct app_config_header)) {
 		LOGE("Invalid application config in image file\n");
-		retval = _EINVAL;
+		retval = -ERR_INVAL;
 		goto exit;
 	}
 	header = (struct app_config_header *)block->data;
@@ -1457,7 +1464,7 @@ int syna_tcm_romboot_do_multichip_reflash(struct tcm_dev *tcm_dev,
 	if (!IS_ROM_BOOTLOADER_MODE(tcm_dev->dev_mode)) {
 		LOGE("Incorrect device mode 0x%02x, expected:0x%02x\n",
 			tcm_dev->dev_mode, MODE_ROMBOOTLOADER);
-		retval = _EINVAL;
+		retval = -ERR_INVAL;
 		goto reset;
 	}
 
@@ -1590,12 +1597,13 @@ int syna_tcm_get_romboot_info(struct tcm_dev *tcm_dev,
 
 	if (!tcm_dev) {
 		LOGE("Invalid tcm device handle\n");
-		return _EINVAL;
+		return -ERR_INVAL;
 	}
 
 	retval = tcm_dev->write_message(tcm_dev,
 			CMD_GET_ROMBOOT_INFO,
 			NULL,
+			0,
 			0,
 			&resp_code,
 			tcm_dev->msg_data.default_resp_reading);

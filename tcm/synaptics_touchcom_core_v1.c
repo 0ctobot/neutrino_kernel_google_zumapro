@@ -57,6 +57,119 @@ struct tcm_v1_message_header {
 };
 
 /**
+ * syna_tcm_v1_update_crc()
+ *
+ * Helper to update the CRC bytes from the internal in_buf
+ *
+ * @param
+ *    [ in] tcm_dev:  the device handle
+ *
+ * @return
+ *    on success, 0 or positive value; otherwise, negative value on error.
+ */
+static void syna_tcm_v1_update_crc(struct tcm_dev *tcm_dev)
+{
+	struct tcm_message_data_blob *tcm_msg = NULL;
+	unsigned int offset;
+
+	if (!tcm_dev) {
+		LOGE("Invalid tcm device handle\n");
+		return;
+	}
+
+	tcm_msg = &tcm_dev->msg_data;
+
+	if (!tcm_msg->has_crc)
+		return;
+
+	if (tcm_msg->payload_length == 0)
+		return;
+
+	syna_tcm_buf_lock(&tcm_msg->in);
+
+	offset = MESSAGE_HEADER_SIZE + tcm_msg->payload_length;
+	if (tcm_msg->in.buf_size <= offset + 1)
+		return;
+
+	if (tcm_msg->has_crc) {
+		/* copy crc bytes which are followed by EOM (0x5a) */
+		tcm_msg->crc_bytes = (unsigned short)syna_pal_le2_to_uint(
+			&tcm_msg->in.buf[offset + 1]); /* skip EOM */
+		LOGD("CRC retrieved: 0x%04X\n", tcm_msg->crc_bytes);
+
+		if (tcm_msg->has_extra_rc) {
+			/* copy an extra rc byte which is appended after crc */
+			offset += TCM_MSG_CRC_LENGTH;
+			if (tcm_msg->in.buf_size >= offset + 1) {
+				tcm_msg->rc_byte =
+					tcm_msg->in.buf[offset + 1];
+				LOGD("Extra RC byte retrieved: 0x%02X\n",
+					tcm_msg->rc_byte);
+			}
+
+		}
+	}
+
+	syna_tcm_buf_unlock(&tcm_msg->in);
+}
+
+/**
+ * syna_tcm_v1_set_max_rw_size()
+ *
+ * Configure the max length for message reading and writing.
+ *
+ * @param
+ *    [ in] tcm_dev: the device handle
+ *
+ * @return
+ *    none.
+ */
+static int syna_tcm_v1_set_max_rw_size(struct tcm_dev *tcm_dev)
+{
+	unsigned int wr_size = 0;
+	struct tcm_identification_info *id_info;
+	unsigned int build_id = 0;
+
+	if (!tcm_dev) {
+		LOGE("Invalid tcm device handle\n");
+		return -ERR_INVAL;
+	}
+
+	id_info = &tcm_dev->id_info;
+	build_id = syna_pal_le4_to_uint(id_info->build_id);
+
+	if (build_id == 0) {
+		LOGE("Invalid identify report stored\n");
+		return -ERR_INVAL;
+	}
+
+	wr_size = syna_pal_le2_to_uint(id_info->max_write_size);
+
+	if (wr_size == 0) {
+		LOGE("Invalid max write size from identify report\n");
+		return -ERR_INVAL;
+	}
+
+	/* set max write size */
+	if (wr_size != tcm_dev->max_wr_size) {
+		if (tcm_dev->max_wr_size == 0)
+			tcm_dev->max_wr_size = wr_size;
+		else
+			tcm_dev->max_wr_size =
+				MIN(wr_size, tcm_dev->max_wr_size);
+
+		LOGD("Set max write length to %d bytes\n",
+			tcm_dev->max_wr_size);
+	}
+
+	tcm_dev->max_rd_size = tcm_dev->max_rd_size;
+
+	LOGD("Set max read length to %d bytes\n", tcm_dev->max_rd_size);
+
+	return 0;
+}
+
+/**
  * syna_tcm_v1_parse_idinfo()
  *
  * Copy the given data to the identification info structure
@@ -75,18 +188,17 @@ static int syna_tcm_v1_parse_idinfo(struct tcm_dev *tcm_dev,
 		unsigned char *data, unsigned int size, unsigned int data_len)
 {
 	int retval;
-	unsigned int wr_size = 0;
 	unsigned int build_id = 0;
 	struct tcm_identification_info *id_info;
 
 	if (!tcm_dev) {
 		LOGE("Invalid tcm device handle\n");
-		return _EINVAL;
+		return -ERR_INVAL;
 	}
 
 	if ((!data) || (data_len == 0)) {
 		LOGE("Invalid given data buffer\n");
-		return _EINVAL;
+		return -ERR_INVAL;
 	}
 
 	id_info = &tcm_dev->id_info;
@@ -103,17 +215,10 @@ static int syna_tcm_v1_parse_idinfo(struct tcm_dev *tcm_dev,
 
 	build_id = syna_pal_le4_to_uint(id_info->build_id);
 
-	wr_size = syna_pal_le2_to_uint(id_info->max_write_size);
-	tcm_dev->max_wr_size = MIN(wr_size, WR_CHUNK_SIZE);
-	if (tcm_dev->max_wr_size == 0) {
-		tcm_dev->max_wr_size = wr_size;
-		LOGD("max_wr_size = %d\n", tcm_dev->max_wr_size);
-	}
-
-	LOGI("TCM Fw mode: 0x%02x\n", id_info->mode);
-
 	if (tcm_dev->packrat_number != build_id)
 		tcm_dev->packrat_number = build_id;
+
+	LOGI("TCM Fw mode: 0x%02x\n", id_info->mode);
 
 	tcm_dev->dev_mode = id_info->mode;
 
@@ -156,58 +261,6 @@ static void syna_tcm_v1_dispatch_report(struct tcm_dev *tcm_dev)
 		goto exit;
 	}
 
-	/* The identify report may be resulted from reset or fw mode switching
-	 */
-	if (tcm_msg->report_code == REPORT_IDENTIFY) {
-
-		syna_tcm_buf_lock(&tcm_msg->in);
-
-		retval = syna_tcm_v1_parse_idinfo(tcm_dev,
-				&tcm_msg->in.buf[MESSAGE_HEADER_SIZE],
-				tcm_msg->in.buf_size - MESSAGE_HEADER_SIZE,
-				tcm_msg->payload_length);
-		if (retval < 0) {
-			LOGE("Fail to identify device\n");
-			syna_tcm_buf_unlock(&tcm_msg->in);
-			return;
-		}
-
-		syna_tcm_buf_unlock(&tcm_msg->in);
-
-		/* in case, the identify info packet is caused by the command */
-		if (ATOMIC_GET(tcm_msg->command_status) == CMD_STATE_BUSY) {
-			switch (tcm_msg->command) {
-			case CMD_RESET:
-				LOGD("Reset by CMD_RESET\n");
-				fallthrough;
-			case CMD_REBOOT_TO_ROM_BOOTLOADER:
-			case CMD_RUN_BOOTLOADER_FIRMWARE:
-			case CMD_RUN_APPLICATION_FIRMWARE:
-			case CMD_ENTER_PRODUCTION_TEST_MODE:
-			case CMD_ROMBOOT_RUN_BOOTLOADER_FIRMWARE:
-				tcm_msg->response_code = STATUS_OK;
-				ATOMIC_SET(tcm_msg->command_status,
-					CMD_STATE_IDLE);
-				syna_pal_completion_complete(cmd_completion);
-				goto exit;
-			default:
-				LOGN("Get unexpected 0x%02X report at command 0x%02X\n",
-					REPORT_IDENTIFY, tcm_msg->command);
-				ATOMIC_SET(tcm_msg->command_status,
-					CMD_STATE_ERROR);
-				syna_pal_completion_complete(cmd_completion);
-				goto exit;
-			}
-		} else {
-			LOGN("Device has been reset\n");
-			/* invoke callback to handle unexpected reset if doesn't
-			 * result from command
-			 */
-			if (tcm_dev->cb_reset_occurrence)
-				tcm_dev->cb_reset_occurrence(tcm_dev->cbdata_reset);
-		}
-	}
-
 	/* store the received report into the internal buffer.report */
 	syna_tcm_buf_lock(&tcm_dev->report_buf);
 
@@ -237,6 +290,64 @@ static void syna_tcm_v1_dispatch_report(struct tcm_dev *tcm_dev)
 
 	syna_tcm_buf_unlock(&tcm_msg->in);
 	syna_tcm_buf_unlock(&tcm_dev->report_buf);
+
+	/* The identify report may be resulted from reset or fw mode switching
+	 */
+	if (tcm_msg->report_code == REPORT_IDENTIFY) {
+
+		syna_tcm_buf_lock(&tcm_msg->in);
+
+		retval = syna_tcm_v1_parse_idinfo(tcm_dev,
+				&tcm_msg->in.buf[MESSAGE_HEADER_SIZE],
+				tcm_msg->in.buf_size - MESSAGE_HEADER_SIZE,
+				tcm_msg->payload_length);
+		if (retval < 0) {
+			LOGE("Fail to identify device\n");
+			syna_tcm_buf_unlock(&tcm_msg->in);
+			return;
+		}
+
+		syna_tcm_buf_unlock(&tcm_msg->in);
+
+		/* in case, the identify info packet is caused by the command */
+		if (ATOMIC_GET(tcm_msg->command_status) == CMD_STATE_BUSY) {
+			switch (tcm_msg->command) {
+			case CMD_RESET:
+				LOGD("Reset by command 0x%02X\n",
+					tcm_msg->command);
+				tcm_msg->response_code = STATUS_OK;
+				ATOMIC_SET(tcm_msg->command_status,
+					CMD_STATE_IDLE);
+				syna_pal_completion_complete(cmd_completion);
+				goto exit;
+			case CMD_REBOOT_TO_ROM_BOOTLOADER:
+			case CMD_RUN_BOOTLOADER_FIRMWARE:
+			case CMD_RUN_APPLICATION_FIRMWARE:
+			case CMD_ENTER_PRODUCTION_TEST_MODE:
+			case CMD_ROMBOOT_RUN_BOOTLOADER_FIRMWARE:
+				tcm_msg->response_code = STATUS_OK;
+				ATOMIC_SET(tcm_msg->command_status,
+					CMD_STATE_IDLE);
+				syna_pal_completion_complete(cmd_completion);
+				goto exit;
+			default:
+				LOGI("Unexpected 0x%02X report received\n",
+					REPORT_IDENTIFY);
+				ATOMIC_SET(tcm_msg->command_status,
+					CMD_STATE_ERROR);
+				syna_pal_completion_complete(cmd_completion);
+				goto exit;
+			}
+		} else {
+			LOGN("Device has been reset\n");
+			/* invoke callback to handle unexpected reset if doesn't
+			 * result from command
+			 */
+			if (tcm_dev->cb_reset_occurrence)
+				tcm_dev->cb_reset_occurrence(
+					tcm_dev->cbdata_reset);
+		}
+	}
 
 exit:
 	return;
@@ -343,7 +454,7 @@ static int syna_tcm_v1_read(struct tcm_dev *tcm_dev, unsigned int rd_length,
 
 	if (!tcm_dev) {
 		LOGE("Invalid tcm device handle\n");
-		return _EINVAL;
+		return -ERR_INVAL;
 	}
 
 	if (rd_length == 0)
@@ -352,7 +463,7 @@ static int syna_tcm_v1_read(struct tcm_dev *tcm_dev, unsigned int rd_length,
 	if (rd_length > buf_size) {
 		LOGE("Invalid read length, len: %d, buf_size: %d\n",
 			rd_length, buf_size);
-		return _EINVAL;
+		return -ERR_INVAL;
 	}
 
 	max_rd_size = tcm_dev->max_rd_size;
@@ -360,7 +471,7 @@ static int syna_tcm_v1_read(struct tcm_dev *tcm_dev, unsigned int rd_length,
 	if ((max_rd_size != 0) && (rd_length > max_rd_size)) {
 		LOGE("Invalid read length, len: %d, max_rd_size: %d\n",
 			rd_length, max_rd_size);
-		return _EINVAL;
+		return -ERR_INVAL;
 	}
 
 	/* read in the message header from device
@@ -383,7 +494,7 @@ static int syna_tcm_v1_read(struct tcm_dev *tcm_dev, unsigned int rd_length,
 		LOGE("Incorrect header marker, 0x%02x (retry:%d)\n",
 			buf[0], retry);
 
-		retval = _EIO;
+		retval = -ERR_TCMMSG;
 		syna_pal_sleep_us(RD_RETRY_US_MIN, RD_RETRY_US_MAX);
 	}
 
@@ -414,11 +525,11 @@ static int syna_tcm_v1_write(struct tcm_dev *tcm_dev, unsigned char command,
 	int retval = 0;
 	struct tcm_message_data_blob *tcm_msg = NULL;
 	int size, buf_size;
-	unsigned char crc16[2] = { 0 };
+	unsigned char crc16[TCM_MSG_CRC_LENGTH] = { 0 };
 
 	if (!tcm_dev) {
 		LOGE("Invalid tcm device handle\n");
-		return _EINVAL;
+		return -ERR_INVAL;
 	}
 
 	tcm_msg = &tcm_dev->msg_data;
@@ -431,7 +542,7 @@ static int syna_tcm_v1_write(struct tcm_dev *tcm_dev, unsigned char command,
 		crc16[0] = (unsigned char) crc & 0xff;
 		crc16[1] = (unsigned char) (crc >> 8);
 
-		buf_size += 2;
+		buf_size += sizeof(crc16);
 	}
 
 	retval = syna_tcm_buf_alloc(&tcm_msg->out, buf_size);
@@ -495,7 +606,7 @@ static int syna_tcm_v1_write(struct tcm_dev *tcm_dev, unsigned char command,
 			goto exit;
 		}
 
-		size += 2;
+		size += sizeof(crc16);
 	}
 
 	/* write command packet to the device */
@@ -544,7 +655,7 @@ static int syna_tcm_v1_continued_read(struct tcm_dev *tcm_dev,
 
 	if (!tcm_dev) {
 		LOGE("Invalid tcm device handle\n");
-		return _EINVAL;
+		return -ERR_INVAL;
 	}
 
 	tcm_msg = &tcm_dev->msg_data;
@@ -554,8 +665,11 @@ static int syna_tcm_v1_continued_read(struct tcm_dev *tcm_dev,
 
 	if ((length & 0xffff) == 0xffff) {
 		LOGE("Invalid length to read\n");
-		return _EINVAL;
+		return -ERR_INVAL;
 	}
+
+	/* delay for the bus turnaround time */
+	syna_pal_sleep_us(TAT_DELAY_US_MIN, TAT_DELAY_US_MAX);
 
 	/* continued read packet contains the header, payload, and a padding */
 	total_length = MESSAGE_HEADER_SIZE + tcm_msg->payload_length + 1;
@@ -564,8 +678,17 @@ static int syna_tcm_v1_continued_read(struct tcm_dev *tcm_dev,
 
 	/* read extra crc if supported */
 	if (tcm_msg->has_crc) {
-		total_length += 2;
-		remaining_length += 2;
+		total_length += TCM_MSG_CRC_LENGTH;
+		remaining_length += TCM_MSG_CRC_LENGTH;
+	}
+	if (tcm_msg->has_extra_rc) {
+		total_length += TCM_EXTRA_RC_LENGTH;
+		remaining_length += TCM_EXTRA_RC_LENGTH;
+	}
+	  /* read in one more EOM when crc bytes appending */
+	if (tcm_msg->has_crc || tcm_msg->has_extra_rc) {
+		total_length += 1;
+		remaining_length += 1;
 	}
 
 	syna_tcm_buf_lock(&tcm_msg->in);
@@ -576,7 +699,7 @@ static int syna_tcm_v1_continued_read(struct tcm_dev *tcm_dev,
 	if (retval < 0) {
 		LOGE("Fail to allocate memory for internal buf_in\n");
 		syna_tcm_buf_unlock(&tcm_msg->in);
-		return retval;
+		return -ERR_NOMEM;
 	}
 
 	/* available chunk space for payload =
@@ -638,7 +761,7 @@ static int syna_tcm_v1_continued_read(struct tcm_dev *tcm_dev,
 		if (code != STATUS_CONTINUED_READ) {
 			LOGE("Incorrect status code 0x%02x at %d out of %d\n",
 					code, idx, chunks);
-			retval = _EIO;
+			retval = -ERR_TCMMSG;
 			goto exit;
 		}
 
@@ -656,14 +779,7 @@ static int syna_tcm_v1_continued_read(struct tcm_dev *tcm_dev,
 		offset += xfer_length;
 		remaining_length -= xfer_length;
 	}
-	/* copy crc bytes which are followed by EOM (0x5a) */
-	offset = MESSAGE_HEADER_SIZE + tcm_msg->payload_length;
-	if (tcm_msg->has_crc) {
-		tcm_msg->crc_bytes = (unsigned short)syna_pal_le2_to_uint(
-			&tcm_msg->in.buf[offset + 1]); /* skip EOM */
 
-		LOGD("CRC to read: 0x%04X\n", tcm_msg->crc_bytes);
-	}
 exit:
 	syna_tcm_buf_unlock(&tcm_msg->temp);
 	syna_tcm_buf_unlock(&tcm_msg->in);
@@ -695,34 +811,46 @@ static int syna_tcm_v1_read_message(struct tcm_dev *tcm_dev,
 	syna_pal_completion_t *cmd_completion = NULL;
 	unsigned int len = 0;
 	bool do_predict = false;
+	unsigned int tmp_len;
 
 	if (!tcm_dev) {
 		LOGE("Invalid tcm device handle\n");
-		return _EINVAL;
+		return -ERR_INVAL;
 	}
 
 	tcm_msg = &tcm_dev->msg_data;
 	rw_mutex = &tcm_msg->rw_mutex;
 	cmd_completion = &tcm_msg->cmd_completion;
 
-	/* predict reading is applied when report streaming only */
+	/* predict reading is applied when doing report streaming only */
 	do_predict = (ATOMIC_GET(tcm_msg->command_status) == CMD_STATE_IDLE);
 
 	if (status_report_code)
 		*status_report_code = STATUS_INVALID;
 
-	tcm_msg->crc_bytes = 0;
-
 	syna_pal_mutex_lock(rw_mutex);
 
 	syna_tcm_buf_lock(&tcm_msg->in);
 
-	/* determine the length to read */
+	/* read in the message header */
 	len = MESSAGE_HEADER_SIZE;
-	if (tcm_msg->predict_reads && do_predict)
-		len += tcm_msg->predict_length;
 
-	/* ensure the size of in.buf */
+	/* if predict read enabled, plus the predicted length
+	 * and determine the length to read
+	 */
+	if (tcm_msg->predict_reads && do_predict) {
+		if (tcm_msg->predict_length > 0) {
+			len += tcm_msg->predict_length;
+			if (tcm_msg->has_crc)
+				len += TCM_MSG_CRC_LENGTH;
+			if (tcm_msg->has_extra_rc)
+				len += TCM_EXTRA_RC_LENGTH;
+			/* end of message byte */
+			len += 1;
+		}
+	}
+
+	/* ensure the size of in.buf, do re-allocate if needed */
 	if (len > tcm_msg->in.buf_size) {
 		retval = syna_tcm_buf_alloc(&tcm_msg->in, len);
 		if (retval < 0) {
@@ -735,7 +863,7 @@ static int syna_tcm_v1_read_message(struct tcm_dev *tcm_dev,
 		}
 	}
 
-	/* read in the message header from device */
+	/* read in the message from device */
 	retval = syna_tcm_v1_read(tcm_dev,
 			len,
 			tcm_msg->in.buf,
@@ -757,21 +885,34 @@ static int syna_tcm_v1_read_message(struct tcm_dev *tcm_dev,
 
 	tcm_msg->payload_length = syna_pal_le2_to_uint(header->length);
 
-	if (tcm_msg->status_report_code != STATUS_IDLE)
+	if ((tcm_msg->status_report_code != STATUS_IDLE) ||
+		(tcm_msg->payload_length > 0)) {
 		LOGD("Status code: 0x%02x, length: %d (%02x %02x %02x %02x)\n",
 			tcm_msg->status_report_code, tcm_msg->payload_length,
 			header->data[0], header->data[1], header->data[2],
 			header->data[3]);
+	}
 
 	syna_tcm_buf_unlock(&tcm_msg->in);
 
+	/* do dispatch if this's the full message */
 	if (tcm_msg->payload_length == 0)
 		goto do_dispatch;
 
-	if (tcm_msg->payload_length > (len - MESSAGE_HEADER_SIZE))
-		len = tcm_msg->payload_length - (len - MESSAGE_HEADER_SIZE);
+	/* calculate the remaining length for continued reads
+	 *
+	 * if enabling predict read or having extra bytes to read,
+	 * the value of 'len' shall be larger than the message header;
+	 * so removing the size of pre-read was the actual size to read.
+	 *
+	 * otherwise, the total length of payload shall be retrieved
+	 */
+	tmp_len = len - MESSAGE_HEADER_SIZE;
+	if (len > MESSAGE_HEADER_SIZE)
+		len = (tcm_msg->payload_length > tmp_len) ?
+			(tcm_msg->payload_length - tmp_len) : 0;
 	else
-		len = 0;
+		len = tcm_msg->payload_length;
 
 	/* retrieve the remaining data, if any */
 	retval = syna_tcm_v1_continued_read(tcm_dev, len);
@@ -780,6 +921,7 @@ static int syna_tcm_v1_read_message(struct tcm_dev *tcm_dev,
 		goto exit;
 	}
 
+do_dispatch:
 	/* refill the header for dispatching */
 	syna_tcm_buf_lock(&tcm_msg->in);
 
@@ -790,7 +932,9 @@ static int syna_tcm_v1_read_message(struct tcm_dev *tcm_dev,
 
 	syna_tcm_buf_unlock(&tcm_msg->in);
 
-do_dispatch:
+	/* update crc data if needed */
+	syna_tcm_v1_update_crc(tcm_dev);
+
 	/* duplicate the data to external buffer */
 	syna_tcm_buf_lock(&tcm_dev->external_buf);
 	if (tcm_msg->payload_length > 0) {
@@ -798,14 +942,18 @@ do_dispatch:
 				tcm_msg->payload_length);
 		if (retval < 0) {
 			LOGE("Fail to allocate memory, external_buf invalid\n");
-		} else {
-			retval = syna_pal_mem_cpy(&tcm_dev->external_buf.buf[0],
-				tcm_msg->payload_length,
-				&tcm_msg->in.buf[MESSAGE_HEADER_SIZE],
-				tcm_msg->in.buf_size - MESSAGE_HEADER_SIZE,
-				tcm_msg->payload_length);
-			if (retval < 0)
-				LOGE("Fail to copy data to external buffer\n");
+			syna_tcm_buf_unlock(&tcm_dev->external_buf);
+			goto exit;
+		}
+		retval = syna_pal_mem_cpy(&tcm_dev->external_buf.buf[0],
+			tcm_msg->payload_length,
+			&tcm_msg->in.buf[MESSAGE_HEADER_SIZE],
+			tcm_msg->in.buf_size - MESSAGE_HEADER_SIZE,
+			tcm_msg->payload_length);
+		if (retval < 0) {
+			LOGE("Fail to copy data to external buffer\n");
+			syna_tcm_buf_unlock(&tcm_dev->external_buf);
+			goto exit;
 		}
 	}
 	tcm_dev->external_buf.data_length = tcm_msg->payload_length;
@@ -818,7 +966,7 @@ do_dispatch:
 			break;
 		case STATUS_CONTINUED_READ:
 			LOGE("Out-of-sync continued read\n");
-			retval = _EIO;
+			retval = -ERR_TCMMSG;
 			goto exit;
 		case STATUS_IDLE:
 			retval = 0;
@@ -842,13 +990,14 @@ do_dispatch:
 
 	/* update the length for predict reading */
 	if (tcm_msg->predict_reads && do_predict) {
-		if (tcm_dev->max_rd_size < MESSAGE_HEADER_SIZE)
+		if (tcm_dev->max_rd_size == 0)
 			tcm_msg->predict_length = tcm_msg->payload_length;
 		else
 			tcm_msg->predict_length = MIN(tcm_msg->payload_length,
 				tcm_dev->max_rd_size - MESSAGE_HEADER_SIZE - 1);
 
-		tcm_msg->predict_length += 1; /* padding byte */
+		if (tcm_msg->status_report_code < REPORT_IDENTIFY)
+			tcm_msg->predict_length = 0;
 	}
 
 	retval = 0;
@@ -878,7 +1027,8 @@ exit:
  *    [ in] tcm_dev:       the device handle
  *    [ in] command:       TouchComm command
  *    [ in] payload:       data payload, if any
- *    [ in] payload_len:   length of data payload, if any
+ *    [ in] length_total:   length of total payload
+ *    [ in] length:         length of payload data, if any
  *    [out] resp_code:     response code returned
  *    [ in] delay_ms_resp: delay time for response reading.
  *                         a positive value presents the time for polling;
@@ -889,8 +1039,8 @@ exit:
  */
 static int syna_tcm_v1_write_message(struct tcm_dev *tcm_dev,
 	unsigned char command, unsigned char *payload,
-	unsigned int payload_len, unsigned char *resp_code,
-	unsigned int delay_ms_resp)
+	unsigned int length_total, unsigned int length,
+	unsigned char *resp_code, unsigned int delay_ms_resp)
 {
 	int retval = 0;
 	unsigned int idx;
@@ -912,7 +1062,7 @@ static int syna_tcm_v1_write_message(struct tcm_dev *tcm_dev,
 
 	if (!tcm_dev) {
 		LOGE("Invalid tcm device handle\n");
-		return _EINVAL;
+		return -ERR_INVAL;
 	}
 
 	tcm_msg = &tcm_dev->msg_data;
@@ -948,19 +1098,25 @@ static int syna_tcm_v1_write_message(struct tcm_dev *tcm_dev,
 
 	tcm_msg->command = command;
 
-	remaining_length = payload_len;
+	remaining_length = length;
 
-	LOGD("Command: 0x%02x, payload len: %d\n", command, payload_len);
+	if (length != length_total) {
+		LOGD("Command: 0x%02x, payload length: %d / %d\n",
+			command, length, length_total);
+	} else {
+		LOGD("Command: 0x%02x, payload length: %d\n",
+			command, length);
+	}
 
 	/* calculate the crc if supported */
 	if (tcm_msg->has_crc) {
 		crc16 = syna_tcm_crc16(&command, 1, crc16);
-		tmp = (unsigned char)payload_len & 0xff;
+		tmp = (unsigned char)length & 0xff;
 		crc16 = syna_tcm_crc16(&tmp, 1, crc16);
-		tmp = (unsigned char)(payload_len >> 8) & 0xff;
+		tmp = (unsigned char)(length >> 8) & 0xff;
 		crc16 = syna_tcm_crc16(&tmp, 1, crc16);
-		if (payload_len > 0)
-			crc16 = syna_tcm_crc16(payload, payload_len, crc16);
+		if (length > 0)
+			crc16 = syna_tcm_crc16(payload, length, crc16);
 
 		LOGD("CRC to write: 0x%04X\n", crc16);
 	}
@@ -1023,7 +1179,7 @@ static int syna_tcm_v1_write_message(struct tcm_dev *tcm_dev,
 	 * assuming to select the polling mode, the while-loop below will
 	 * repeatedly read in the respose data based on the given polling
 	 * time; otherwise, wait until receiving a completion event from
-	 * interupt thread.
+	 * interrupt thread.
 	 */
 	timeout = 0;
 	if (!in_polling)
@@ -1035,15 +1191,14 @@ static int syna_tcm_v1_write_message(struct tcm_dev *tcm_dev,
 		/* wait for the completion event triggered by read_message */
 		retval = syna_pal_completion_wait_for(cmd_completion,
 				polling_ms);
-		/* reset the status when times out and keep in polling */
-		if (retval < 0)
-			ATOMIC_SET(tcm_msg->command_status, CMD_STATE_BUSY);
 
-		/* break when geting a valid resp; otherwise, keep in polling */
+		/* break the loop once a resp was ready */
 		if (ATOMIC_GET(tcm_msg->command_status) == CMD_STATE_IDLE)
 			goto check_response;
-
+		/* otherwise, keep in polling */
 		if (in_polling) {
+			ATOMIC_SET(tcm_msg->command_status, CMD_STATE_BUSY);
+
 			/* retrieve the message packet back */
 			retval = syna_tcm_v1_read_message(tcm_dev, NULL);
 			/* keep in polling if still not having a valid resp */
@@ -1051,41 +1206,38 @@ static int syna_tcm_v1_write_message(struct tcm_dev *tcm_dev,
 				syna_pal_completion_reset(cmd_completion);
 		}
 
-		timeout += polling_ms + 10;
+		timeout += polling_ms;
 
 	} while (timeout < CMD_RESPONSE_TIMEOUT_MS);
 
 	/* check the status of response data
 	 * according to the touchcomm spec, each command message
-	 * should have an associated reponse message.
+	 * should have an associated response message.
 	 */
 check_response:
 	if (ATOMIC_GET(tcm_msg->command_status) != CMD_STATE_IDLE) {
 		if (timeout >= CMD_RESPONSE_TIMEOUT_MS) {
 			LOGE("Timed out wait for response of command 0x%02x\n",
 				command);
-			retval = _ETIMEDOUT;
+			retval = -ERR_TIMEDOUT;
 			goto exit;
 		} else {
 			LOGE("Fail to get valid response of command 0x%02x\n",
 				command);
-			retval = _EIO;
+			retval = -ERR_TCMMSG;
 			goto exit;
 		}
 	}
 
 	/* copy response code to the caller */
-	LOGD("Received code 0x%02x\n",
-		tcm_msg->status_report_code);
 	if (resp_code)
 		*resp_code = tcm_msg->status_report_code;
 
+	retval = 0;
 	if (tcm_msg->response_code != STATUS_OK) {
 		LOGE("Received code 0x%02x (command 0x%02x)\n",
 			tcm_msg->status_report_code, tcm_msg->command);
-		retval = _EIO;
-	} else {
-		retval = 0;
+		retval = -ERR_TCMMSG;
 	}
 
 exit:
@@ -1101,9 +1253,36 @@ exit:
 
 	return retval;
 }
+/**
+ * syna_tcm_v1_set_ops()
+ *
+ * Assign read / write operations
+ *
+ * @param
+ *    [ in] tcm_dev: the device handle
+ *
+ * @return
+ *    none
+ */
+void syna_tcm_v1_set_ops(struct tcm_dev *tcm_dev)
+{
+	if (!tcm_dev) {
+		LOGE("Invalid tcm device handle\n");
+		return;
+	}
 
+	/* expose the read / write operations */
+	tcm_dev->read_message = syna_tcm_v1_read_message;
+	tcm_dev->write_message = syna_tcm_v1_write_message;
+	tcm_dev->set_max_rw_size = syna_tcm_v1_set_max_rw_size;
+
+	tcm_dev->msg_data.predict_length = 0;
+	tcm_dev->protocol = TOUCHCOMM_V1;
+}
 /**
  * syna_tcm_v1_detect()
+ *
+ * Function to process the startup packet of TouchComm V1 firmware
  *
  * For TouchCom v1 protocol, the given raw data must start with a specific
  * maker code. If so, read the remaining packet from TouchCom device.
@@ -1124,15 +1303,17 @@ int syna_tcm_v1_detect(struct tcm_dev *tcm_dev, unsigned char *data,
 	struct tcm_message_data_blob *tcm_msg = NULL;
 	unsigned int payload_length = 0;
 	unsigned char resp_code = 0;
+	unsigned short default_crc = 0x5a5a;
+	unsigned short default_rc = 0x5a;
 
 	if (!tcm_dev) {
 		LOGE("Invalid tcm device handle\n");
-		return _EINVAL;
+		return -ERR_INVAL;
 	}
 
 	if ((!data) || (size != MESSAGE_HEADER_SIZE)) {
 		LOGE("Invalid parameters\n");
-		return _EINVAL;
+		return -ERR_INVAL;
 	}
 
 	tcm_msg = &tcm_dev->msg_data;
@@ -1140,27 +1321,27 @@ int syna_tcm_v1_detect(struct tcm_dev *tcm_dev, unsigned char *data,
 	header = (struct tcm_v1_message_header *)data;
 
 	if (header->marker != TCM_V1_MESSAGE_MARKER)
-		return _ENODEV;
+		return -ERR_NODEV;
 
 	/* assume having crc appended, will determine whether feature
 	 * is enabled or not
 	 */
 	tcm_msg->has_crc = true;
-	tcm_dev->msg_data.crc_bytes = 0x5a5a;
+	tcm_dev->msg_data.crc_bytes = default_crc;
+	tcm_msg->has_extra_rc = true;
+	tcm_dev->msg_data.rc_byte = (unsigned char)default_rc;
 
-	/* after initially powering on, the identify report should be the
-	 * first packet
-	 */
+	/* the identify report should be the first packet at startup */
 	if (header->code == REPORT_IDENTIFY) {
 		payload_length = syna_pal_le2_to_uint(header->length);
 		tcm_msg->payload_length = payload_length;
 
-		/* retrieve the identify info packet */
+		/* retrieve the startup packet */
 		retval = syna_tcm_v1_continued_read(tcm_dev,
 				payload_length);
 		if (retval < 0) {
 			LOGE("Fail to read in identify info packet\n");
-			return retval;
+			return -ERR_TCMMSG;
 		}
 	} else {
 		/* if not, send an identify command instead */
@@ -1168,51 +1349,67 @@ int syna_tcm_v1_detect(struct tcm_dev *tcm_dev, unsigned char *data,
 				CMD_IDENTIFY,
 				NULL,
 				0,
+				0,
 				&resp_code,
 				RESP_IN_POLLING);
 		if (retval < 0) {
-			/* in case the identify command is not working,
-			 * send a rest command as the workaround
-			 */
+			/* if still not working, do reset */
 			retval = syna_tcm_v1_write_message(tcm_dev,
 					CMD_RESET,
 					NULL,
 					0,
+					0,
 					&resp_code,
 					RESET_DELAY_MS);
 			if (retval < 0) {
-				LOGE("Fail to identify the device\n");
-				return _ENODEV;
+				LOGE("Fail to identify at startup\n");
+				return -ERR_TCMMSG;
 			}
 		}
 
 		payload_length = tcm_msg->payload_length;
 	}
 
-	/* parse the identify info packet */
-	syna_tcm_buf_lock(&tcm_msg->in);
 
-	retval = syna_tcm_v1_parse_idinfo(tcm_dev,
-			&tcm_msg->in.buf[MESSAGE_HEADER_SIZE],
-			tcm_msg->in.buf_size - MESSAGE_HEADER_SIZE,
-			payload_length);
-	if (retval < 0) {
-		LOGE("Fail to identify device\n");
+	/* parse the identify info packet if needed */
+	if (tcm_dev->dev_mode == MODE_UNKNOWN) {
+		syna_tcm_buf_lock(&tcm_msg->in);
+
+		retval = syna_tcm_v1_parse_idinfo(tcm_dev,
+				&tcm_msg->in.buf[MESSAGE_HEADER_SIZE],
+				tcm_msg->in.buf_size - MESSAGE_HEADER_SIZE,
+				payload_length);
+		if (retval < 0) {
+			LOGE("Fail to parse identify report at startup\n");
+			syna_tcm_buf_unlock(&tcm_msg->in);
+			return -ERR_TCMMSG;
+		}
+
 		syna_tcm_buf_unlock(&tcm_msg->in);
-		return retval;
 	}
 
-	syna_tcm_buf_unlock(&tcm_msg->in);
+	/* set up the max. reading length at startup */
+	retval = syna_tcm_v1_set_max_rw_size(tcm_dev);
+	if (retval < 0) {
+		LOGE("Fail to setup the max length to read/write\n");
+		return -ERR_TCMMSG;
+	}
 
-	/* expose the read / write operations */
-	tcm_dev->read_message = syna_tcm_v1_read_message;
-	tcm_dev->write_message = syna_tcm_v1_write_message;
+	/* detect whether has crc data appended */
+	syna_tcm_v1_update_crc(tcm_dev);
 	/* if all crc bytes belong to EOM, crc feature is yet enabled */
-	if (tcm_dev->msg_data.crc_bytes == 0x5a5a)
+	if (tcm_dev->msg_data.crc_bytes == default_crc)
 		tcm_msg->has_crc = false;
+	/* if rc byte belongs to EOM, extra rc feature is yet enabled */
+	if (tcm_dev->msg_data.rc_byte == default_rc)
+		tcm_msg->has_extra_rc = false;
 
-	LOGI("Message CRC appending is %s\n",
-		(tcm_msg->has_crc) ? "enabled" : "disabled");
+	LOGI("Message including CRC:(%s) extra RC:(%s)\n",
+			(tcm_msg->has_crc) ? "yes" : "no",
+			(tcm_msg->has_extra_rc) ? "yes" : "no");
 
-	return retval;
+	/* set up read/write operations */
+	syna_tcm_v1_set_ops(tcm_dev);
+
+	return 0;
 }

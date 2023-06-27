@@ -111,19 +111,6 @@ extern struct device *syna_request_managed_device(void);
 #define LOGE(log, ...) \
 	pr_err("[  error] %s: " log, __func__, ##__VA_ARGS__)
 
-
-/**
- * @section: Error Codes returned
- *           Functions usually return 0 or positive value on success.
- *           Thus, please defines negative value here.
- */
-#define _EIO        (-EIO)       /* I/O errors */
-#define _ENOMEM     (-ENOMEM)    /* Out of memory */
-#define _EINVAL     (-EINVAL)    /* Invalid parameters */
-#define _ENODEV     (-ENODEV)    /* No such device */
-#define _ETIMEDOUT  (-ETIMEDOUT) /* execution timeout */
-
-
 /**
  * @section: Data Comparison helpers
  *
@@ -349,12 +336,12 @@ static inline int syna_pal_mem_cpy(void *dest, unsigned int dest_size,
 		const void *src, unsigned int src_size, unsigned int num)
 {
 	if (dest == NULL || src == NULL)
-		return -1;
+		return -EINVAL;
 
 	if (num > dest_size || num > src_size) {
-		LOGE("Invalid size. src:%d, dest:%d, num:%d\n",
+		LOGE("Invalid size. src:%d, dest:%d, size to copy:%d\n",
 			src_size, dest_size, num);
-		return -1;
+		return -EINVAL;
 	}
 
 	memcpy((void *)dest, (const void *)src, num);
@@ -364,7 +351,7 @@ static inline int syna_pal_mem_cpy(void *dest, unsigned int dest_size,
 
 
 /**
- * @section: C Runtime for Muxtex Control helpers
+ * @section: C Runtime for Mutex Control helpers
  *
  * @brief: syna_pal_mutex_alloc
  *         Create a mutex object
@@ -665,12 +652,12 @@ static inline int syna_pal_str_cpy(char *dest, unsigned int dest_size,
 		const char *src, unsigned int src_size, unsigned int num)
 {
 	if (dest == NULL || src == NULL)
-		return -1;
+		return -EINVAL;
 
 	if (num > dest_size || num > src_size) {
 		LOGE("Invalid size. src:%d, dest:%d, num:%d\n",
 			src_size, dest_size, num);
-		return -1;
+		return -EINVAL;
 	}
 
 	strncpy(dest, src, num);

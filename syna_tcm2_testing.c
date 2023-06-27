@@ -134,21 +134,21 @@ static bool syna_testing_compare_frame(unsigned char *data,
 	}
 
 	if (data_size < (2 * rows * cols)) {
-		LOGE("Size mismatched, data:%d (exppected:%d)\n",
+		LOGE("Size mismatched, data:%d (expected:%d)\n",
 			data_size, (2 * rows * cols));
 		result = false;
 		return false;
 	}
 
 	if (rows > LIMIT_BOUNDARY) {
-		LOGE("Rows mismatched, rows:%d (exppected:%d)\n",
+		LOGE("Rows mismatched, rows:%d (expected:%d)\n",
 			rows, LIMIT_BOUNDARY);
 		result = false;
 		return false;
 	}
 
 	if (cols > LIMIT_BOUNDARY) {
-		LOGE("Columns mismatched, cols: %d (exppected:%d)\n",
+		LOGE("Columns mismatched, cols: %d (expected:%d)\n",
 			cols, LIMIT_BOUNDARY);
 		result = false;
 		return false;
@@ -226,21 +226,21 @@ static bool syna_testing_compare_list(unsigned char *data,
 	}
 
 	if (data_size % (rows + cols) != 0) {
-		LOGE("Size mismatched, data:%d (exppected:%d * N)\n",
+		LOGE("Size mismatched, data:%d (expected:%d * N)\n",
 			data_size, (rows + cols));
 		result = false;
 		return false;
 	}
 
 	if (rows > LIMIT_BOUNDARY) {
-		LOGE("Rows mismatched, rows:%d (exppected:%d)\n",
+		LOGE("Rows mismatched, rows:%d (expected:%d)\n",
 			rows, LIMIT_BOUNDARY);
 		result = false;
 		return false;
 	}
 
 	if (cols > LIMIT_BOUNDARY) {
-		LOGE("Columns mismatched, cols: %d (exppected:%d)\n",
+		LOGE("Columns mismatched, cols: %d (expected:%d)\n",
 			cols, LIMIT_BOUNDARY);
 		result = false;
 		return false;

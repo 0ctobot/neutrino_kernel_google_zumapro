@@ -230,19 +230,19 @@ static int syna_tcm_save_flash_block_data(struct image_info *image_info,
 {
 	if (!image_info) {
 		LOGE("Invalid image_info\n");
-		return _EINVAL;
+		return -ERR_INVAL;
 	}
 
 	if (area >= AREA_MAX) {
 		LOGE("Invalid flash area\n");
-		return _EINVAL;
+		return -ERR_INVAL;
 	}
 
 	if (checksum != CRC32((const char *)content, size)) {
 		LOGE("%s checksum error, in image: 0x%x (0x%x)\n",
 			AREA_ID_STR(area), checksum,
 			CRC32((const char *)content, size));
-		return _EINVAL;
+		return -ERR_INVAL;
 	}
 	image_info->data[area].size = size;
 	image_info->data[area].data = content;
@@ -319,12 +319,12 @@ static inline int syna_tcm_parse_fw_image(const unsigned char *image,
 
 	if (!image) {
 		LOGE("No image data\n");
-		return _EINVAL;
+		return -ERR_INVAL;
 	}
 
 	if (!image_info) {
 		LOGE("Invalid image_info blob\n");
-		return _EINVAL;
+		return -ERR_INVAL;
 	}
 
 	syna_pal_mem_set(image_info, 0x00, sizeof(struct image_info));
@@ -334,7 +334,7 @@ static inline int syna_tcm_parse_fw_image(const unsigned char *image,
 	magic_value = syna_pal_le4_to_uint(header->magic_value);
 	if (magic_value != IMAGE_FILE_MAGIC_VALUE) {
 		LOGE("Invalid image file magic value\n");
-		return _EINVAL;
+		return -ERR_INVAL;
 	}
 
 	offset = sizeof(struct image_header);
@@ -365,7 +365,7 @@ static inline int syna_tcm_parse_fw_image(const unsigned char *image,
 				length,
 				checksum);
 		if (retval < 0)
-			return _EINVAL;
+			return retval;
 	}
 
 	return 0;
@@ -404,12 +404,12 @@ static inline int syna_tcm_parse_ihex_line(char *line, unsigned int *count,
 
 	if (!line) {
 		LOGE("No string line\n");
-		return _EINVAL;
+		return -ERR_INVAL;
 	}
 
 	if ((!buf) || (buf_size == 0)) {
 		LOGE("Invalid temporary data buffer\n");
-		return _EINVAL;
+		return -ERR_INVAL;
 	}
 
 	*count = syna_pal_hex_to_uint(
@@ -422,12 +422,12 @@ static inline int syna_tcm_parse_ihex_line(char *line, unsigned int *count,
 	if (*count > buf_size) {
 		LOGE("Data size mismatched, required:%d, given:%d\n",
 			*count, buf_size);
-		return _EINVAL;
+		return -ERR_INVAL;
 	}
 
 	for (pos = 0; pos < *count; pos++)
 		buf[pos] = (unsigned char)syna_pal_hex_to_uint(
-			line + (((int)(pos << 1)) + OFFSET_DATA),
+			line + (int)((pos << 1) + OFFSET_DATA),
 			SIZE_DATA);
 
 	return 0;
@@ -466,23 +466,23 @@ static inline int syna_tcm_parse_fw_ihex(const char *ihex, int ihex_size,
 
 	if (!ihex) {
 		LOGE("No ihex data\n");
-		return _EINVAL;
+		return -ERR_INVAL;
 	}
 
 	if (!ihex_info) {
 		LOGE("Invalid ihex_info blob\n");
-		return _EINVAL;
+		return -ERR_INVAL;
 	}
 
 	if ((!ihex_info->bin) || (ihex_info->bin_size == 0)) {
 		LOGE("Invalid ihex_info->data\n");
-		return _EINVAL;
+		return -ERR_INVAL;
 	}
 
 	tmp = syna_pal_mem_alloc(len_per_line + 1, sizeof(char));
 	if (!tmp) {
 		LOGE("Fail to allocate temporary buffer\n");
-		return _ENOMEM;
+		return -ERR_NOMEM;
 	}
 
 	offset = 0;

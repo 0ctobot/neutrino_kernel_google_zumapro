@@ -54,7 +54,7 @@
 
 #define SYNAPTICS_TCM_DRIVER_ID (1 << 0)
 #define SYNAPTICS_TCM_DRIVER_VERSION 1
-#define SYNAPTICS_TCM_DRIVER_SUBVER "2.8"
+#define SYNAPTICS_TCM_DRIVER_SUBVER "5.1"
 
 /**
  * @section: Driver Configurations
@@ -94,6 +94,22 @@
  *         Open to enable the multi-touch (MT) protocol
  */
 #define TYPE_B_PROTOCOL
+
+/**
+ * @brief: POWER_SEQUENCE_ON_CONNECT
+ *         Open if willing to issue the power sequence when connecting to the
+ *         touch controller.
+ *         Set "enable" in default.
+ */
+#define POWER_SEQUENCE_ON_CONNECT
+
+/**
+ * @brief: RESET_ON_CONNECT
+ *         Open if willing to issue a reset when connecting to the
+ *         touch controller.
+ *         Set "enable" in default.
+ */
+#define RESET_ON_CONNECT
 
 /**
  * @brief: RESET_ON_RESUME
@@ -240,7 +256,7 @@
 
 /**
  * @brief FORCE_CONNECTION
- *        Open if willing to connect to TouchComm device w/o error outs.
+ *        Open if still connect to TouchComm device even error occurs.
  *
  *        Set "disable" in default
  */
@@ -272,6 +288,7 @@ enum power_state {
 	PWR_OFF = 0,
 	PWR_ON,
 	LOW_PWR,
+	BARE_MODE,
 };
 
 #if defined(ENABLE_HELPER)
@@ -288,6 +305,7 @@ enum helper_task {
 struct syna_tcm_helper {
 	syna_pal_atomic_t task;
 	struct work_struct work;
+	struct workqueue_struct *workqueue;
 };
 #endif
 
@@ -433,11 +451,15 @@ struct syna_tcm {
 	int pwr_state;
 	bool slept_in_early_suspend;
 	bool lpwg_enabled;
-	bool is_attn_redirecting;
+	bool is_attn_asserted;
 	unsigned char fb_ready;
 	bool is_connected;
+	bool has_custom_tp_config;
+	bool helper_enabled;
+	bool startup_reflash_enabled;
+	bool rst_on_resume_enabled;
 
-	/* framebuffer callbacks notifier */
+	/* frame-buffer callbacks notifier */
 #if defined(ENABLE_DISP_NOTIFIER)
 	struct notifier_block fb_notifier;
 #endif
@@ -460,6 +482,9 @@ struct syna_tcm {
 	/* helper workqueue */
 	struct syna_tcm_helper helper;
 #endif
+
+	/* the pointer of userspace application info data */
+	void *userspace_app_info;
 
 	/* Specific function pointer to do device connection.
 	 *
@@ -522,27 +547,29 @@ struct syna_tcm {
 };
 
 /**
- * @brief: Helpers for cdevice nodes and sysfs nodes creation
- *
- * These functions are implemented in syna_touchcom_sysfs.c
- * and available only when HAS_SYSFS_INTERFACE is enabled.
- */
-#ifdef HAS_SYSFS_INTERFACE
-
-int syna_cdev_create_sysfs(struct syna_tcm *ptcm,
+ * @brief: Helpers for chardev nodes and sysfs nodes creation
+  *
+  * These functions are implemented in syna_touchcom_sysfs.c
+  * and available only when HAS_SYSFS_INTERFACE is enabled.
+  */
+int syna_cdev_create(struct syna_tcm *ptcm,
 		struct platform_device *pdev);
 
-void syna_cdev_remove_sysfs(struct syna_tcm *ptcm);
-
-void syna_cdev_redirect_attn(struct syna_tcm *ptcm);
+void syna_cdev_remove(struct syna_tcm *ptcm);
 
 #ifdef ENABLE_EXTERNAL_FRAME_PROCESS
 void syna_cdev_update_report_queue(struct syna_tcm *tcm,
 		unsigned char code, struct tcm_buffer *pevent_data);
 #endif
 
+#ifdef HAS_SYSFS_INTERFACE
+
+int syna_sysfs_create_dir(struct syna_tcm *ptcm,
+		struct platform_device *pdev);
+
+void syna_sysfs_remove_dir(struct syna_tcm *tcm);
+
 #endif
-int syna_set_bus_ref(struct syna_tcm *tcm, u32 ref, bool enable);
 
 #endif /* end of _SYNAPTICS_TCM2_DRIVER_H_ */
 
