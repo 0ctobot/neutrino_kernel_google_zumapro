@@ -263,7 +263,7 @@ set_type:
 #if IS_ENABLED(CONFIG_SEC_MODEM_S5100)
 	if (ld->interrupt_types == INTERRUPT_GPIO)
 		/* Raise DUMP_NOTI GPIO to CP */
-		s5100_force_crash_exit_ext();
+		s5100_force_crash_exit_ext(crash_type);
 #endif
 
 	mif_err("%s->%s: CP_CRASH_REQ by %d, %s <%ps>\n",
@@ -2697,7 +2697,7 @@ exit:
 	spin_unlock_irqrestore(&mc->pcie_tx_lock, flags);
 
 	if (unlikely(force_crash))
-		s5100_force_crash_exit_ext();
+		s5100_force_crash_exit_ext(CRASH_REASON_PCIE_DOORBELL_FALIURE_AP2CP_IRQ);
 }
 
 static inline u16 pcie_read_ap2cp_irq(struct mem_link_device *mld)
