@@ -201,6 +201,17 @@ enum tcm_scan_mode {
 };
 
 /**
+ * @section: Touch INT2 Production Configuration
+ *
+ * The current touch INT2.
+ */
+enum tcm_int2_production {
+	INT2_PRODUCTION_DISABLE = 0,
+	INT2_PRODUCTION_HIGH = 1,
+	INT2_PRODUCTION_LOW = 3,
+};
+
+/**
  * @section: Field IDs in Dynamic Configuration
  *
  * The codes specify the generic dynamic configuration options.
@@ -224,6 +235,7 @@ enum dynamic_tcm_config_id {
 	DC_INHIBIT_ACTIVE_GESTURE = 0x0f,
 	DC_DISABLE_PROXIMITY = 0x10,
 	DC_HIGH_SENSITIVIRY_MODE = 0xCB,
+	DC_INT2_PRODUCTION_CMD = 0xD2,
 	/* Set 0 for high report rate(240Hz), 1 for low report rate(120Hz). */
 	DC_REPORT_RATE_SWITCH = 0xE6,
 	DC_FORCE_DOZE_MODE = 0xF0,

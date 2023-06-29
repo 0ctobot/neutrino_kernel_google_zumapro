@@ -449,6 +449,129 @@ static struct kobj_attribute kobj_attr_irq_en =
 	__ATTR(irq_en, 0220, NULL, syna_sysfs_irq_en_store);
 
 /**
+ * syna_sysfs_int2_store()
+ *
+ * Attribute to set int2.
+ *
+ * @param
+ *    [ in] kobj:  an instance of kobj
+ *    [ in] attr:  an instance of kobj attribute structure
+ *    [ in] buf:   string buffer input
+ *    [ in] count: size of buffer input
+ *
+ * @return
+ *    on success, return count; otherwise, return error code
+ */
+static ssize_t syna_sysfs_int2_store(struct kobject *kobj,
+		struct kobj_attribute *attr, const char *buf, size_t count)
+{
+	int retval = 0;
+	u16 config;
+	unsigned int input;
+	struct device *p_dev;
+	struct kobject *p_kobj;
+	struct syna_tcm *tcm;
+
+	p_kobj = g_sysfs_dir->parent;
+	p_dev = container_of(p_kobj, struct device, kobj);
+	tcm = dev_get_drvdata(p_dev);
+
+	if (kstrtouint(buf, 10, &input))
+		return -EINVAL;
+
+	if (!tcm->is_connected) {
+		LOGW("Device is NOT connected\n");
+		return count;
+	}
+
+	syna_pal_mutex_lock(&g_extif_mutex);
+
+	/* Set int2 production mode disabled. */
+	if (input == 0) {
+		config = INT2_PRODUCTION_DISABLE;
+		LOGI("Set INT2 production mode disabled");
+	} else if (input == 1) {
+	/*  Set int2 as high. */
+		config = INT2_PRODUCTION_HIGH;
+		LOGI("Set INT2 production mode high");
+	} else if (input == 3) {
+	/*  Set int2 as low. */
+		config = INT2_PRODUCTION_LOW;
+		LOGI("Set INT2 production mode low");
+	} else {
+		LOGE("Unknown option.");
+		goto exit;
+	}
+
+	syna_tcm_set_dynamic_config(tcm->tcm_dev,
+			DC_INT2_PRODUCTION_CMD,
+			config,
+			RESP_IN_ATTN);
+
+exit:
+	retval = count;
+	syna_pal_mutex_unlock(&g_extif_mutex);
+	return retval;
+}
+
+/**
+ * syna_sysfs_int2_show()
+ *
+ * Attribute to show the int2 status.
+ *
+ * @param
+ *    [ in] kobj:  an instance of kobj
+ *    [ in] attr:  an instance of kobj attribute structure
+ *    [out] buf:  string buffer shown on console
+ *
+ * @return
+ *    on success, number of characters being output;
+ *    otherwise, negative value on error.
+ */
+static ssize_t syna_sysfs_int2_show(struct kobject *kobj,
+		struct kobj_attribute *attr, char *buf)
+{
+	int retval = 0;
+	u16 config;
+	struct device *p_dev;
+	struct kobject *p_kobj;
+	struct syna_tcm *tcm;
+
+	p_kobj = g_sysfs_dir->parent;
+	p_dev = container_of(p_kobj, struct device, kobj);
+	tcm = dev_get_drvdata(p_dev);
+
+	syna_pal_mutex_lock(&g_extif_mutex);
+
+	tcm->hw_if->ops_enable_irq(tcm->hw_if, false);
+
+	retval = syna_tcm_get_dynamic_config(tcm->tcm_dev, DC_INT2_PRODUCTION_CMD,
+			&config, RESP_IN_POLLING);
+
+	tcm->hw_if->ops_enable_irq(tcm->hw_if, true);
+
+	if (retval < 0) {
+		retval = scnprintf(buf, PAGE_SIZE, "Read failure.\n");
+	} else {
+		if (config == INT2_PRODUCTION_DISABLE)
+			retval = scnprintf(buf, PAGE_SIZE, "Disabled\n");
+		else if (config == INT2_PRODUCTION_HIGH)
+			retval = scnprintf(buf, PAGE_SIZE, "High\n");
+		else if (config == INT2_PRODUCTION_LOW)
+			retval = scnprintf(buf, PAGE_SIZE, "Low\n");
+		else
+			retval = scnprintf(buf, PAGE_SIZE, "Unknown value %u\n", config);
+	}
+
+	syna_pal_mutex_unlock(&g_extif_mutex);
+
+	return retval;
+}
+
+static struct kobj_attribute kobj_attr_int2 =
+	__ATTR(int2, 0644, syna_sysfs_int2_show, syna_sysfs_int2_store);
+
+/**
  * syna_sysfs_reset_store()
  *
  * Attribute to issue a reset.
@@ -1341,6 +1464,7 @@ static struct kobj_attribute kobj_attr_compression_threshold =
 static struct attribute *attrs[] = {
 	&kobj_attr_info.attr,
 	&kobj_attr_irq_en.attr,
+	&kobj_attr_int2.attr,
 	&kobj_attr_reset.attr,
 	&kobj_attr_scan_mode.attr,
 	&kobj_attr_force_active.attr,
