@@ -1524,7 +1524,7 @@ static ssize_t syna_testing_pt_moisture_show(struct kobject *kobj,
 	count += scnprintf(buf + count, PAGE_SIZE - count, "%d %d\n",
 			tcm->tcm_dev->cols, tcm->tcm_dev->rows);
 
-	if (retval == 0) {
+	if (test_data.buf) {
 		data_ptr = (short *)&(test_data.buf[0]);
 		for (i = 0; i < tcm->tcm_dev->rows; i++) {
 			for (j = 0; j < tcm->tcm_dev->cols; j++) {
