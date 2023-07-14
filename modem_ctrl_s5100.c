@@ -304,9 +304,16 @@ static irqreturn_t ap_wakeup_handler(int irq, void *data)
 {
 	struct modem_ctl *mc = (struct modem_ctl *)data;
 	int gpio_val = mif_gpio_get_value(&mc->cp_gpio[CP_GPIO_CP2AP_WAKEUP], true);
+	int wrst_gpio_val = mif_gpio_get_value(&mc->cp_gpio[CP_GPIO_CP2AP_CP_WRST_N], true);
 	unsigned long flags;
 
 	mif_disable_irq(&mc->cp_gpio_irq[CP_GPIO_IRQ_CP2AP_WAKEUP]);
+
+	/* To avoid holding on to the wakesource in case of a race condition */
+	if (wrst_gpio_val) {
+		mif_info("release wrst lock in ap_wakeup\n");
+		cpif_wake_unlock(mc->ws_wrst);
+	}
 
 	if (mc->device_reboot) {
 		mif_err("skip : device is rebooting..!!!\n");
@@ -416,6 +423,55 @@ irq_done:
 	return IRQ_HANDLED;
 }
 
+
+static irqreturn_t cp_wrst_handler(int irq, void *data)
+{
+	struct modem_ctl *mc = (struct modem_ctl *)data;
+	int gpio_val = mif_gpio_get_value(&mc->cp_gpio[CP_GPIO_CP2AP_CP_WRST_N], true);
+
+	mif_disable_irq(&mc->cp_gpio_irq[CP_GPIO_IRQ_CP2AP_CP_WRST_N]);
+
+	if (gpio_val == 0) {
+		mif_info("acquire wrst lock\n");
+		cpif_wake_lock(mc->ws_wrst);
+	} else {
+		mif_info("release wrst lock\n");
+		cpif_wake_unlock(mc->ws_wrst);
+	}
+
+	mc->cp_wrst_irq_chip->irq_set_type(
+		irq_get_irq_data(mc->cp_gpio_irq[CP_GPIO_IRQ_CP2AP_CP_WRST_N].num),
+		(gpio_val == 1 ? IRQF_TRIGGER_LOW : IRQF_TRIGGER_HIGH));
+	mif_enable_irq(&mc->cp_gpio_irq[CP_GPIO_IRQ_CP2AP_CP_WRST_N]);
+
+	return IRQ_HANDLED;
+}
+
+static int register_cp_wrst_interrupt(struct modem_ctl *mc)
+{
+	int ret;
+
+	if (mc == NULL)
+		return -EINVAL;
+
+	if (mc->cp_gpio_irq[CP_GPIO_IRQ_CP2AP_CP_WRST_N].registered)
+		return 0;
+
+	mif_info("Register CP_WRST interrupt.\n");
+	mif_init_irq(&mc->cp_gpio_irq[CP_GPIO_IRQ_CP2AP_CP_WRST_N],
+		     mc->cp_gpio_irq[CP_GPIO_IRQ_CP2AP_CP_WRST_N].num,
+		     "cp_wrst", IRQF_TRIGGER_LOW);
+
+	ret = mif_request_irq(&mc->cp_gpio_irq[CP_GPIO_IRQ_CP2AP_CP_WRST_N],
+			cp_wrst_handler, mc);
+	if (ret)
+		mif_err("%s: ERR! request_irq(%s#%d) fail (%d)\n",
+			mc->name, mc->cp_gpio_irq[CP_GPIO_IRQ_CP2AP_CP_WRST_N].name,
+			mc->cp_gpio_irq[CP_GPIO_IRQ_CP2AP_CP_WRST_N].num, ret);
+
+	return ret;
+}
+
 static int register_phone_active_interrupt(struct modem_ctl *mc)
 {
 	int ret;
@@ -518,7 +574,8 @@ static ssize_t s5100_wake_lock_show(struct device *dev, struct device_attribute 
 {
 	struct modem_ctl *mc = dev_get_drvdata(dev);
 
-	return scnprintf(buf, PAGE_SIZE, "%d\n", cpif_wake_lock_active(mc->ws));
+	return scnprintf(buf, PAGE_SIZE, "%d, %d\n", cpif_wake_lock_active(mc->ws),
+			cpif_wake_lock_active(mc->ws_wrst));
 }
 
 static ssize_t s5100_wake_lock_store(struct device *dev, struct device_attribute *attr,
@@ -909,6 +966,7 @@ static int power_on_cp(struct modem_ctl *mc)
 
 	mif_disable_irq(&mc->cp_gpio_irq[CP_GPIO_IRQ_CP2AP_CP_ACTIVE]);
 	mif_disable_irq(&mc->cp_gpio_irq[CP_GPIO_IRQ_CP2AP_WAKEUP]);
+
 	drain_workqueue(mc->wakeup_wq);
 
 	print_mc_state(mc);
@@ -974,6 +1032,7 @@ static int power_shutdown_cp(struct modem_ctl *mc)
 
 	mif_disable_irq(&mc->cp_gpio_irq[CP_GPIO_IRQ_CP2AP_CP_ACTIVE]);
 	mif_disable_irq(&mc->cp_gpio_irq[CP_GPIO_IRQ_CP2AP_WAKEUP]);
+
 	drain_workqueue(mc->wakeup_wq);
 
 	/* wait for cp_active for 3 seconds */
@@ -1016,6 +1075,7 @@ static int power_reset_dump_cp(struct modem_ctl *mc, bool silent)
 	mc->phone_state = STATE_CRASH_EXIT;
 	mif_disable_irq(&mc->cp_gpio_irq[CP_GPIO_IRQ_CP2AP_CP_ACTIVE]);
 	mif_disable_irq(&mc->cp_gpio_irq[CP_GPIO_IRQ_CP2AP_WAKEUP]);
+
 	drain_workqueue(mc->wakeup_wq);
 	pcie_clean_dislink(mc);
 
@@ -1350,6 +1410,11 @@ static int complete_normal_boot(struct modem_ctl *mc)
 		mif_err("Err: register_cp2ap_wakeup_interrupt:%d\n", err);
 	mif_enable_irq(&mc->cp_gpio_irq[CP_GPIO_IRQ_CP2AP_WAKEUP]);
 
+	err = register_cp_wrst_interrupt(mc);
+	if (err)
+		mif_err("Err: register_cp_wrst_interrupt:%d\n", err);
+	mif_disable_irq(&mc->cp_gpio_irq[CP_GPIO_IRQ_CP2AP_CP_WRST_N]);
+
 	print_mc_state(mc);
 
 	mc->device_reboot = false;
@@ -1417,6 +1482,7 @@ static int trigger_cp_crash_internal(struct modem_ctl *mc)
 		mif_gpio_set_value(&mc->cp_gpio[CP_GPIO_AP2CP_DUMP_NOTI], 1, 0);
 #endif
 		mif_disable_irq(&mc->cp_gpio_irq[CP_GPIO_IRQ_CP2AP_WAKEUP]);
+
 		drain_workqueue(mc->wakeup_wq);
 	} else {
 		mif_err("do not need to set dump_noti\n");
@@ -1708,6 +1774,7 @@ int s5100_poweron_pcie(struct modem_ctl *mc, enum link_up_mode mode)
 
 	if (!boot_on)
 		mif_gpio_set_value(&mc->cp_gpio[CP_GPIO_AP2CP_WAKEUP], 1, 5);
+
 	print_mc_state(mc);
 
 	spin_lock_irqsave(&mc->pcie_tx_lock, flags);
@@ -1997,6 +2064,7 @@ static int s5100_get_pdata(struct modem_ctl *mc, struct modem_data *pdata)
 	/* irq */
 	mc->cp_gpio[CP_GPIO_CP2AP_WAKEUP].irq_type = CP_GPIO_IRQ_CP2AP_WAKEUP;
 	mc->cp_gpio[CP_GPIO_CP2AP_CP_ACTIVE].irq_type = CP_GPIO_IRQ_CP2AP_CP_ACTIVE;
+	mc->cp_gpio[CP_GPIO_CP2AP_CP_WRST_N].irq_type = CP_GPIO_IRQ_CP2AP_CP_WRST_N;
 
 	/* gpio */
 	for (i = 0; i < CP_GPIO_MAX; i++) {
@@ -2066,11 +2134,13 @@ static int s5100_call_state_notifier(struct notifier_block *nb,
 	switch (action) {
 	case MODEM_VOICE_CALL_OFF:
 		mc->pcie_voice_call_on = false;
+		mif_disable_irq(&mc->cp_gpio_irq[CP_GPIO_IRQ_CP2AP_CP_WRST_N]);
 		queue_work_on(RUNTIME_PM_AFFINITY_CORE, mc->wakeup_wq,
 			&mc->call_off_work);
 		break;
 	case MODEM_VOICE_CALL_ON:
 		mc->pcie_voice_call_on = true;
+		mif_enable_irq(&mc->cp_gpio_irq[CP_GPIO_IRQ_CP2AP_CP_WRST_N]);
 		queue_work_on(RUNTIME_PM_AFFINITY_CORE, mc->wakeup_wq,
 			&mc->call_on_work);
 		break;
@@ -2129,7 +2199,8 @@ int s5100_init_modemctl_device(struct modem_ctl *mc, struct modem_data *pdata)
 	dev_set_drvdata(mc->dev, mc);
 
 	mc->ws = cpif_wake_lock_register(&pdev->dev, "s5100_wake_lock");
-	if (mc->ws == NULL) {
+	mc->ws_wrst = cpif_wake_lock_register(&pdev->dev, "s5100_wrst_wake_lock");
+	if ((mc->ws == NULL) || (mc->ws_wrst == NULL)) {
 		mif_err("s5100_wake_lock: wakeup_source_register fail\n");
 		ret = -EINVAL;
 		goto err_wake_lock_register;
@@ -2149,7 +2220,9 @@ int s5100_init_modemctl_device(struct modem_ctl *mc, struct modem_data *pdata)
 
 	mif_info("Register GPIO interrupts\n");
 	mc->apwake_irq_chip = irq_get_chip(mc->cp_gpio_irq[CP_GPIO_IRQ_CP2AP_WAKEUP].num);
-	if (mc->apwake_irq_chip == NULL) {
+	mc->cp_wrst_irq_chip = irq_get_chip(
+			mc->cp_gpio_irq[CP_GPIO_IRQ_CP2AP_CP_WRST_N].num);
+	if (mc->apwake_irq_chip == NULL || mc->cp_wrst_irq_chip == NULL) {
 		mif_err("Can't get irq_chip structure!!!!\n");
 		ret = -EINVAL;
 		goto err_irq_get_chip;
@@ -2234,6 +2307,7 @@ err_crash_wq:
 	destroy_workqueue(mc->wakeup_wq);
 err_irq_get_chip:
 	cpif_wake_lock_unregister(mc->ws);
+	cpif_wake_lock_unregister(mc->ws_wrst);
 err_wake_lock_register:
 	g_mc = NULL;
 	return ret;
@@ -2257,5 +2331,6 @@ void s5100_uninit_modemctl_device(struct modem_ctl *mc, struct modem_data *pdata
 	mutex_destroy(&mc->pcie_check_lock);
 	mutex_destroy(&mc->pcie_onoff_lock);
 	cpif_wake_lock_unregister(mc->ws);
+	cpif_wake_lock_unregister(mc->ws_wrst);
 	g_mc = NULL;
 }
