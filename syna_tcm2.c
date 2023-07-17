@@ -190,6 +190,15 @@ static int gti_default_handler(void *private_data, enum gti_cmd_type cmd_type,
 
 	return ret;
 }
+
+static int get_fw_version(void *private_data, struct gti_fw_version_cmd *cmd)
+{
+	struct syna_tcm *tcm = private_data;
+	int cmd_buffer_size = sizeof(cmd->buffer);
+
+	syna_get_fw_info(tcm, cmd->buffer, cmd_buffer_size);
+	return 0;
+}
 #endif
 
 /**
@@ -2385,6 +2394,9 @@ static int syna_dev_probe(struct platform_device *pdev)
 #if IS_ENABLED(CONFIG_GOOG_TOUCH_INTERFACE)
 	pdev->dev.of_node = pdev->dev.parent->of_node;
 	options = devm_kzalloc(&pdev->dev, sizeof(struct gti_optional_configuration), GFP_KERNEL);
+
+	options->get_fw_version = get_fw_version;
+
 	tcm->gti = goog_touch_interface_probe(
 		tcm, &pdev->dev, tcm->input_dev, gti_default_handler, options);
 

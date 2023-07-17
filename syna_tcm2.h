@@ -577,5 +577,7 @@ void syna_sysfs_remove_dir(struct syna_tcm *tcm);
 
 #endif
 
+ssize_t syna_get_fw_info(struct syna_tcm *tcm, char *buf, size_t buf_size);
+
 #endif /* end of _SYNAPTICS_TCM2_DRIVER_H_ */
 

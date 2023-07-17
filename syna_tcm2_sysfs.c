@@ -49,6 +49,204 @@
 static struct kobject *g_sysfs_dir;
 
 /**
+ * syna_get_fw_info()
+ *
+ * Output the device and driver information.
+ *
+ * @param
+ *    [ in] tcm: the driver handle
+ *    [out] buf:  string buffer for the firmware and the driver information
+ *    [ in] buf_size: size of the buf
+ *
+ * @return
+ *    on success, number of characters being output;
+ *    otherwise, negative value on error.
+ */
+ssize_t syna_get_fw_info(struct syna_tcm *tcm, char *buf, size_t buf_size)
+{
+	int retval;
+	int i;
+	unsigned int count;
+	struct tcm_dev *tcm_dev;
+
+	tcm_dev = tcm->tcm_dev;
+
+	count = 0;
+
+	retval = scnprintf(buf, buf_size - count,
+			"Driver version:     %d.%s\n",
+			SYNAPTICS_TCM_DRIVER_VERSION,
+			SYNAPTICS_TCM_DRIVER_SUBVER);
+	if (retval < 0)
+		goto exit;
+
+	buf += retval;
+	count += retval;
+
+	retval = scnprintf(buf, buf_size - count,
+			"Core lib version:   %d.%02d\n\n",
+			(unsigned char)(SYNA_TCM_CORE_LIB_VERSION >> 8),
+			(unsigned char)SYNA_TCM_CORE_LIB_VERSION);
+	if (retval < 0)
+		goto exit;
+
+	buf += retval;
+	count += retval;
+
+	if (!tcm->is_connected) {
+		retval = scnprintf(buf, buf_size - count,
+				"Device is NOT connected\n");
+		count += retval;
+		retval = count;
+		goto exit;
+	}
+
+	if (tcm->pwr_state == BARE_MODE) {
+		retval = count;
+		goto exit;
+	}
+
+	retval = scnprintf(buf, buf_size - count,
+			"TouchComm version:  %d\n", tcm_dev->id_info.version);
+	if (retval < 0)
+		goto exit;
+
+	buf += retval;
+	count += retval;
+
+	switch (tcm_dev->id_info.mode) {
+	case MODE_APPLICATION_FIRMWARE:
+		retval = scnprintf(buf, buf_size - count,
+				"Firmware mode:      Application Firmware, 0x%02x\n",
+				tcm_dev->id_info.mode);
+		if (retval < 0)
+			goto exit;
+		break;
+	case MODE_BOOTLOADER:
+		retval = scnprintf(buf, buf_size - count,
+				"Firmware mode:      Bootloader, 0x%02x\n",
+				tcm_dev->id_info.mode);
+		if (retval < 0)
+			goto exit;
+		break;
+	case MODE_ROMBOOTLOADER:
+		retval = scnprintf(buf, buf_size - count,
+				"Firmware mode:      Rom Bootloader, 0x%02x\n",
+				tcm_dev->id_info.mode);
+		if (retval < 0)
+			goto exit;
+		break;
+	default:
+		retval = scnprintf(buf, buf_size - count,
+				"Firmware mode:      Mode 0x%02x\n",
+				tcm_dev->id_info.mode);
+		if (retval < 0)
+			goto exit;
+		break;
+	}
+	buf += retval;
+	count += retval;
+
+	retval = scnprintf(buf, buf_size - count,
+			"Part number:        %s", tcm_dev->id_info.part_number);
+	if (retval < 0)
+		goto exit;
+
+	buf += retval;
+	count += retval;
+
+	retval = scnprintf(buf, buf_size - count, "\n");
+	if (retval < 0)
+		goto exit;
+
+	buf += retval;
+	count += retval;
+
+	retval = scnprintf(buf, buf_size - count,
+			"Packrat number:     %d\n\n", tcm_dev->packrat_number);
+	if (retval < 0)
+		goto exit;
+
+	buf += retval;
+	count += retval;
+
+	if (tcm_dev->id_info.mode != MODE_APPLICATION_FIRMWARE) {
+		retval = count;
+		goto exit;
+	}
+
+	retval = scnprintf(buf, buf_size - count, "Config ID:          ");
+	if (retval < 0)
+		goto exit;
+
+	buf += retval;
+	count += retval;
+
+	for (i = 0; i < MAX_SIZE_CONFIG_ID; i++) {
+		retval = scnprintf(buf, buf_size - count,
+			"0x%2x ", tcm_dev->config_id[i]);
+		if (retval < 0)
+			goto exit;
+		buf += retval;
+		count += retval;
+	}
+
+	retval = scnprintf(buf, buf_size - count, "\n");
+	if (retval < 0)
+		goto exit;
+
+	buf += retval;
+	count += retval;
+
+	retval = scnprintf(buf, buf_size - count,
+		"Max X & Y:          %d, %d\n", tcm_dev->max_x, tcm_dev->max_y);
+	if (retval < 0)
+		goto exit;
+
+	buf += retval;
+	count += retval;
+
+	retval = scnprintf(buf, buf_size - count,
+		"Num of objects:     %d\n", tcm_dev->max_objects);
+	if (retval < 0)
+		goto exit;
+
+	buf += retval;
+	count += retval;
+
+	retval = scnprintf(buf, buf_size - count,
+		"Num of cols & rows: %d, %d\n", tcm_dev->cols, tcm_dev->rows);
+	if (retval < 0)
+		goto exit;
+
+	buf += retval;
+	count += retval;
+
+	retval = snprintf(buf, buf_size - count,
+		"Max. Read Size:     %d bytes\n", tcm_dev->max_rd_size);
+	if (retval < 0)
+		goto exit;
+
+	buf += retval;
+	count += retval;
+
+	retval = snprintf(buf, buf_size - count,
+		"Max. Write Size:    %d bytes\n", tcm_dev->max_wr_size);
+	if (retval < 0)
+		goto exit;
+
+	buf += retval;
+	count += retval;
+
+	retval = count;
+
+exit:
+	if (retval < 0)
+		LOGE("Failed to get firmware info");
+
+	return retval;
+}
+/**
  * syna_sysfs_info_show()
  *
  * Attribute to show the device and driver information to the console.
@@ -66,198 +264,15 @@ static ssize_t syna_sysfs_info_show(struct kobject *kobj,
 		struct kobj_attribute *attr, char *buf)
 {
 	int retval;
-	unsigned int count;
 	struct device *p_dev;
 	struct kobject *p_kobj;
 	struct syna_tcm *tcm;
-	struct tcm_dev *tcm_dev;
-	int i;
 
 	p_kobj = g_sysfs_dir->parent;
 	p_dev = container_of(p_kobj, struct device, kobj);
 	tcm = dev_get_drvdata(p_dev);
-	tcm_dev = tcm->tcm_dev;
 
-	count = 0;
-
-	retval = scnprintf(buf, PAGE_SIZE - count,
-			"Driver version:     %d.%s\n",
-			SYNAPTICS_TCM_DRIVER_VERSION,
-			SYNAPTICS_TCM_DRIVER_SUBVER);
-	if (retval < 0)
-		goto exit;
-
-	buf += retval;
-	count += retval;
-
-	retval = scnprintf(buf, PAGE_SIZE - count,
-			"Core lib version:   %d.%02d\n\n",
-			(unsigned char)(SYNA_TCM_CORE_LIB_VERSION >> 8),
-			(unsigned char)SYNA_TCM_CORE_LIB_VERSION);
-	if (retval < 0)
-		goto exit;
-
-	buf += retval;
-	count += retval;
-
-	if (!tcm->is_connected) {
-		retval = scnprintf(buf, PAGE_SIZE - count,
-				"Device is NOT connected\n");
-		count += retval;
-		retval = count;
-		goto exit;
-	}
-
-	if (tcm->pwr_state == BARE_MODE) {
-		retval = count;
-		goto exit;
-	}
-
-	retval = scnprintf(buf, PAGE_SIZE - count,
-			"TouchComm version:  %d\n", tcm_dev->id_info.version);
-	if (retval < 0)
-		goto exit;
-
-	buf += retval;
-	count += retval;
-
-	switch (tcm_dev->id_info.mode) {
-	case MODE_APPLICATION_FIRMWARE:
-		retval = scnprintf(buf, PAGE_SIZE - count,
-				"Firmware mode:      Application Firmware, 0x%02x\n",
-				tcm_dev->id_info.mode);
-		if (retval < 0)
-			goto exit;
-		break;
-	case MODE_BOOTLOADER:
-		retval = scnprintf(buf, PAGE_SIZE - count,
-				"Firmware mode:      Bootloader, 0x%02x\n",
-				tcm_dev->id_info.mode);
-		if (retval < 0)
-			goto exit;
-		break;
-	case MODE_ROMBOOTLOADER:
-		retval = scnprintf(buf, PAGE_SIZE - count,
-				"Firmware mode:      Rom Bootloader, 0x%02x\n",
-				tcm_dev->id_info.mode);
-		if (retval < 0)
-			goto exit;
-		break;
-	default:
-		retval = scnprintf(buf, PAGE_SIZE - count,
-				"Firmware mode:      Mode 0x%02x\n",
-				tcm_dev->id_info.mode);
-		if (retval < 0)
-			goto exit;
-		break;
-	}
-	buf += retval;
-	count += retval;
-
-	retval = scnprintf(buf, PAGE_SIZE - count,
-			"Part number:        ");
-	if (retval < 0)
-		goto exit;
-
-	buf += retval;
-	count += retval;
-
-	retval = syna_pal_mem_cpy(buf,
-			PAGE_SIZE - count,
-			tcm_dev->id_info.part_number,
-			sizeof(tcm_dev->id_info.part_number),
-			sizeof(tcm_dev->id_info.part_number));
-	if (retval < 0) {
-		LOGE("Fail to copy part number string\n");
-		goto exit;
-	}
-	buf += sizeof(tcm_dev->id_info.part_number);
-	count += sizeof(tcm_dev->id_info.part_number);
-
-	retval = scnprintf(buf, PAGE_SIZE - count, "\n");
-	if (retval < 0)
-		goto exit;
-
-	buf += retval;
-	count += retval;
-
-	retval = scnprintf(buf, PAGE_SIZE - count,
-			"Packrat number:     %d\n\n", tcm_dev->packrat_number);
-	if (retval < 0)
-		goto exit;
-
-	buf += retval;
-	count += retval;
-
-	if (tcm_dev->id_info.mode != MODE_APPLICATION_FIRMWARE) {
-		retval = count;
-		goto exit;
-	}
-
-	retval = scnprintf(buf, PAGE_SIZE - count, "Config ID:          ");
-	if (retval < 0)
-		goto exit;
-
-	buf += retval;
-	count += retval;
-
-	for (i = 0; i < MAX_SIZE_CONFIG_ID; i++) {
-		retval = scnprintf(buf, PAGE_SIZE - count,
-			"0x%2x ", tcm_dev->config_id[i]);
-		if (retval < 0)
-			goto exit;
-		buf += retval;
-		count += retval;
-	}
-
-	retval = scnprintf(buf, PAGE_SIZE - count, "\n");
-	if (retval < 0)
-		goto exit;
-
-	buf += retval;
-	count += retval;
-
-	retval = scnprintf(buf, PAGE_SIZE - count,
-		"Max X & Y:          %d, %d\n", tcm_dev->max_x, tcm_dev->max_y);
-	if (retval < 0)
-		goto exit;
-
-	buf += retval;
-	count += retval;
-
-	retval = scnprintf(buf, PAGE_SIZE - count,
-		"Num of objects:     %d\n", tcm_dev->max_objects);
-	if (retval < 0)
-		goto exit;
-
-	buf += retval;
-	count += retval;
-
-	retval = scnprintf(buf, PAGE_SIZE - count,
-		"Num of cols & rows: %d, %d\n", tcm_dev->cols, tcm_dev->rows);
-	if (retval < 0)
-		goto exit;
-
-	buf += retval;
-	count += retval;
-
-	retval = snprintf(buf, PAGE_SIZE - count,
-		"Max. Read Size:     %d bytes\n", tcm_dev->max_rd_size);
-	if (retval < 0)
-		goto exit;
-
-	buf += retval;
-	count += retval;
-
-	retval = snprintf(buf, PAGE_SIZE - count,
-		"Max. Write Size:    %d bytes\n", tcm_dev->max_wr_size);
-	if (retval < 0)
-		goto exit;
-
-	buf += retval;
-	count += retval;
-
-	retval = count;
+	retval = syna_get_fw_info(tcm, buf, PAGE_SIZE);
 
 exit:
 	return retval;
