@@ -726,6 +726,10 @@ static void syna_dev_report_input_events(struct syna_tcm *tcm)
 	if (tcm->pwr_state == LOW_PWR)
 		goto exit;
 
+#if IS_ENABLED(CONFIG_GOOG_TOUCH_INTERFACE)
+	goog_input_set_timestamp(tcm->gti, input_dev, tcm->timestamp);
+#endif
+
 	touch_count = 0;
 
 	for (idx = 0; idx < max_objects; idx++) {
@@ -857,7 +861,6 @@ static void syna_dev_report_input_events(struct syna_tcm *tcm)
 		goog_input_report_key(tcm->gti, input_dev, BTN_TOOL_FINGER, 0);
 	}
 
-	goog_input_set_timestamp(tcm->gti, input_dev, tcm->timestamp);
 	goog_input_sync(tcm->gti, input_dev);
 #else
 	if (touch_count == 0) {
@@ -1292,6 +1295,11 @@ static int syna_dev_request_irq(struct syna_tcm *tcm)
 	attn->irq_id = gpio_to_irq(attn->irq_gpio);
 
 #ifdef DEV_MANAGED_API
+#if IS_ENABLED(CONFIG_GOOG_TOUCH_INTERFACE)
+	retval = goog_devm_request_threaded_irq(tcm->gti, &tcm->pdev->dev,
+			attn->irq_id, syna_dev_isr, syna_dev_interrupt_thread,
+			attn->irq_flags, PLATFORM_DRIVER_NAME, tcm);
+#else
 	retval = devm_request_threaded_irq(dev,
 			attn->irq_id,
 			syna_dev_isr,
@@ -1299,6 +1307,7 @@ static int syna_dev_request_irq(struct syna_tcm *tcm)
 			attn->irq_flags,
 			PLATFORM_DRIVER_NAME,
 			tcm);
+#endif
 #else /* Legacy API */
 	retval = request_threaded_irq(attn->irq_id,
 			syna_dev_isr,
