@@ -697,6 +697,96 @@ exit:
 static struct kobj_attribute kobj_attr_scan_mode =
 	__ATTR(scan_mode, 0220, NULL, syna_sysfs_scan_mode_store);
 
+#if IS_ENABLED(CONFIG_GOOG_TOUCH_INTERFACE)
+/**
+ * syna_sysfs_force_active_store()
+ *
+ * Attribute to set different scan mode.
+ * 0x10 - Set SYNA_BUS_REF_FORCE_ACTIVE bit 0.
+ * 0x11 - Set SYNA_BUS_REF_FORCE_ACTIVE bit 1.
+ * 0x20 - Set SYNA_BUS_REF_BUGREPORT bit 0.
+ * 0x21 - Set SYNA_BUS_REF_BUGREPORT bit 1.
+ *
+ * @param
+ *    [ in] kobj:  an instance of kobj
+ *    [ in] attr:  an instance of kobj attribute structure
+ *    [ in] buf:   string buffer input
+ *    [ in] count: size of buffer input
+ *
+ * @return
+ *    on success, return count; otherwise, return error code
+ */
+static ssize_t syna_sysfs_force_active_store(struct kobject *kobj,
+		struct kobj_attribute *attr, const char *buf, size_t count)
+{
+	int retval = 0;
+	unsigned char input;
+	struct device *p_dev;
+	struct kobject *p_kobj;
+	struct syna_tcm *tcm;
+	bool active;
+	u32 ref = 0;
+
+	p_kobj = g_sysfs_dir->parent;
+	p_dev = container_of(p_kobj, struct device, kobj);
+	tcm = dev_get_drvdata(p_dev);
+
+	if (kstrtou8(buf, 16, &input))
+		return -EINVAL;
+
+	if (!tcm->is_connected) {
+		LOGW("Device is NOT connected\n");
+		retval = count;
+		goto exit;
+	}
+
+	switch (input) {
+	case 0x10:
+		ref = GTI_PM_WAKELOCK_TYPE_FORCE_ACTIVE;
+		active = false;
+		break;
+	case 0x11:
+		ref = GTI_PM_WAKELOCK_TYPE_FORCE_ACTIVE;
+		active = true;
+		break;
+	case 0x20:
+		ref = GTI_PM_WAKELOCK_TYPE_BUGREPORT;
+		active = false;
+		break;
+	case 0x21:
+		ref = GTI_PM_WAKELOCK_TYPE_BUGREPORT;
+		active = true;
+		break;
+	default:
+		LOGE("Invalid input %#x.\n", input);
+		retval = -EINVAL;
+		goto exit;
+	}
+
+	LOGI("Set pm wake bit %#x %s.", ref,
+	     active ? "enable" : "disable");
+
+	if (active)
+		retval = goog_pm_wake_lock(tcm->gti, ref, false);
+	else
+		retval = goog_pm_wake_unlock_nosync(tcm->gti, ref);
+
+	if (retval < 0) {
+		LOGE("Set pm wake bit %#x %s failed.", ref,
+				active ? "enable" : "disable");
+		goto exit;
+	}
+
+	retval = count;
+
+exit:
+	return retval;
+}
+
+static struct kobj_attribute kobj_attr_force_active =
+	__ATTR(force_active, 0220, NULL, syna_sysfs_force_active_store);
+#endif
+
 /**
  * syna_sysfs_get_raw_data_show()
  *
@@ -1186,6 +1276,9 @@ static struct attribute *attrs[] = {
 	&kobj_attr_reset.attr,
 	&kobj_attr_pwr.attr,
 	&kobj_attr_scan_mode.attr,
+#if IS_ENABLED(CONFIG_GOOG_TOUCH_INTERFACE)
+	&kobj_attr_force_active.attr,
+#endif
 	&kobj_attr_get_raw_data.attr,
 	&kobj_attr_high_sensitivity.attr,
 	&kobj_attr_fw_grip.attr,
