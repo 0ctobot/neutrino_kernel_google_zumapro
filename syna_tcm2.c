@@ -2407,8 +2407,8 @@ static int syna_dev_probe(struct platform_device *pdev)
 		goto err_request_irq;
 	}
 
-	tcm->enable_fw_grip = 0x00;
-	tcm->enable_fw_palm = 0x01;
+	tcm->enable_fw_grip = 0x02;
+	tcm->enable_fw_palm = 0x02;
 	syna_dev_restore_feature_setting(tcm, RESP_IN_POLLING);
 
 	/* for the reference,
