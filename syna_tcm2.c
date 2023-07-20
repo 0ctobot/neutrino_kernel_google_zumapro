@@ -199,6 +199,44 @@ static int get_fw_version(void *private_data, struct gti_fw_version_cmd *cmd)
 	syna_get_fw_info(tcm, cmd->buffer, cmd_buffer_size);
 	return 0;
 }
+
+static int get_irq_mode(void *private_data, struct gti_irq_cmd *cmd)
+{
+	struct syna_tcm *tcm = private_data;
+
+	cmd->setting = tcm->hw_if->bdata_attn.irq_enabled ?
+			GTI_IRQ_MODE_ENABLE : GTI_IRQ_MODE_DISABLE;
+
+	return 0;
+}
+
+static int set_irq_mode(void *private_data, struct gti_irq_cmd *cmd)
+{
+	struct syna_tcm *tcm = private_data;
+
+	return tcm->hw_if->ops_enable_irq(tcm->hw_if, cmd->setting == GTI_IRQ_MODE_ENABLE);
+}
+
+static int set_reset(void *private_data, struct gti_reset_cmd *cmd)
+{
+	struct syna_tcm *tcm = private_data;
+
+	if (goog_pm_wake_get_locks(tcm->gti) == 0 || tcm->pwr_state != PWR_ON) {
+		LOGI("Connot trigger reset because touch is off");
+		return -EPERM;
+	}
+
+	if (cmd->setting == GTI_RESET_MODE_HW || cmd->setting == GTI_RESET_MODE_AUTO) {
+		tcm->hw_if->ops_hw_reset(tcm->hw_if);
+	} else if (cmd->setting == GTI_RESET_MODE_SW) {
+		syna_tcm_reset(tcm->tcm_dev);
+		syna_dev_restore_feature_setting(tcm, RESP_IN_ATTN);
+	} else {
+		return -EOPNOTSUPP;
+	}
+
+	return 0;
+}
 #endif
 
 /**
@@ -252,6 +290,12 @@ static void syna_dev_set_heatmap_mode(struct syna_tcm *tcm, bool en)
  */
 static void syna_dev_restore_feature_setting(struct syna_tcm *tcm, unsigned int delay_ms_resp)
 {
+	LOGI("Restore touch feature settings.");
+
+#if IS_ENABLED(CONFIG_GOOG_TOUCH_INTERFACE)
+	goog_notify_fw_status_changed(tcm->gti, GTI_FW_STATUS_RESET, NULL);
+#endif
+
 	syna_dev_set_heatmap_mode(tcm, true);
 
 	syna_tcm_set_dynamic_config(tcm->tcm_dev,
@@ -2440,6 +2484,9 @@ static int syna_dev_probe(struct platform_device *pdev)
 	options = devm_kzalloc(&pdev->dev, sizeof(struct gti_optional_configuration), GFP_KERNEL);
 
 	options->get_fw_version = get_fw_version;
+	options->get_irq_mode = get_irq_mode;
+	options->set_irq_mode = set_irq_mode;
+	options->reset = set_reset;
 
 	tcm->gti = goog_touch_interface_probe(
 		tcm, &pdev->dev, tcm->input_dev, gti_default_handler, options);
