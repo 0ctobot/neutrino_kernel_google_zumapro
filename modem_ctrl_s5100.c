@@ -1506,10 +1506,15 @@ static int trigger_cp_crash_internal(struct modem_ctl *mc)
 	struct link_device *ld = get_current_link(mc->bootd);
 	struct mem_link_device *mld = to_mem_link_device(ld);
 	u32 crash_type;
+	char reason[CP_CRASH_INFO_SIZE] = "Forced crash call";
 
 	if (ld->crash_reason.type == CRASH_REASON_NONE)
 		ld->crash_reason.type = CRASH_REASON_MIF_FORCED;
 	crash_type = ld->crash_reason.type;
+
+	if (strlen(ld->crash_reason.string) > 0)
+		snprintf(reason, CP_CRASH_INFO_SIZE, "Forced crash call by %s", ld->crash_reason.string);
+
 
 	mif_err("+++\n");
 
@@ -1539,7 +1544,7 @@ static int trigger_cp_crash_internal(struct modem_ctl *mc)
 		mif_err("do not need to set dump_noti\n");
 	}
 
-	ld->link_trigger_cp_crash(mld, crash_type, "Forced crash is called");
+	ld->link_trigger_cp_crash(mld, crash_type, reason);
 
 exit:
 	mif_err("---\n");
@@ -1562,6 +1567,7 @@ static int trigger_cp_crash(struct modem_ctl *mc)
 int s5100_force_crash_exit_ext(enum crash_type type)
 {
 	struct link_device *ld = get_current_link(g_mc->bootd);
+
 	ld->crash_reason.type = type;
 
 	if (g_mc)
@@ -1570,8 +1576,13 @@ int s5100_force_crash_exit_ext(enum crash_type type)
 	return 0;
 }
 
-int modem_force_crash_exit_ext(void)
+int modem_force_crash_exit_ext(const char *buf)
 {
+	struct link_device *ld = get_current_link(g_mc->bootd);
+
+	if (strlen(buf) > 0)
+		strncpy(ld->crash_reason.string, buf, CP_CRASH_INFO_SIZE);
+
 	return s5100_force_crash_exit_ext(CRASH_REASON_MIF_FORCED);
 }
 EXPORT_SYMBOL(modem_force_crash_exit_ext);

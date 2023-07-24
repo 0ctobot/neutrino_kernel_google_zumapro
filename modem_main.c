@@ -688,7 +688,7 @@ static enum mif_sim_mode get_sim_mode(struct device_node *of_node)
 static ssize_t do_cp_crash_store(struct device *dev, struct device_attribute *attr,
 		const char *buf, size_t count)
 {
-	modem_force_crash_exit_ext();
+	modem_force_crash_exit_ext(buf);
 
 	return count;
 }
