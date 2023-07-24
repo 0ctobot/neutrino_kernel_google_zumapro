@@ -818,6 +818,8 @@ static void gpio_power_off_cp(struct modem_ctl *mc)
 	mif_gpio_set_value(&mc->cp_gpio[CP_GPIO_AP2CP_NRESET], 0, 50);
 	mif_gpio_set_value(&mc->cp_gpio[CP_GPIO_AP2CP_CP_PWR], 0, 0);
 #else
+	mif_gpio_set_value(&mc->cp_gpio[CP_GPIO_AP2CP_WAKEUP], 1, 10);
+	mif_gpio_set_value(&mc->cp_gpio[CP_GPIO_AP2CP_WAKEUP], 0, 0);
 	mif_gpio_set_value(&mc->cp_gpio[CP_GPIO_AP2CP_NRESET], 0, 0);
 	mif_gpio_set_value(&mc->cp_gpio[CP_GPIO_AP2CP_CP_WRST_N], 0, 0);
 	mif_gpio_set_value(&mc->cp_gpio[CP_GPIO_AP2CP_CP_PWR], 0, 30);
