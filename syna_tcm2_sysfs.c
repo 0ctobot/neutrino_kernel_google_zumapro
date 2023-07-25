@@ -1085,10 +1085,15 @@ static ssize_t syna_sysfs_fw_grip_store(struct kobject *kobj,
 
 	tcm->enable_fw_grip = input;
 
+#if IS_ENABLED(CONFIG_GOOG_TOUCH_INTERFACE)
+	tcm->gti->cmd.grip_cmd.setting = (input & 0x01) ? GTI_GRIP_ENABLE : GTI_GRIP_DISABLE;
+	tcm->gti->ignore_grip_update = (input >> 1) & 0x01;
+#endif
+
 	retval = syna_tcm_set_dynamic_config(tcm->tcm_dev,
-				DC_ENABLE_GRIP_SUPPRESSION,
-				(input & 0x01),
-				RESP_IN_ATTN);
+			DC_ENABLE_GRIP_SUPPRESSION,
+			(input & 0x01),
+			RESP_IN_ATTN);
 
 	LOGI("Set fw grip suppression mode %u.\n", tcm->enable_fw_grip);
 
@@ -1170,10 +1175,15 @@ static ssize_t syna_sysfs_fw_palm_store(struct kobject *kobj,
 
 	tcm->enable_fw_palm = input;
 
+#if IS_ENABLED(CONFIG_GOOG_TOUCH_INTERFACE)
+	tcm->gti->cmd.palm_cmd.setting = (input & 0x01) ? GTI_PALM_ENABLE : GTI_PALM_DISABLE;
+	tcm->gti->ignore_palm_update = (input >> 1) & 0x01;
+#endif
+
 	retval = syna_tcm_set_dynamic_config(tcm->tcm_dev,
-				DC_ENABLE_PALM_REJECTION,
-				(input & 0x01),
-				RESP_IN_ATTN);
+			DC_ENABLE_PALM_REJECTION,
+			(input & 0x01),
+			RESP_IN_ATTN);
 
 	LOGI("Set fw palm rejection mode %u.\n", tcm->enable_fw_palm);
 

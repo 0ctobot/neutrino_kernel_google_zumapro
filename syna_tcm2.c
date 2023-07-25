@@ -237,6 +237,144 @@ static int set_reset(void *private_data, struct gti_reset_cmd *cmd)
 
 	return 0;
 }
+
+static int syna_set_palm_mode(void *private_data, struct gti_palm_cmd *cmd)
+{
+	struct syna_tcm *tcm = private_data;
+
+	if (goog_pm_wake_get_locks(tcm->gti) == 0 || tcm->pwr_state != PWR_ON) {
+		LOGI("Connot set palm mode because touch is off");
+		return -EPERM;
+	}
+
+	tcm->enable_fw_palm = cmd->setting == GTI_PALM_ENABLE ? 1 : 0;
+
+	if (tcm->hw_if->bdata_attn.irq_enabled) {
+		queue_work(tcm->event_wq, &tcm->set_palm_mode_work);
+	} else {
+		LOGI("%s firmware palm rejection.\n",
+			(tcm->enable_fw_palm & 0x01) ? "Enable" : "Disable");
+		syna_tcm_set_dynamic_config(tcm->tcm_dev,
+			DC_ENABLE_PALM_REJECTION,
+			tcm->enable_fw_palm & 0x01,
+			RESP_IN_POLLING);
+	}
+
+	return 0;
+}
+
+static int syna_get_palm_mode(void *private_data, struct gti_palm_cmd *cmd)
+{
+	struct syna_tcm *tcm = private_data;
+	unsigned short palm_mode;
+	int retval;
+
+	if (goog_pm_wake_get_locks(tcm->gti) == 0 || tcm->pwr_state != PWR_ON) {
+		LOGI("Connot get palm mode because touch is off");
+		return -EPERM;
+	}
+
+	retval = syna_tcm_get_dynamic_config(tcm->tcm_dev, DC_ENABLE_PALM_REJECTION,
+			&palm_mode, RESP_IN_POLLING);
+	if (retval < 0) {
+		LOGE("Fail to read palm mode.");
+		return retval;
+	}
+
+	cmd->setting = palm_mode ? GTI_PALM_ENABLE : GTI_PALM_DISABLE;
+
+	return retval;
+}
+
+static void syna_set_palm_mode_work(struct work_struct *work)
+{
+	struct syna_tcm *tcm = container_of(work, struct syna_tcm, set_palm_mode_work);
+	int retval = 0;
+
+	retval = goog_pm_wake_lock(tcm->gti, GTI_PM_WAKELOCK_TYPE_VENDOR_REQUEST, true);
+	if (retval) {
+		LOGE("Failed to obtain wake lock, ret = %d", retval);
+		return;
+	}
+
+	LOGI("%s firmware palm rejection.\n",
+		(tcm->enable_fw_palm & 0x01) ? "Enable" : "Disable");
+	syna_tcm_set_dynamic_config(tcm->tcm_dev,
+			DC_ENABLE_PALM_REJECTION,
+			tcm->enable_fw_palm & 0x01,
+			RESP_IN_ATTN);
+
+	goog_pm_wake_unlock_nosync(tcm->gti, GTI_PM_WAKELOCK_TYPE_VENDOR_REQUEST);
+}
+
+static int syna_set_grip_mode(void *private_data, struct gti_grip_cmd *cmd)
+{
+	struct syna_tcm *tcm = private_data;
+
+	if (goog_pm_wake_get_locks(tcm->gti) == 0 || tcm->pwr_state != PWR_ON) {
+		LOGI("Connot set grip mode because touch is off");
+		return -EPERM;
+	}
+
+	tcm->enable_fw_grip = cmd->setting == GTI_GRIP_ENABLE ? 1 : 0;
+
+	if (tcm->hw_if->bdata_attn.irq_enabled) {
+		queue_work(tcm->event_wq, &tcm->set_grip_mode_work);
+	} else {
+		LOGI("%s firmware grip suppression.\n",
+			(tcm->enable_fw_grip & 0x01) ? "Enable" : "Disable");
+		syna_tcm_set_dynamic_config(tcm->tcm_dev,
+			DC_ENABLE_GRIP_SUPPRESSION,
+			tcm->enable_fw_grip & 0x01,
+			RESP_IN_POLLING);
+	}
+
+	return 0;
+}
+
+static int syna_get_grip_mode(void *private_data, struct gti_grip_cmd *cmd)
+{
+	struct syna_tcm *tcm = private_data;
+	unsigned short grip_mode;
+	int retval;
+
+	if (goog_pm_wake_get_locks(tcm->gti) == 0 || tcm->pwr_state != PWR_ON) {
+		LOGI("Connot get grip mode because touch is off");
+		return -EPERM;
+	}
+
+	retval = syna_tcm_get_dynamic_config(tcm->tcm_dev, DC_ENABLE_GRIP_SUPPRESSION,
+			&grip_mode, RESP_IN_POLLING);
+	if (retval < 0) {
+		LOGE("Fail to read grip mode.");
+		return retval;
+	}
+
+	cmd->setting = grip_mode ? GTI_GRIP_ENABLE : GTI_GRIP_DISABLE;
+
+	return retval;
+}
+
+static void syna_set_grip_mode_work(struct work_struct *work)
+{
+	struct syna_tcm *tcm = container_of(work, struct syna_tcm, set_grip_mode_work);
+	int retval = 0;
+
+	retval = goog_pm_wake_lock(tcm->gti, GTI_PM_WAKELOCK_TYPE_VENDOR_REQUEST, true);
+	if (retval) {
+		LOGE("Failed to obtain wake lock, ret = %d", retval);
+		return;
+	}
+
+	LOGI("%s firmware grip suppression.\n",
+		(tcm->enable_fw_grip & 0x01) ? "Enable" : "Disable");
+	syna_tcm_set_dynamic_config(tcm->tcm_dev,
+			DC_ENABLE_GRIP_SUPPRESSION,
+			tcm->enable_fw_grip & 0x01,
+			RESP_IN_ATTN);
+
+	goog_pm_wake_unlock_nosync(tcm->gti, GTI_PM_WAKELOCK_TYPE_VENDOR_REQUEST);
+}
 #endif
 
 /**
@@ -297,16 +435,6 @@ static void syna_dev_restore_feature_setting(struct syna_tcm *tcm, unsigned int 
 #endif
 
 	syna_dev_set_heatmap_mode(tcm, true);
-
-	syna_tcm_set_dynamic_config(tcm->tcm_dev,
-			DC_ENABLE_PALM_REJECTION,
-			(tcm->enable_fw_palm & 0x01),
-			delay_ms_resp);
-
-	syna_tcm_set_dynamic_config(tcm->tcm_dev,
-			DC_ENABLE_GRIP_SUPPRESSION,
-			(tcm->enable_fw_grip & 0x01),
-			delay_ms_resp);
 
 	syna_tcm_set_dynamic_config(tcm->tcm_dev,
 			DC_COMPRESSION_THRESHOLD,
@@ -374,46 +502,6 @@ static void syna_set_report_rate_work(struct work_struct *work)
 			RESP_IN_ATTN);
 	LOGI("Set touch report rate as %dHz",
 		(tcm->touch_report_rate_config == CONFIG_HIGH_REPORT_RATE) ? 240 : 120);
-}
-
-static void syna_set_grip_mode_work(struct work_struct *work)
-{
-	struct syna_tcm *tcm = container_of(work, struct syna_tcm, set_grip_mode_work);
-
-	if (tcm->pwr_state != PWR_ON) {
-		LOGI("Touch is already off.");
-		return;
-	}
-
-	if (tcm->enable_fw_grip != tcm->next_enable_fw_grip) {
-		tcm->enable_fw_grip = tcm->next_enable_fw_grip;
-		LOGI("%s firmware grip suppression.\n",
-			(tcm->enable_fw_grip == 1) ? "Enable" : "Disable");
-		syna_tcm_set_dynamic_config(tcm->tcm_dev,
-				DC_ENABLE_GRIP_SUPPRESSION,
-				tcm->enable_fw_grip,
-				RESP_IN_ATTN);
-	}
-}
-
-static void syna_set_palm_mode_work(struct work_struct *work)
-{
-	struct syna_tcm *tcm = container_of(work, struct syna_tcm, set_palm_mode_work);
-
-	if (tcm->pwr_state != PWR_ON) {
-		LOGI("Touch is already off.");
-		return;
-	}
-
-	if (tcm->enable_fw_palm != tcm->next_enable_fw_palm) {
-		tcm->enable_fw_palm = tcm->next_enable_fw_palm;
-		LOGI("%s firmware palm rejection.\n",
-			(tcm->enable_fw_palm == 1) ? "Enable" : "Disable");
-		syna_tcm_set_dynamic_config(tcm->tcm_dev,
-				DC_ENABLE_PALM_REJECTION,
-				tcm->enable_fw_palm,
-				RESP_IN_ATTN);
-	}
 }
 
 #if defined(ENABLE_HELPER)
@@ -2473,13 +2561,14 @@ static int syna_dev_probe(struct platform_device *pdev)
 	complete_all(&tcm->raw_data_completion);
 
 	INIT_WORK(&tcm->motion_filter_work, syna_motion_filter_work);
-	INIT_WORK(&tcm->set_grip_mode_work, syna_set_grip_mode_work);
-	INIT_WORK(&tcm->set_palm_mode_work, syna_set_palm_mode_work);
 
 	tcm->touch_report_rate_config = CONFIG_HIGH_REPORT_RATE;
 	INIT_DELAYED_WORK(&tcm->set_report_rate_work, syna_set_report_rate_work);
 
 #if IS_ENABLED(CONFIG_GOOG_TOUCH_INTERFACE)
+	INIT_WORK(&tcm->set_grip_mode_work, syna_set_grip_mode_work);
+	INIT_WORK(&tcm->set_palm_mode_work, syna_set_palm_mode_work);
+
 	pdev->dev.of_node = pdev->dev.parent->of_node;
 	options = devm_kzalloc(&pdev->dev, sizeof(struct gti_optional_configuration), GFP_KERNEL);
 
@@ -2487,6 +2576,10 @@ static int syna_dev_probe(struct platform_device *pdev)
 	options->get_irq_mode = get_irq_mode;
 	options->set_irq_mode = set_irq_mode;
 	options->reset = set_reset;
+	options->set_grip_mode = syna_set_grip_mode;
+	options->get_grip_mode = syna_get_grip_mode;
+	options->set_palm_mode = syna_set_palm_mode;
+	options->get_palm_mode = syna_get_palm_mode;
 
 	tcm->gti = goog_touch_interface_probe(
 		tcm, &pdev->dev, tcm->input_dev, gti_default_handler, options);
@@ -2498,15 +2591,15 @@ static int syna_dev_probe(struct platform_device *pdev)
 	}
 #endif
 
+	tcm->enable_fw_grip = 0x02;
+	tcm->enable_fw_palm = 0x02;
+	syna_dev_restore_feature_setting(tcm, RESP_IN_POLLING);
+
 	retval = syna_dev_request_irq(tcm);
 	if (retval < 0) {
 		LOGE("Fail to request the interrupt line\n");
 		goto err_request_irq;
 	}
-
-	tcm->enable_fw_grip = 0x02;
-	tcm->enable_fw_palm = 0x02;
-	syna_dev_restore_feature_setting(tcm, RESP_IN_POLLING);
 
 	/* for the reference,
 	 * create a delayed work to perform fw update during the startup time
@@ -2621,9 +2714,11 @@ static int syna_dev_remove(struct platform_device *pdev)
 	cancel_work_sync(&tcm->helper.work);
 #endif
 
-	cancel_work_sync(&tcm->motion_filter_work);
+#if IS_ENABLED(CONFIG_GOOG_TOUCH_INTERFACE)
 	cancel_work_sync(&tcm->set_grip_mode_work);
 	cancel_work_sync(&tcm->set_palm_mode_work);
+#endif
+	cancel_work_sync(&tcm->motion_filter_work);
 	cancel_delayed_work_sync(&tcm->set_report_rate_work);
 
 #if defined(ENABLE_DISP_NOTIFIER)

@@ -429,6 +429,10 @@ struct syna_tcm {
 
 #if IS_ENABLED(CONFIG_GOOG_TOUCH_INTERFACE)
 	struct goog_touch_interface *gti;
+	/* Work for setting firmware grip mode. */
+	struct work_struct set_grip_mode_work;
+	/* Work for setting firmware palm mode. */
+	struct work_struct set_palm_mode_work;
 #else
 	syna_pal_mutex_t tp_event_mutex;
 #endif
@@ -437,11 +441,6 @@ struct syna_tcm {
 	u16 set_continuously_report;
 	/* Work for motion filter commands. */
 	struct work_struct motion_filter_work;
-
-	/* Work for setting firmware grip mode. */
-	struct work_struct set_grip_mode_work;
-	/* Work for setting firmware palm mode. */
-	struct work_struct set_palm_mode_work;
 
 	/* IOCTL-related variables */
 	pid_t proc_pid;
@@ -475,8 +474,6 @@ struct syna_tcm {
 	bool high_sensitivity_mode;
 	u8 enable_fw_grip;
 	u8 enable_fw_palm;
-	u8 next_enable_fw_grip;
-	u8 next_enable_fw_palm;
 
 	/* fifo to pass the data to userspace */
 	unsigned int fifo_remaining_frame;
