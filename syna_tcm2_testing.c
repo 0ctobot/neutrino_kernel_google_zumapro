@@ -50,6 +50,87 @@ typedef enum{
 }gaptesttype_t;
 
 /**
+ * syna_parse_test_limit16()
+ *
+ * Parse the test limit from the device tree.
+ *
+ * @param
+ *    [ in] np: device node
+ *    [ in] name: property name
+ *    [out] array: test limit array
+ *    [ in] size: size of the array
+ *
+ * @return
+ *    on success, 0; otherwise, return error code
+ */
+static int syna_parse_test_limit_16(struct syna_tcm *tcm, const char *name, u16 *array, int size)
+{
+	int length;
+	struct device_node *np = tcm->pdev->dev.parent->of_node;
+
+	length = of_property_count_u16_elems(np, name);
+	if (length < 0) {
+		LOGE("Fail to get %s elements count, ret = %d\n", name, length);
+		return length;
+	}
+
+	if (length != size) {
+		LOGE("invalid array length %d\n", length);
+		return -EINVAL;
+	}
+
+	if (of_property_read_u16_array(np, name, array, length) < 0) {
+		LOGE("Error reading array %s\n", name);
+		return -EINVAL;
+	}
+
+	LOGI("Parsed %s from device tree", name);
+
+	return 0;
+}
+
+/**
+ * syna_parse_test_limit32()
+ *
+ * Parse the test limit from the device tree.
+ *
+ * @param
+ *    [ in] np: device node
+ *    [ in] name: property name
+ *    [out] array: test limit array
+ *    [ in] size: size of the array
+ *
+ * @return
+ *    on success, 0; otherwise, return error code
+ */
+static int syna_parse_test_limit_32(struct syna_tcm *tcm, const char *name, u32 *array, int size)
+{
+	int length;
+	struct device_node *np = tcm->pdev->dev.parent->of_node;
+
+	length = of_property_count_u32_elems(np, name);
+	if (length < 0) {
+		LOGE("Fail to get %s elements count, ret = %d\n", name, length);
+		return -EINVAL;
+	}
+
+	if (length != size) {
+		LOGE("invalid array length %d\n", length);
+		return -EINVAL;
+	}
+
+	if (of_property_read_u32_array(np, name, array, length)) {
+		LOGE("Error reading array %s\n", name);
+		kfree(array);
+		return -EINVAL;
+	}
+
+	LOGI("Parsed %s from device tree", name);
+
+	return 0;
+}
+
+/**
  * syna_testing_compare_byte_vector()
  *
  * Sample code to compare the test result with limits
@@ -166,7 +247,7 @@ static bool syna_testing_compare_frame(unsigned char *data,
 	data_ptr = (short *)&data[0];
 	for (i = 0; i < rows; i++) {
 		for (j = 0; j < cols; j++) {
-			limit = limits_hi[i * LIMIT_BOUNDARY + j];
+			limit = limits_hi[i * cols + j];
 			if (*data_ptr > limit) {
 				LOGE("Fail on (%2d,%2d)=%5d, limits_hi:%4d\n",
 					i, j, *data_ptr, limit);
@@ -184,7 +265,7 @@ end_of_upper_bound_limit:
 	data_ptr = (short *)&data[0];
 	for (i = 0; i < rows; i++) {
 		for (j = 0; j < cols; j++) {
-			limit = limits_lo[i * LIMIT_BOUNDARY + j];
+			limit = limits_lo[i * cols + j];
 			if (*data_ptr < limit) {
 				LOGE("Fail on (%2d,%2d)=%5d, limits_lo:%4d\n",
 					i, j, *data_ptr, limit);
@@ -266,7 +347,7 @@ static bool syna_testing_compare_list(unsigned char *data,
 		data_ptr++;
 	}
 	for (i = 0; i < rows; i++) {
-		limit = limits_hi[LIMIT_BOUNDARY + i];
+		limit = limits_hi[cols + i];
 		if (*data_ptr > limit) {
 			LOGE("Fail on row-%2d=%5d, limits_hi:%4d\n",
 				i, *data_ptr, limit);
@@ -291,7 +372,7 @@ end_of_upper_bound_limit:
 		data_ptr++;
 	}
 	for (i = 0; i < rows; i++) {
-		limit = limits_lo[LIMIT_BOUNDARY + i];
+		limit = limits_lo[cols + i];
 		if (*data_ptr < limit) {
 			LOGE("Fail on row-%2d=%5d, limits_lo:%4d\n",
 				i, *data_ptr, limit);
@@ -705,6 +786,11 @@ static int syna_testing_pt05(struct syna_tcm *tcm, struct tcm_buffer *test_data)
 		goto exit;
 	}
 
+	syna_parse_test_limit_16(tcm, tcm->hw_if->pt05_high_limit_name,
+			(u16*) pt05_hi_limits, tcm->tcm_dev->rows * tcm->tcm_dev->cols);
+	syna_parse_test_limit_16(tcm, tcm->hw_if->pt05_low_limit_name,
+			(u16*) pt05_lo_limits, tcm->tcm_dev->rows * tcm->tcm_dev->cols);
+
 	result = syna_testing_compare_frame(test_data->buf,
 			test_data->data_length,
 			tcm->tcm_dev->rows,
@@ -791,6 +877,11 @@ static int syna_testing_pt05_gap(struct syna_tcm *tcm, struct tcm_buffer *test_d
 			goto exit;
 		}
 
+		syna_parse_test_limit_16(tcm, tcm->hw_if->pt05_gap_x_limit_name,
+				(u16*) pt05_gap_x_limits, rows * (cols - 1));
+		syna_parse_test_limit_16(tcm, tcm->hw_if->pt05_gap_y_limit_name,
+				(u16*) pt05_gap_y_limits, (rows - 1) * cols);
+
 		/* compare to the limits */
 		result = true;
 		for (i = 0; i < rows - 1; i++) {
@@ -806,6 +897,7 @@ static int syna_testing_pt05_gap(struct syna_tcm *tcm, struct tcm_buffer *test_d
 						i, j, gap_frame_y[idx], pt05_gap_y_limits[idx]);
 					result = false;
 				}
+
 			}
 		}
 	} else {
@@ -817,6 +909,9 @@ static int syna_testing_pt05_gap(struct syna_tcm *tcm, struct tcm_buffer *test_d
 			result = false;
 			goto exit;
 		}
+
+		syna_parse_test_limit_16(tcm, tcm->hw_if->pt05_gap_x_limit_name,
+				(u16*) pt05_gap_x_limits, rows * cols);
 
 		/* compare to the limits */
 		result = true;
@@ -931,6 +1026,11 @@ static int syna_testing_pt0a(struct syna_tcm *tcm, struct tcm_buffer *test_data)
 		goto exit;
 	}
 
+	syna_parse_test_limit_16(tcm, tcm->hw_if->pt0a_high_limit_name,
+			(u16*) pt0a_hi_limits, tcm->tcm_dev->rows * tcm->tcm_dev->cols);
+	syna_parse_test_limit_16(tcm, tcm->hw_if->pt0a_low_limit_name,
+			(u16*) pt0a_lo_limits, tcm->tcm_dev->rows * tcm->tcm_dev->cols);
+
 	result = syna_testing_compare_frame(test_data->buf,
 			test_data->data_length,
 			tcm->tcm_dev->rows,
@@ -1027,6 +1127,11 @@ static int syna_testing_pt10(struct syna_tcm *tcm, struct tcm_buffer *test_data)
 		goto exit;
 	}
 
+	syna_parse_test_limit_16(tcm, tcm->hw_if->pt10_high_limit_name,
+			(u16*) pt10_hi_limits, tcm->tcm_dev->rows * tcm->tcm_dev->cols);
+	syna_parse_test_limit_16(tcm, tcm->hw_if->pt10_low_limit_name,
+			(u16*) pt10_lo_limits, tcm->tcm_dev->rows * tcm->tcm_dev->cols);
+
 	result = syna_testing_compare_frame(test_data->buf,
 			test_data->data_length,
 			tcm->tcm_dev->rows,
@@ -1113,6 +1218,11 @@ static int syna_testing_pt10_gap(struct syna_tcm *tcm, struct tcm_buffer *test_d
 			goto exit;
 		}
 
+		syna_parse_test_limit_16(tcm, tcm->hw_if->pt10_gap_x_limit_name,
+				(u16*) pt10_gap_x_limits, rows * (cols - 1));
+		syna_parse_test_limit_16(tcm, tcm->hw_if->pt10_gap_y_limit_name,
+				(u16*) pt10_gap_y_limits, (rows - 1) * cols);
+
 		/* compare to the limits */
 		result = true;
 		for (i = 0; i < rows - 1; i++) {
@@ -1139,6 +1249,9 @@ static int syna_testing_pt10_gap(struct syna_tcm *tcm, struct tcm_buffer *test_d
 			result = false;
 			goto exit;
 		}
+
+		syna_parse_test_limit_16(tcm, tcm->hw_if->pt10_gap_x_limit_name,
+				(u16*) pt10_gap_x_limits, rows * cols);
 
 		/* compare to the limits */
 		result = true;
@@ -1253,6 +1366,11 @@ static int syna_testing_pt11(struct syna_tcm *tcm, struct tcm_buffer *test_data)
 		goto exit;
 	}
 
+	syna_parse_test_limit_16(tcm, tcm->hw_if->pt11_high_limit_name,
+			(u16*) pt11_hi_limits, tcm->tcm_dev->rows * tcm->tcm_dev->cols);
+	syna_parse_test_limit_16(tcm, tcm->hw_if->pt11_low_limit_name,
+			(u16*) pt11_lo_limits, tcm->tcm_dev->rows * tcm->tcm_dev->cols);
+
 	result = syna_testing_compare_frame(test_data->buf,
 			test_data->data_length,
 			tcm->tcm_dev->rows,
@@ -1349,12 +1467,17 @@ static int syna_testing_pt12(struct syna_tcm *tcm, struct tcm_buffer *test_data)
 		goto exit;
 	}
 
+	syna_parse_test_limit_32(tcm, tcm->hw_if->pt12_high_limit_name,
+			(u32*) pt12_hi_limits, tcm->tcm_dev->rows + tcm->tcm_dev->cols);
+	syna_parse_test_limit_32(tcm, tcm->hw_if->pt12_low_limit_name,
+			(u32*) pt12_lo_limits, tcm->tcm_dev->rows + tcm->tcm_dev->cols);
+
 	result = syna_testing_compare_list(test_data->buf,
 			test_data->data_length,
 			tcm->tcm_dev->rows,
 			tcm->tcm_dev->cols,
-			(const int *)&pt12_limits[0],
-			NULL);
+			(const int *)&pt12_hi_limits[0],
+			(const int *)&pt12_lo_limits[0]);
 
 exit:
 	LOGI("Result = %s\n", (result)?"pass":"fail");
@@ -1447,6 +1570,11 @@ static int syna_testing_pt16(struct syna_tcm *tcm, struct tcm_buffer *test_data)
 		result = false;
 		goto exit;
 	}
+
+	syna_parse_test_limit_16(tcm, tcm->hw_if->pt16_high_limit_name,
+			(u16*) pt16_hi_limits, tcm->tcm_dev->rows * tcm->tcm_dev->cols);
+	syna_parse_test_limit_16(tcm, tcm->hw_if->pt16_low_limit_name,
+			(u16*) pt16_lo_limits, tcm->tcm_dev->rows * tcm->tcm_dev->cols);
 
 	result = syna_testing_compare_frame(test_data->buf,
 			test_data->data_length,
@@ -1583,6 +1711,9 @@ static int syna_testing_pt_tag_moisture(struct syna_tcm *tcm, struct tcm_buffer 
 		goto exit;
 	}
 
+	syna_parse_test_limit_16(tcm, tcm->hw_if->pt_tag_moisture_limit_name,
+			(u16*) pt_moisture_limits, rows * cols);
+
 	/* compare to the limits */
 	result = true;
 	data_ptr = (short *)&test_data->buf[0];
@@ -1591,7 +1722,7 @@ static int syna_testing_pt_tag_moisture(struct syna_tcm *tcm, struct tcm_buffer 
 			if (*data_ptr < 0)
 				continue;
 
-			limit = pt_moisture_limits[i * LIMIT_BOUNDARY + j];
+			limit = pt_moisture_limits[i * cols + j];
 			if (*data_ptr > limit) {
 				LOGE("Fail on (%2d,%2d)=%5d, limits_hi:%4d\n",
 					i, j, *data_ptr, limit);

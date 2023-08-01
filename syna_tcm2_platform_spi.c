@@ -238,6 +238,169 @@ err_set_gpio_irq:
 }
 
 /**
+ * syna_parse_test_limit()
+ *
+ * Parse the touch test limit property name and limit array from the
+ * device tree
+ *
+ * @param
+ *    [ in] hw_if: the handle of hw interface
+ *    [ in] dev: device node
+ *    [ in] index: panel index
+ */
+
+static void syna_parse_test_limit_name(struct syna_hw_interface *hw_if,
+		struct device_node *np, int index)
+{
+	int retval;
+	const char *name;
+
+	/* pt05 */
+	retval = of_property_read_string_index(np, "synaptics,pt05_high_name", index, &name);
+	if (retval == 0) {
+		strncpy(hw_if->pt05_high_limit_name, name, sizeof(hw_if->pt05_high_limit_name));
+	} else {
+		strncpy(hw_if->pt05_high_limit_name, "synaptics,pt05_high",
+				sizeof(hw_if->pt05_high_limit_name));
+	}
+
+	retval = of_property_read_string_index(np, "synaptics,pt05_low_name", index, &name);
+	if (retval == 0) {
+		strncpy(hw_if->pt05_low_limit_name, name, sizeof(hw_if->pt05_low_limit_name));
+	} else {
+		strncpy(hw_if->pt05_low_limit_name, "synaptics,pt05_low",
+				sizeof(hw_if->pt05_low_limit_name));
+	}
+
+	retval = of_property_read_string_index(np, "synaptics,pt05_gap_x_name", index, &name);
+	if (retval == 0) {
+		strncpy(hw_if->pt05_gap_x_limit_name, name, sizeof(hw_if->pt05_gap_x_limit_name));
+	} else {
+		strncpy(hw_if->pt05_gap_x_limit_name, "synaptics,pt05_gap_x",
+				sizeof(hw_if->pt05_gap_x_limit_name));
+	}
+
+	retval = of_property_read_string_index(np, "synaptics,pt05_gap_y_name", index, &name);
+	if (retval == 0) {
+		strncpy(hw_if->pt05_gap_y_limit_name, name, sizeof(hw_if->pt05_gap_y_limit_name));
+	} else {
+		strncpy(hw_if->pt05_gap_y_limit_name, "synaptics,pt05_gap_y",
+				sizeof(hw_if->pt05_gap_y_limit_name));
+	}
+
+	/* pt0a */
+	retval = of_property_read_string_index(np, "synaptics,pt0a_high_name", index, &name);
+	if (retval == 0) {
+		strncpy(hw_if->pt0a_high_limit_name, name, sizeof(hw_if->pt0a_high_limit_name));
+	} else {
+		strncpy(hw_if->pt0a_high_limit_name, "synaptics,pt0a_high",
+				sizeof(hw_if->pt0a_high_limit_name));
+	}
+
+	retval = of_property_read_string_index(np, "synaptics,pt0a_low_name", index, &name);
+	if (retval == 0) {
+		strncpy(hw_if->pt0a_low_limit_name, name, sizeof(hw_if->pt0a_low_limit_name));
+	} else {
+		strncpy(hw_if->pt0a_low_limit_name, "synaptics,pt0a_low",
+				sizeof(hw_if->pt0a_low_limit_name));
+	}
+
+	/* pt10 */
+	retval = of_property_read_string_index(np, "synaptics,pt10_high_name", index, &name);
+	if (retval == 0) {
+		strncpy(hw_if->pt10_high_limit_name, name, sizeof(hw_if->pt10_high_limit_name));
+	} else {
+		strncpy(hw_if->pt10_high_limit_name, "synaptics,pt10_high",
+				sizeof(hw_if->pt10_high_limit_name));
+	}
+
+	retval = of_property_read_string_index(np, "synaptics,pt10_low_name", index, &name);
+	if (retval == 0) {
+		strncpy(hw_if->pt10_low_limit_name, name, sizeof(hw_if->pt10_low_limit_name));
+	} else {
+		strncpy(hw_if->pt10_low_limit_name, "synaptics,pt10_low",
+				sizeof(hw_if->pt10_low_limit_name));
+	}
+
+	retval = of_property_read_string_index(np, "synaptics,pt10_gap_x_name", index, &name);
+	if (retval == 0) {
+		strncpy(hw_if->pt10_gap_x_limit_name, name, sizeof(hw_if->pt10_gap_x_limit_name));
+	} else {
+		strncpy(hw_if->pt10_gap_x_limit_name, "synaptics,pt10_gap_x",
+				sizeof(hw_if->pt10_gap_x_limit_name));
+	}
+
+	retval = of_property_read_string_index(np, "synaptics,pt10_gap_y_name", index, &name);
+	if (retval == 0) {
+		strncpy(hw_if->pt10_gap_y_limit_name, name, sizeof(hw_if->pt10_gap_y_limit_name));
+	} else {
+		strncpy(hw_if->pt10_gap_y_limit_name, "synaptics,pt10_gap_y",
+				sizeof(hw_if->pt10_gap_y_limit_name));
+	}
+
+	/* pt11 */
+	retval = of_property_read_string_index(np, "synaptics,pt11_high_name", index, &name);
+	if (retval == 0) {
+		strncpy(hw_if->pt11_high_limit_name, name, sizeof(hw_if->pt11_high_limit_name));
+	} else {
+		strncpy(hw_if->pt11_high_limit_name, "synaptics,pt11_high",
+				sizeof(hw_if->pt11_high_limit_name));
+	}
+
+	retval = of_property_read_string_index(np, "synaptics,pt11_low_name", index, &name);
+	if (retval == 0) {
+		strncpy(hw_if->pt11_low_limit_name, name, sizeof(hw_if->pt11_low_limit_name));
+	} else {
+		strncpy(hw_if->pt11_low_limit_name, "synaptics,pt11_low",
+				sizeof(hw_if->pt11_low_limit_name));
+	}
+
+	/* pt12 */
+	retval = of_property_read_string_index(np, "synaptics,pt12_high_name", index, &name);
+	if (retval == 0) {
+		strncpy(hw_if->pt12_high_limit_name, name, sizeof(hw_if->pt12_high_limit_name));
+	} else {
+		strncpy(hw_if->pt12_high_limit_name, "synaptics,pt12_high",
+				sizeof(hw_if->pt12_high_limit_name));
+	}
+
+	retval = of_property_read_string_index(np, "synaptics,pt12_low_name", index, &name);
+	if (retval == 0) {
+		strncpy(hw_if->pt12_low_limit_name, name, sizeof(hw_if->pt12_low_limit_name));
+	} else {
+		strncpy(hw_if->pt12_low_limit_name, "synaptics,pt12_low",
+				sizeof(hw_if->pt12_low_limit_name));
+	}
+
+	/* pt16 */
+	retval = of_property_read_string_index(np, "synaptics,pt16_high_name", index, &name);
+	if (retval == 0) {
+		strncpy(hw_if->pt16_high_limit_name, name, sizeof(hw_if->pt16_high_limit_name));
+	} else {
+		strncpy(hw_if->pt16_high_limit_name, "synaptics,pt16_high",
+				sizeof(hw_if->pt16_high_limit_name));
+	}
+
+	retval = of_property_read_string_index(np, "synaptics,pt16_low_name", index, &name);
+	if (retval == 0) {
+		strncpy(hw_if->pt16_low_limit_name, name, sizeof(hw_if->pt16_low_limit_name));
+	} else {
+		strncpy(hw_if->pt16_low_limit_name, "synaptics,pt16_low",
+				sizeof(hw_if->pt16_low_limit_name));
+	}
+
+	/*pt tag moisture*/
+	retval = of_property_read_string_index(np, "synaptics,pt_tag_moisture_name", index, &name);
+	if (retval == 0) {
+		strncpy(hw_if->pt_tag_moisture_limit_name, name,
+				sizeof(hw_if->pt_tag_moisture_limit_name));
+	} else {
+		strncpy(hw_if->pt_tag_moisture_limit_name, "synaptics,pt_tag_moisture",
+				sizeof(hw_if->pt_tag_moisture_limit_name));
+	}
+}
+
+/**
  * syna_spi_parse_dt()
  *
  * Parse and obtain board specific data from the device tree source file.
@@ -301,6 +464,8 @@ static int syna_spi_parse_dt(struct syna_hw_interface *hw_if,
 	} else {
 		hw_if->fw_name = FW_IMAGE_NAME;
 	}
+
+	syna_parse_test_limit_name(hw_if, np, index);
 
 	prop = of_find_property(np, "synaptics,irq-gpio", NULL);
 	if (prop && prop->length) {

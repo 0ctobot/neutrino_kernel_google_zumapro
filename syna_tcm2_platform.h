@@ -51,6 +51,8 @@
 #define RD_CHUNK_SIZE (512)
 #define WR_CHUNK_SIZE (512)
 
+#define LIMIT_NAME_LEN 32
+
 /**
  * @section: Type of power supply
  *
@@ -161,6 +163,23 @@ struct syna_hw_interface {
 	struct syna_hw_rst_data bdata_rst;
 	struct syna_hw_pwr_data bdata_pwr;
 	const char *fw_name;
+	char pt05_high_limit_name[LIMIT_NAME_LEN];
+	char pt05_low_limit_name[LIMIT_NAME_LEN];
+	char pt05_gap_x_limit_name[LIMIT_NAME_LEN];
+	char pt05_gap_y_limit_name[LIMIT_NAME_LEN];
+	char pt0a_high_limit_name[LIMIT_NAME_LEN];
+	char pt0a_low_limit_name[LIMIT_NAME_LEN];
+	char pt10_high_limit_name[LIMIT_NAME_LEN];
+	char pt10_low_limit_name[LIMIT_NAME_LEN];
+	char pt10_gap_x_limit_name[LIMIT_NAME_LEN];
+	char pt10_gap_y_limit_name[LIMIT_NAME_LEN];
+	char pt11_high_limit_name[LIMIT_NAME_LEN];
+	char pt11_low_limit_name[LIMIT_NAME_LEN];
+	char pt12_high_limit_name[LIMIT_NAME_LEN];
+	char pt12_low_limit_name[LIMIT_NAME_LEN];
+	char pt16_high_limit_name[LIMIT_NAME_LEN];
+	char pt16_low_limit_name[LIMIT_NAME_LEN];
+	char pt_tag_moisture_limit_name[LIMIT_NAME_LEN];
 	int pixels_per_mm;
 	int test_algo;
 	u16 compression_threhsold;
