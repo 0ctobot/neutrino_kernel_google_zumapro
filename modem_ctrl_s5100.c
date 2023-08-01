@@ -1931,7 +1931,7 @@ int s5100_poweron_pcie(struct modem_ctl *mc, bool boot_on)
 
 	set_pcie_msi_int(ld, true);
 
-	if ((mc->s51xx_pdev != NULL) && mc->pcie_registered) {
+	if ((mc->s51xx_pdev != NULL) && mc->pcie_registered && (mc->phone_state != STATE_CRASH_EXIT)) {
 		/* DBG */
 		logbuffer_log(mc->log, "DBG: doorbell: pcie_registered = %d", mc->pcie_registered);
 		if (s51xx_pcie_send_doorbell_int(mc->s51xx_pdev,
@@ -1941,7 +1941,6 @@ int s5100_poweron_pcie(struct modem_ctl *mc, bool boot_on)
 			s5100_force_crash_exit_ext();
 		}
 	}
-
 #if IS_ENABLED(CONFIG_CPIF_AP_SUSPEND_DURING_VOICE_CALL)
 	if (mc->pcie_voice_call_on && (mc->phone_state != STATE_CRASH_EXIT)) {
 		if (cpif_wake_lock_active(mc->ws))
