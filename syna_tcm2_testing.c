@@ -391,7 +391,8 @@ static int syna_testing_calculate_gap_frame(short *in, short *out,
  *    [out] out: output frame
  *    [ in] rows: number of rows
  *    [ in] cols: number of cols
- *    [ in] direction_x: appoint the gap direction x
+ *    [ in] direction_x: appoint the gap direction x. Follow the panel maker
+ *                       that the x direction is the longer side.
  *    [ in] percentage: true for gap percentage, false for gap value.
  *    [ in] abs_only: indicate to return the abs value
  *
@@ -416,19 +417,6 @@ static int syna_testing_calculate_gap_frame_b(short *in, short *out,
 
 	idx = 0;
 	if (direction_x) {
-		for (i = 1; i < rows; i++) {
-			for (j = 0; j < cols; j++) {
-				val_1 = in[i * cols + j];
-				val_2 = in[(i-1) * cols + j];
-				if (abs_only) {
-					out[idx++] = (short)abs(val_1 - val_2);
-				} else {
-					out[idx++] = (val_2 == 0) ? 0 :
-						((abs(val_1 - val_2)) * 100 / val_2);
-				}
-			}
-		}
-	} else {
 		for (i = 0; i < rows; i++) {
 			for (j = 1; j < cols; j++) {
 				val_1 = in[i * cols + j];
@@ -441,6 +429,19 @@ static int syna_testing_calculate_gap_frame_b(short *in, short *out,
 				}
 			}
 			out[idx++] = 0;
+		}
+	} else {
+		for (i = 1; i < rows; i++) {
+			for (j = 0; j < cols; j++) {
+				val_1 = in[i * cols + j];
+				val_2 = in[(i-1) * cols + j];
+				if (abs_only) {
+					out[idx++] = (short)abs(val_1 - val_2);
+				} else {
+					out[idx++] = (val_2 == 0) ? 0 :
+						((abs(val_1 - val_2)) * 100 / val_2);
+				}
+			}
 		}
 	}
 
