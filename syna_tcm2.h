@@ -58,7 +58,7 @@
 
 #define SYNAPTICS_TCM_DRIVER_ID (1 << 0)
 #define SYNAPTICS_TCM_DRIVER_VERSION 1
-#define SYNAPTICS_TCM_DRIVER_SUBVER "5.1"
+#define SYNAPTICS_TCM_DRIVER_SUBVER "5.2"
 
 /**
  * @section: Driver Configurations

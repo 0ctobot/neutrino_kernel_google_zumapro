@@ -288,6 +288,13 @@ static int syna_spi_parse_dt(struct syna_hw_interface *hw_if,
 				else
 					hw_if->fw_name = name;
 				LOGI("Firmware name %s", hw_if->fw_name);
+
+				retval = of_property_read_u32_index(np, "synaptics,test_algo",
+						index, &value);
+				if (retval < 0)
+					hw_if->test_algo = 0;
+				else
+					hw_if->test_algo = value;
 				break;
 			}
 		}

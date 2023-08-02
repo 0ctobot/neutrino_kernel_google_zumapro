@@ -162,6 +162,7 @@ struct syna_hw_interface {
 	struct syna_hw_pwr_data bdata_pwr;
 	const char *fw_name;
 	int pixels_per_mm;
+	int test_algo;
 	u16 compression_threhsold;
 	u16 grip_delta_threshold;
 	u16 grip_border_threshold;

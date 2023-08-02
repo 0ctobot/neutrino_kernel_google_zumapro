@@ -44,6 +44,10 @@
 static struct kobject *g_testing_dir;
 static struct syna_tcm *g_tcm_ptr;
 
+typedef enum{
+	RAW_GAP_TEST = 1,
+	SENSOR_SPEED_TEST
+}gaptesttype_t;
 
 /**
  * syna_testing_compare_byte_vector()
@@ -310,14 +314,92 @@ end_of_lower_bound_limit:
  *    [out] out: output frame
  *    [ in] rows: number of rows
  *    [ in] cols: number of cols
- *    [ in] direction_x: appoint the gap direction x
- *    [ in] percentage: true for gap percentage, false for gap value.
+ *    [ in] testtype: type of the test to be performed ( 1- full raw cap, 2 - sensor speed test )
  *
  * @return
  *    on success, 0; otherwise, negative value on error.
  */
 static int syna_testing_calculate_gap_frame(short *in, short *out,
-		int rows, int cols, bool direction_x, bool percentage)
+		int rows, int cols, gaptesttype_t testtype)
+{
+	int i, j, idx;
+	int val_1, val_2, val_3;
+	int x_gap, y_gap;
+
+	if (!in || !out) {
+		LOGE("Invalid frame to calculate\n");
+		return -1;
+	}
+
+	if (rows * cols <= 0) {
+		LOGE("Invalid parameter of rows and cols\n");
+		return -1;
+	}
+
+	idx = 0;
+	for (i = 0; i < rows; i++) {
+		for (j = 0; j < cols; j++) {
+			val_1 = in[i * cols + j];
+
+			if(j == cols -1)
+				val_2 = val_1;
+			else
+				val_2 = in[i * cols + (j+1)];
+
+			if(i == rows -1)
+				val_3 = val_1;
+			else
+				val_3 = in[(i+1) * cols + j];
+
+			if(testtype == RAW_GAP_TEST){
+				if((val_1 == 0) && (val_2 == 0)) {
+					x_gap = 0;
+				} else {
+					x_gap = (val_1 > val_2) ?
+						(100 - ((val_2*100 + val_1/2)/val_1)) :
+							(100 - ((val_1*100 + val_2/2)/val_2));
+				}
+
+				if((val_1 == 0) && (val_3 == 0)) {
+					y_gap = 0;
+				} else {
+					y_gap = (val_1 > val_3) ?
+						(100 - ((val_3*100 + val_1/2)/val_1)) :
+							(100 - ((val_1*100 + val_3/2)/val_3));
+				}
+
+				out[idx++] = (x_gap > y_gap)? x_gap : y_gap;
+			}
+			else if(testtype == SENSOR_SPEED_TEST){
+				x_gap = abs(val_1 - val_2);
+				y_gap = abs(val_1 - val_3);
+
+				out[idx++] = (x_gap > y_gap)? x_gap: y_gap;
+			}
+		}
+	}
+	return 0;
+}
+
+/**
+ * syna_testing_calculate_gap_frame_b()
+ *
+ * Sample code to calculate the GAP frame for the test
+ *
+ * @param
+ *    [ in] in: input frame
+ *    [out] out: output frame
+ *    [ in] rows: number of rows
+ *    [ in] cols: number of cols
+ *    [ in] direction_x: appoint the gap direction x
+ *    [ in] percentage: true for gap percentage, false for gap value.
+ *    [ in] abs_only: indicate to return the abs value
+ *
+ * @return
+ *    on success, 0; otherwise, negative value on error.
+ */
+static int syna_testing_calculate_gap_frame_b(short *in, short *out,
+		int rows, int cols, bool direction_x, bool abs_only)
 {
 	int i, j, idx;
 	short val_1, val_2;
@@ -338,13 +420,11 @@ static int syna_testing_calculate_gap_frame(short *in, short *out,
 			for (j = 0; j < cols; j++) {
 				val_1 = in[i * cols + j];
 				val_2 = in[(i-1) * cols + j];
-				if (percentage) {
-					if (val_2 == 0)
-						out[idx++] = 0;
-					else
-						out[idx++] = (abs(val_1 - val_2)) * 100 / val_2;
+				if (abs_only) {
+					out[idx++] = (short)abs(val_1 - val_2);
 				} else {
-					out[idx++] = abs(val_1 - val_2);
+					out[idx++] = (val_2 == 0) ? 0 :
+						((abs(val_1 - val_2)) * 100 / val_2);
 				}
 			}
 		}
@@ -353,13 +433,11 @@ static int syna_testing_calculate_gap_frame(short *in, short *out,
 			for (j = 1; j < cols; j++) {
 				val_1 = in[i * cols + j];
 				val_2 = in[i * cols + (j-1)];
-				if (percentage) {
-					if (val_2 == 0)
-						out[idx++] = 0;
-					else
-						out[idx++] = (abs(val_1 - val_2)) * 100 / val_2;
+				if (abs_only) {
+					out[idx++] = (short)abs(val_1 - val_2);
 				} else {
-					out[idx++] = abs(val_1 - val_2);
+					out[idx++] = (val_2 == 0) ? 0 :
+						((abs(val_1 - val_2)) * 100 / val_2);
 				}
 			}
 			out[idx++] = 0;
@@ -694,36 +772,61 @@ static int syna_testing_pt05_gap(struct syna_tcm *tcm, struct tcm_buffer *test_d
 		}
 	}
 
-	retval = syna_testing_calculate_gap_frame(frame,
-			gap_frame_x, rows, cols, true, true);
-	if (retval < 0) {
-		LOGE("Fail to get the gap frame x\n");
-		result = false;
-		goto exit;
-	}
+	if (tcm->hw_if->test_algo == 1) {
+		LOGI("Gap test algo b");
+		retval = syna_testing_calculate_gap_frame_b(frame,
+				gap_frame_x, rows, cols, true, false);
+		if (retval < 0) {
+			LOGE("Fail to get the gap frame x\n");
+			result = false;
+			goto exit;
+		}
 
-	retval = syna_testing_calculate_gap_frame(frame,
-			gap_frame_y, rows, cols, false, true);
-	if (retval < 0) {
-		LOGE("Fail to get the gap frame y\n");
-		result = false;
-		goto exit;
-	}
+		retval = syna_testing_calculate_gap_frame_b(frame,
+				gap_frame_y, rows, cols, false, false);
+		if (retval < 0) {
+			LOGE("Fail to get the gap frame y\n");
+			result = false;
+			goto exit;
+		}
 
-	/* compare to the limits */
-	result = true;
-	for (i = 0; i < rows - 1; i++) {
-		for (j = 0; j < cols; j++) {
-			idx = i * cols + j;
-			if (gap_frame_x[idx] > pt05_gap_x_limits[idx]) {
-				LOGE("Fail on gapX (%2d,%2d)=%5d, max:%4d\n",
-					i, j, gap_frame_x[idx], pt05_gap_x_limits[idx]);
-				result = false;
+		/* compare to the limits */
+		result = true;
+		for (i = 0; i < rows - 1; i++) {
+			for (j = 0; j < cols; j++) {
+				idx = i * cols + j;
+				if (gap_frame_x[idx] > pt05_gap_x_limits[idx]) {
+					LOGE("Fail on gapX (%2d,%2d)=%5d, max:%4d\n",
+						i, j, gap_frame_x[idx], pt05_gap_x_limits[idx]);
+					result = false;
+				}
+				if (gap_frame_y[idx] > pt05_gap_y_limits[idx]) {
+					LOGE("Fail on gapY (%2d,%2d)=%5d, max:%4d\n",
+						i, j, gap_frame_y[idx], pt05_gap_y_limits[idx]);
+					result = false;
+				}
 			}
-			if (gap_frame_y[idx] > pt05_gap_y_limits[idx]) {
-				LOGE("Fail on gapY (%2d,%2d)=%5d, max:%4d\n",
-					i, j, gap_frame_y[idx], pt05_gap_y_limits[idx]);
-				result = false;
+		}
+	} else {
+		LOGI("Gap test algo a");
+		retval = syna_testing_calculate_gap_frame(frame,
+				gap_frame_x, rows, cols, RAW_GAP_TEST);
+		if (retval < 0) {
+			LOGE("Fail to get the gap frame\n");
+			result = false;
+			goto exit;
+		}
+
+		/* compare to the limits */
+		result = true;
+		for (i = 0; i < rows; i++) {
+			for (j = 0; j < cols; j++) {
+				idx = i * cols + j;
+				if (gap_frame_x[idx] > pt05_gap_x_limits[idx]) {
+					LOGE("Fail on gap frame(%2d,%2d)=%5d, max:%4d\n",
+						i, j, gap_frame_x[idx], pt05_gap_x_limits[idx]);
+					result = false;
+				}
 			}
 		}
 	}
@@ -991,36 +1094,61 @@ static int syna_testing_pt10_gap(struct syna_tcm *tcm, struct tcm_buffer *test_d
 		}
 	}
 
-	retval = syna_testing_calculate_gap_frame(frame,
-			gap_frame_x, rows, cols, true, false);
-	if (retval < 0) {
-		LOGE("Fail to get the gap frame x\n");
-		result = false;
-		goto exit;
-	}
+	if (tcm->hw_if->test_algo == 1) {
+		LOGI("Gap test algo b");
+		retval = syna_testing_calculate_gap_frame_b(frame,
+				gap_frame_x, rows, cols, true, true);
+		if (retval < 0) {
+			LOGE("Fail to get the gap frame x\n");
+			result = false;
+			goto exit;
+		}
 
-	retval = syna_testing_calculate_gap_frame(frame,
-			gap_frame_y, rows, cols, false, false);
-	if (retval < 0) {
-		LOGE("Fail to get the gap frame y\n");
-		result = false;
-		goto exit;
-	}
+		retval = syna_testing_calculate_gap_frame_b(frame,
+				gap_frame_y, rows, cols, false, true);
+		if (retval < 0) {
+			LOGE("Fail to get the gap frame y\n");
+			result = false;
+			goto exit;
+		}
 
-	/* compare to the limits */
-	result = true;
-	for (i = 0; i < rows - 1; i++) {
-		for (j = 0; j < cols; j++) {
-			idx = i * cols + j;
-			if (gap_frame_x[idx] > pt10_gap_x_limits[idx]) {
-				LOGE("Fail on gapX (%2d,%2d)=%5d, max:%4d\n",
-					i, j, gap_frame_x[idx], pt10_gap_x_limits[idx]);
-				result = false;
+		/* compare to the limits */
+		result = true;
+		for (i = 0; i < rows - 1; i++) {
+			for (j = 0; j < cols; j++) {
+				idx = i * cols + j;
+				if (gap_frame_x[idx] > pt10_gap_x_limits[idx]) {
+					LOGE("Fail on gapX (%2d,%2d)=%5d, max:%4d\n",
+						i, j, gap_frame_x[idx], pt10_gap_x_limits[idx]);
+					result = false;
+				}
+				if (gap_frame_y[idx] > pt10_gap_y_limits[idx]) {
+					LOGE("Fail on gapY (%2d,%2d)=%5d, max:%4d\n",
+						i, j, gap_frame_y[idx], pt10_gap_y_limits[idx]);
+					result = false;
+				}
 			}
-			if (gap_frame_y[idx] > pt10_gap_y_limits[idx]) {
-				LOGE("Fail on gapY (%2d,%2d)=%5d, max:%4d\n",
-					i, j, gap_frame_y[idx], pt10_gap_y_limits[idx]);
-				result = false;
+		}
+	} else {
+		LOGI("Gap test algo a");
+		retval = syna_testing_calculate_gap_frame(frame,
+			 gap_frame_x, rows, cols, SENSOR_SPEED_TEST);
+		if (retval < 0) {
+			LOGE("Fail to get the gap frame\n");
+			result = false;
+			goto exit;
+		}
+
+		/* compare to the limits */
+		result = true;
+		for (i = 0; i < rows; i++) {
+			for (j = 0; j < cols; j++) {
+				idx = i * cols + j;
+				if (gap_frame_x[idx] > pt10_gap_x_limits[idx]) {
+					LOGE("Fail on gap frame(%2d,%2d)=%5d, max:%4d\n",
+						i, j, gap_frame_x[idx], pt10_gap_x_limits[idx]);
+					result = false;
+				}
 			}
 		}
 	}
