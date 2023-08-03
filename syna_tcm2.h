@@ -309,7 +309,6 @@ enum helper_task {
 struct syna_tcm_helper {
 	syna_pal_atomic_t task;
 	struct work_struct work;
-	struct workqueue_struct *workqueue;
 };
 #endif
 

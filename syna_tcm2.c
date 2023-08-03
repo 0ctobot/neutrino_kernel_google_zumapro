@@ -2542,8 +2542,6 @@ static int syna_dev_remove(struct platform_device *pdev)
 	}
 #if defined(ENABLE_HELPER)
 	cancel_work_sync(&tcm->helper.work);
-	flush_workqueue(tcm->helper.workqueue);
-	destroy_workqueue(tcm->helper.workqueue);
 #endif
 
 	cancel_work_sync(&tcm->motion_filter_work);
