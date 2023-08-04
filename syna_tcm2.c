@@ -1359,7 +1359,11 @@ static void syna_dev_release_irq(struct syna_tcm *tcm)
 		tcm->hw_if->ops_enable_irq(tcm->hw_if, false);
 
 #ifdef DEV_MANAGED_API
+#if IS_ENABLED(CONFIG_GOOG_TOUCH_INTERFACE)
+	goog_devm_free_irq(tcm->gti, &tcm->pdev->dev, attn->irq_id);
+#else
 	devm_free_irq(dev, attn->irq_id, tcm);
+#endif
 #else
 	free_irq(attn->irq_id, tcm);
 #endif
