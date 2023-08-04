@@ -2495,11 +2495,6 @@ static int syna_dev_probe(struct platform_device *pdev)
 #ifdef HAS_SYSFS_INTERFACE
 err_create_cdev:
 	syna_tcm_remove_device(tcm->tcm_dev);
-#ifdef STARTUP_REFLASH
-	cancel_delayed_work_sync(&tcm->reflash_work);
-	flush_workqueue(tcm->reflash_workqueue);
-	destroy_workqueue(tcm->reflash_workqueue);
-#endif
 #endif
 err_request_irq:
 #if defined(TCM_CONNECT_IN_PROBE)
@@ -2562,12 +2557,6 @@ static int syna_dev_remove(struct platform_device *pdev)
 #ifdef HAS_SYSFS_INTERFACE
 	/* remove the cdev and sysfs nodes */
 	syna_cdev_remove(tcm);
-#endif
-
-#ifdef STARTUP_REFLASH
-	cancel_delayed_work_sync(&tcm->reflash_work);
-	flush_workqueue(tcm->reflash_workqueue);
-	destroy_workqueue(tcm->reflash_workqueue);
 #endif
 
 	/* check the connection status, and do disconnection */
