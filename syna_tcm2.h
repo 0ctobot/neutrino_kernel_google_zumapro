@@ -58,7 +58,7 @@
 
 #define SYNAPTICS_TCM_DRIVER_ID (1 << 0)
 #define SYNAPTICS_TCM_DRIVER_VERSION 1
-#define SYNAPTICS_TCM_DRIVER_SUBVER "5.2"
+#define SYNAPTICS_TCM_DRIVER_SUBVER "5.3"
 
 /**
  * @section: Driver Configurations
@@ -338,6 +338,7 @@ struct custom_fw_status {
 enum custom_report_type {
 	REPORT_FW_STATUS = 0xc2,
 	REPORT_HEAT_MAP = 0xc3,
+	REPORT_TOUCH_AND_HEATMAP = 0xc5,
 };
 
 #if defined(ENABLE_WAKEUP_GESTURE)

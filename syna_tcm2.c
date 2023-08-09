@@ -1171,6 +1171,11 @@ static irqreturn_t syna_dev_interrupt_thread(int irq, void *data)
 	struct custom_fw_status *status;
 	struct syna_hw_attn_data *attn = &tcm->hw_if->bdata_attn;
 	struct tcm_dev *tcm_dev = tcm->tcm_dev;
+	unsigned char *touch_data = 0;
+	unsigned short touch_data_size = 0;
+	unsigned char *heatmap_data_start = 0;
+	unsigned char *heatmap_data = 0;
+	unsigned short heatmap_data_size = 0;
 
 	if (unlikely(gpio_get_value(attn->irq_gpio) != attn->irq_on_state))
 		goto exit;
@@ -1243,6 +1248,32 @@ static irqreturn_t syna_dev_interrupt_thread(int irq, void *data)
 		 */
 		LOGD("Heat map data received, size:%d\n",
 			tcm->event_data.data_length);
+		break;
+	case REPORT_TOUCH_AND_HEATMAP:
+		/* parse $c5 report containing touch and heatmap data */
+
+		/* touch data */
+		touch_data_size = (tcm->event_data.buf[1] << 8) | tcm->event_data.buf[0];
+		touch_data = tcm->event_data.buf + 2;
+
+		retval = syna_tcm_parse_touch_report(tcm->tcm_dev,
+				touch_data,
+				touch_data_size,
+				&tcm->tp_data);
+		if (retval < 0) {
+			LOGE("Fail to parse touch report\n");
+			goto exit;
+		}
+		/* forward the touch event to system */
+		syna_dev_report_input_events(tcm);
+
+		/* heatmap data */
+		heatmap_data_start = touch_data + touch_data_size;
+		heatmap_data_size = (heatmap_data_start[1] << 8) | heatmap_data_start[0];
+		heatmap_data = touch_data + touch_data_size + 2;
+
+		LOGD("$c5 Heat map data received, size:%d\n", heatmap_data_size);
+
 		break;
 	case REPORT_FW_STATUS:
 		/* for 'fw status' ($c2) report,
