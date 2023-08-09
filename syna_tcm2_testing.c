@@ -509,7 +509,6 @@ static int syna_testing_calculate_gap_frame_b(short *in, short *out,
 						((abs(val_1 - val_2)) * 100 / val_2);
 				}
 			}
-			out[idx++] = 0;
 		}
 	} else {
 		for (i = 1; i < rows; i++) {
@@ -884,17 +883,23 @@ static int syna_testing_pt05_gap(struct syna_tcm *tcm, struct tcm_buffer *test_d
 
 		/* compare to the limits */
 		result = true;
+		for (i = 0; i < rows; i++) {
+			for (j = 0; j < cols - 1; j++) {
+				idx = i * (cols - 1) + j;
+				if (gap_frame_x[idx] > pt05_gap_x_limits[idx]) {
+					LOGE("Fail on gapX (%2d,%2d)=%5d, max:%4d\n",
+						j, i, gap_frame_x[idx], pt05_gap_x_limits[idx]);
+					result = false;
+				}
+			}
+		}
+
 		for (i = 0; i < rows - 1; i++) {
 			for (j = 0; j < cols; j++) {
 				idx = i * cols + j;
-				if (gap_frame_x[idx] > pt05_gap_x_limits[idx]) {
-					LOGE("Fail on gapX (%2d,%2d)=%5d, max:%4d\n",
-						i, j, gap_frame_x[idx], pt05_gap_x_limits[idx]);
-					result = false;
-				}
 				if (gap_frame_y[idx] > pt05_gap_y_limits[idx]) {
 					LOGE("Fail on gapY (%2d,%2d)=%5d, max:%4d\n",
-						i, j, gap_frame_y[idx], pt05_gap_y_limits[idx]);
+						j, i, gap_frame_y[idx], pt05_gap_y_limits[idx]);
 					result = false;
 				}
 
@@ -1225,17 +1230,23 @@ static int syna_testing_pt10_gap(struct syna_tcm *tcm, struct tcm_buffer *test_d
 
 		/* compare to the limits */
 		result = true;
+		for (i = 0; i < rows; i++) {
+			for (j = 0; j < cols - 1; j++) {
+				idx = i * (cols - 1) + j;
+				if (gap_frame_x[idx] > pt10_gap_x_limits[idx]) {
+					LOGE("Fail on gapX (%2d,%2d)=%5d, max:%4d\n",
+						j, i, gap_frame_x[idx], pt10_gap_x_limits[idx]);
+					result = false;
+				}
+			}
+		}
+
 		for (i = 0; i < rows - 1; i++) {
 			for (j = 0; j < cols; j++) {
 				idx = i * cols + j;
-				if (gap_frame_x[idx] > pt10_gap_x_limits[idx]) {
-					LOGE("Fail on gapX (%2d,%2d)=%5d, max:%4d\n",
-						i, j, gap_frame_x[idx], pt10_gap_x_limits[idx]);
-					result = false;
-				}
 				if (gap_frame_y[idx] > pt10_gap_y_limits[idx]) {
 					LOGE("Fail on gapY (%2d,%2d)=%5d, max:%4d\n",
-						i, j, gap_frame_y[idx], pt10_gap_y_limits[idx]);
+						j, i, gap_frame_y[idx], pt10_gap_y_limits[idx]);
 					result = false;
 				}
 			}
