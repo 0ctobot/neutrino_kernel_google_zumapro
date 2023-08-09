@@ -363,11 +363,9 @@ static irqreturn_t cp_active_handler(int irq, void *data)
 	mif_err("[PHONE_ACTIVE Handler] state:%s cp_active:%d\n",
 			cp_state_str(mc->phone_state), cp_active);
 
-	if (cp_active == 1) {
+	if (cp_active == 1)
 		mif_err("ERROR - cp_active is not low, state:%s cp_active:%d\n",
 				cp_state_str(mc->phone_state), cp_active);
-		return IRQ_HANDLED;
-	}
 
 	if (timer_pending(&mld->crash_ack_timer))
 		del_timer(&mld->crash_ack_timer);
@@ -796,6 +794,8 @@ static void gpio_power_off_cp(struct modem_ctl *mc)
 	mif_gpio_set_value(&mc->cp_gpio[CP_GPIO_AP2CP_NRESET], 0, 50);
 	mif_gpio_set_value(&mc->cp_gpio[CP_GPIO_AP2CP_CP_PWR], 0, 0);
 #else
+	mif_gpio_set_value(&mc->cp_gpio[CP_GPIO_AP2CP_WAKEUP], 1, 10);
+	mif_gpio_set_value(&mc->cp_gpio[CP_GPIO_AP2CP_WAKEUP], 0, 0);
 	mif_gpio_set_value(&mc->cp_gpio[CP_GPIO_AP2CP_NRESET], 0, 0);
 	mif_gpio_set_value(&mc->cp_gpio[CP_GPIO_AP2CP_CP_WRST_N], 0, 0);
 	mif_gpio_set_value(&mc->cp_gpio[CP_GPIO_AP2CP_CP_PWR], 0, 30);
@@ -1559,8 +1559,11 @@ static int trigger_cp_crash(struct modem_ctl *mc)
 	return 0;
 }
 
-int s5100_force_crash_exit_ext(void)
+int s5100_force_crash_exit_ext(enum crash_type type)
 {
+	struct link_device *ld = get_current_link(g_mc->bootd);
+	ld->crash_reason.type = type;
+
 	if (g_mc)
 		g_mc->ops.trigger_cp_crash(g_mc);
 
@@ -1569,7 +1572,7 @@ int s5100_force_crash_exit_ext(void)
 
 int modem_force_crash_exit_ext(void)
 {
-	return s5100_force_crash_exit_ext();
+	return s5100_force_crash_exit_ext(CRASH_REASON_MIF_FORCED);
 }
 EXPORT_SYMBOL(modem_force_crash_exit_ext);
 
@@ -1844,7 +1847,7 @@ exit:
 	spin_unlock_irqrestore(&mc->pcie_tx_lock, flags);
 
 	if (unlikely(force_crash))
-		s5100_force_crash_exit_ext();
+		s5100_force_crash_exit_ext(CRASH_REASON_PCIE_DOORBELL_FAILURE_POWEROFF);
 
 	return 0;
 }
@@ -1938,7 +1941,7 @@ int s5100_poweron_pcie(struct modem_ctl *mc, bool boot_on)
 						 mld->intval_ap2cp_pcie_link_ack) != 0) {
 			/* DBG */
 			mif_err("DBG: s5100pcie_send_doorbell_int() func. is failed !!!\n");
-			s5100_force_crash_exit_ext();
+			s5100_force_crash_exit_ext(CRASH_REASON_PCIE_DOORBELL_FAILURE_POWERON);
 		}
 	}
 #if IS_ENABLED(CONFIG_CPIF_AP_SUSPEND_DURING_VOICE_CALL)
@@ -1966,7 +1969,7 @@ exit:
 	spin_unlock_irqrestore(&mc->pcie_tx_lock, flags);
 
 	if (unlikely(force_crash))
-		s5100_force_crash_exit_ext();
+		s5100_force_crash_exit_ext(CRASH_REASON_PCIE_DOORBELL_FAILURE_POWERON);
 
 	return 0;
 }
