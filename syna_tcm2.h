@@ -325,7 +325,8 @@ struct custom_fw_status {
 			unsigned char b2_freq_hopping:1;
 			unsigned char b3_grip:1;
 			unsigned char b4_palm:1;
-			unsigned char b5__7_reserved:3;
+			unsigned char b5_fast_relaxation:1;
+			unsigned char b6__7_reserved:2;
 			unsigned char reserved;
 		} __packed;
 		unsigned char data[2];

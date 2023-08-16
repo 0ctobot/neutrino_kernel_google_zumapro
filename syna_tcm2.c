@@ -1461,9 +1461,11 @@ static irqreturn_t syna_dev_interrupt_thread(int irq, void *data)
 		 * report size shall be 2-byte only; the
 		 */
 		status = (struct custom_fw_status *)&tcm->event_data.buf[0];
-		LOGI("Status: moisture:%d noise:%d freq-change:%d, grip:%d, palm:%d\n",
+		LOGI("Status: moisture:%d noise:%d freq-change:%d, grip:%d, palm:%d, "
+			"fast relax:%d\n",
 			status->b0_moisture, status->b1_noise_state,
-			status->b2_freq_hopping, status->b3_grip, status->b4_palm);
+			status->b2_freq_hopping, status->b3_grip, status->b4_palm,
+			status->b5_fast_relaxation);
 		break;
 	default:
 		break;
