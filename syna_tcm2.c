@@ -375,6 +375,55 @@ static void syna_set_grip_mode_work(struct work_struct *work)
 
 	goog_pm_wake_unlock_nosync(tcm->gti, GTI_PM_WAKELOCK_TYPE_VENDOR_REQUEST);
 }
+
+static void syna_gti_init(struct syna_tcm *tcm)
+{
+	int retval = 0;
+	struct gti_optional_configuration *options;
+	struct platform_device *pdev = tcm->pdev;
+	struct syna_hw_attn_data *attn = &tcm->hw_if->bdata_attn;
+
+	/* release the interrupt and register the gti irq later. */
+	syna_dev_release_irq(tcm);
+
+	INIT_WORK(&tcm->set_grip_mode_work, syna_set_grip_mode_work);
+	INIT_WORK(&tcm->set_palm_mode_work, syna_set_palm_mode_work);
+
+	pdev->dev.of_node = pdev->dev.parent->of_node;
+	options = devm_kzalloc(&pdev->dev, sizeof(struct gti_optional_configuration), GFP_KERNEL);
+
+	options->get_fw_version = get_fw_version;
+	options->get_irq_mode = get_irq_mode;
+	options->set_irq_mode = set_irq_mode;
+	options->reset = set_reset;
+	options->set_grip_mode = syna_set_grip_mode;
+	options->get_grip_mode = syna_get_grip_mode;
+	options->set_palm_mode = syna_set_palm_mode;
+	options->get_palm_mode = syna_get_palm_mode;
+
+	tcm->gti = goog_touch_interface_probe(
+		tcm, &pdev->dev, tcm->input_dev, gti_default_handler, options);
+	if (!tcm->gti) {
+		LOGE("Failed to initialize GTI");
+		return;
+	}
+
+	retval = goog_pm_register_notification(tcm->gti, &syna_dev_pm_ops);
+	if (retval < 0)
+		LOGE("Failed to register GTI pm");
+
+	LOGI("Register IRQ by GTI.");
+	attn->irq_id = gpio_to_irq(attn->irq_gpio);
+	retval = goog_devm_request_threaded_irq(tcm->gti, &tcm->pdev->dev,
+			attn->irq_id, syna_dev_isr, syna_dev_interrupt_thread,
+			attn->irq_flags, PLATFORM_DRIVER_NAME, tcm);
+	if (retval < 0)
+		LOGE("Failed to request GTI IRQ");
+	else
+		attn->irq_enabled = true;
+
+	syna_dev_restore_feature_setting(tcm, RESP_IN_ATTN);
+}
 #endif
 
 /**
@@ -1458,11 +1507,6 @@ static int syna_dev_request_irq(struct syna_tcm *tcm)
 	attn->irq_id = gpio_to_irq(attn->irq_gpio);
 
 #ifdef DEV_MANAGED_API
-#if IS_ENABLED(CONFIG_GOOG_TOUCH_INTERFACE)
-	retval = goog_devm_request_threaded_irq(tcm->gti, &tcm->pdev->dev,
-			attn->irq_id, syna_dev_isr, syna_dev_interrupt_thread,
-			attn->irq_flags, PLATFORM_DRIVER_NAME, tcm);
-#else
 	retval = devm_request_threaded_irq(dev,
 			attn->irq_id,
 			syna_dev_isr,
@@ -1470,7 +1514,6 @@ static int syna_dev_request_irq(struct syna_tcm *tcm)
 			attn->irq_flags,
 			PLATFORM_DRIVER_NAME,
 			tcm);
-#endif
 #else /* Legacy API */
 	retval = request_threaded_irq(attn->irq_id,
 			syna_dev_isr,
@@ -1518,12 +1561,21 @@ static void syna_dev_release_irq(struct syna_tcm *tcm)
 	if (attn->irq_id <= 0)
 		return;
 
+#if IS_ENABLED(CONFIG_GOOG_TOUCH_INTERFACE)
+	syna_pal_mutex_lock(&attn->irq_en_mutex);
+	disable_irq(attn->irq_id);
+	syna_pal_mutex_unlock(&attn->irq_en_mutex);
+#else
 	if (tcm->hw_if->ops_enable_irq)
 		tcm->hw_if->ops_enable_irq(tcm->hw_if, false);
+#endif
 
 #ifdef DEV_MANAGED_API
 #if IS_ENABLED(CONFIG_GOOG_TOUCH_INTERFACE)
-	goog_devm_free_irq(tcm->gti, &tcm->pdev->dev, attn->irq_id);
+	if (tcm->gti)
+		goog_devm_free_irq(tcm->gti, &tcm->pdev->dev, attn->irq_id);
+	else
+		devm_free_irq(dev, attn->irq_id, tcm);
 #else
 	devm_free_irq(dev, attn->irq_id, tcm);
 #endif
@@ -1639,21 +1691,21 @@ static void syna_dev_reflash_startup_work(struct work_struct *work)
 
 	tcm_dev = tcm->tcm_dev;
 
+	pm_stay_awake(&tcm->pdev->dev);
+
 	/* get firmware image */
 	retval = request_firmware(&fw_entry,
 			tcm->hw_if->fw_name,
 			tcm->pdev->dev.parent);
 	if (retval < 0) {
 		LOGE("Fail to request %s\n", tcm->hw_if->fw_name);
-		return;
+		goto exit;
 	}
 
 	fw_image = fw_entry->data;
 	fw_image_size = fw_entry->size;
 
 	LOGD("Firmware image size = %d\n", fw_image_size);
-
-	pm_stay_awake(&tcm->pdev->dev);
 
 	/* perform fw update */
 #ifdef MULTICHIP_DUT_REFLASH
@@ -1696,6 +1748,8 @@ static void syna_dev_reflash_startup_work(struct work_struct *work)
 		LOGE("Fail to register input device\n");
 		goto exit;
 	}
+
+	syna_gti_init(tcm);
 exit:
 	fw_image = NULL;
 
@@ -2445,9 +2499,6 @@ static int syna_dev_probe(struct platform_device *pdev)
 #if defined(USE_DRM_PANEL_NOTIFIER)
 	struct device *dev;
 #endif
-#if IS_ENABLED(CONFIG_GOOG_TOUCH_INTERFACE)
-	struct gti_optional_configuration *options;
-#endif
 
 	hw_if = pdev->dev.platform_data;
 	if (!hw_if) {
@@ -2565,35 +2616,8 @@ static int syna_dev_probe(struct platform_device *pdev)
 	tcm->touch_report_rate_config = CONFIG_HIGH_REPORT_RATE;
 	INIT_DELAYED_WORK(&tcm->set_report_rate_work, syna_set_report_rate_work);
 
-#if IS_ENABLED(CONFIG_GOOG_TOUCH_INTERFACE)
-	INIT_WORK(&tcm->set_grip_mode_work, syna_set_grip_mode_work);
-	INIT_WORK(&tcm->set_palm_mode_work, syna_set_palm_mode_work);
-
-	pdev->dev.of_node = pdev->dev.parent->of_node;
-	options = devm_kzalloc(&pdev->dev, sizeof(struct gti_optional_configuration), GFP_KERNEL);
-
-	options->get_fw_version = get_fw_version;
-	options->get_irq_mode = get_irq_mode;
-	options->set_irq_mode = set_irq_mode;
-	options->reset = set_reset;
-	options->set_grip_mode = syna_set_grip_mode;
-	options->get_grip_mode = syna_get_grip_mode;
-	options->set_palm_mode = syna_set_palm_mode;
-	options->get_palm_mode = syna_get_palm_mode;
-
-	tcm->gti = goog_touch_interface_probe(
-		tcm, &pdev->dev, tcm->input_dev, gti_default_handler, options);
-
-	retval = goog_pm_register_notification(tcm->gti, &syna_dev_pm_ops);
-	if (retval < 0) {
-		LOGE("Failed to register gti pm");
-		goto err_request_irq;
-	}
-#endif
-
 	tcm->enable_fw_grip = 0x02;
 	tcm->enable_fw_palm = 0x02;
-	syna_dev_restore_feature_setting(tcm, RESP_IN_POLLING);
 
 	retval = syna_dev_request_irq(tcm);
 	if (retval < 0) {
