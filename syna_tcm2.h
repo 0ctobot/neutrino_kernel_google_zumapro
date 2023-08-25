@@ -429,11 +429,14 @@ struct syna_tcm {
 				* CLOCK_MONOTONIC */
 
 #if IS_ENABLED(CONFIG_GOOG_TOUCH_INTERFACE)
+	unsigned short heatmap_mode;
 	struct goog_touch_interface *gti;
 	/* Work for setting firmware grip mode. */
 	struct work_struct set_grip_mode_work;
 	/* Work for setting firmware palm mode. */
 	struct work_struct set_palm_mode_work;
+	/* Work for setting heatmap mode. */
+	struct work_struct set_heatmap_enabled_work;
 #else
 	syna_pal_mutex_t tp_event_mutex;
 #endif

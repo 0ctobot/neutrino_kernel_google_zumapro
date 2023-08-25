@@ -376,6 +376,52 @@ static void syna_set_grip_mode_work(struct work_struct *work)
 	goog_pm_wake_unlock_nosync(tcm->gti, GTI_PM_WAKELOCK_TYPE_VENDOR_REQUEST);
 }
 
+static int syna_set_heatmap_enabled(void *private_data, struct gti_heatmap_cmd *cmd)
+{
+	struct syna_tcm *tcm = private_data;
+
+	if (goog_pm_wake_get_locks(tcm->gti) == 0 || tcm->pwr_state != PWR_ON) {
+		LOGI("Connot set heatmap mode because touch is off");
+		return -EPERM;
+	}
+
+	tcm->heatmap_mode = cmd->setting == GTI_HEATMAP_ENABLE ?
+			HEATMAP_MODE_COMBINED : HEATMAP_MODE_COORD;
+
+	if (tcm->hw_if->bdata_attn.irq_enabled) {
+		queue_work(tcm->event_wq, &tcm->set_heatmap_enabled_work);
+	} else {
+		LOGI("Set heatmap mode %d.\n", tcm->heatmap_mode);
+		syna_tcm_set_dynamic_config(tcm->tcm_dev,
+			DC_HEATMAP_MODE,
+			tcm->heatmap_mode,
+			RESP_IN_POLLING);
+	}
+
+	return 0;
+}
+
+static void syna_set_heatmap_enabled_work(struct work_struct *work)
+{
+	struct syna_tcm *tcm = container_of(work, struct syna_tcm, set_heatmap_enabled_work);
+	int retval = 0;
+
+	retval = goog_pm_wake_lock(tcm->gti, GTI_PM_WAKELOCK_TYPE_VENDOR_REQUEST, true);
+	if (retval) {
+		LOGE("Failed to obtain wake lock, ret = %d", retval);
+		return;
+	}
+
+	LOGI("Set heatmap mode %d.\n", tcm->heatmap_mode);
+
+	syna_tcm_set_dynamic_config(tcm->tcm_dev,
+			DC_HEATMAP_MODE,
+			tcm->heatmap_mode,
+			RESP_IN_ATTN);
+
+	goog_pm_wake_unlock_nosync(tcm->gti, GTI_PM_WAKELOCK_TYPE_VENDOR_REQUEST);
+}
+
 static void syna_gti_init(struct syna_tcm *tcm)
 {
 	int retval = 0;
@@ -388,6 +434,7 @@ static void syna_gti_init(struct syna_tcm *tcm)
 
 	INIT_WORK(&tcm->set_grip_mode_work, syna_set_grip_mode_work);
 	INIT_WORK(&tcm->set_palm_mode_work, syna_set_palm_mode_work);
+	INIT_WORK(&tcm->set_heatmap_enabled_work, syna_set_heatmap_enabled_work);
 
 	pdev->dev.of_node = pdev->dev.parent->of_node;
 	options = devm_kzalloc(&pdev->dev, sizeof(struct gti_optional_configuration), GFP_KERNEL);
@@ -400,6 +447,7 @@ static void syna_gti_init(struct syna_tcm *tcm)
 	options->get_grip_mode = syna_get_grip_mode;
 	options->set_palm_mode = syna_set_palm_mode;
 	options->get_palm_mode = syna_get_palm_mode;
+	options->set_heatmap_enabled = syna_set_heatmap_enabled;
 
 	tcm->gti = goog_touch_interface_probe(
 		tcm, &pdev->dev, tcm->input_dev, gti_default_handler, options);
@@ -427,41 +475,6 @@ static void syna_gti_init(struct syna_tcm *tcm)
 #endif
 
 /**
- * syna_dev_set_heatmap_mode()
- *
- * Enable or disable the low power gesture mode.
- * Furthermore, set up the wake-up irq.
- *
- * @param
- *    [ in] tcm: tcm driver handle
- *    [ in] en:  '1' to enable heatmap mode; '0' to disable.
- *
- * @return
- *    on success, 0; otherwise, negative value on error.
- */
-static void syna_dev_set_heatmap_mode(struct syna_tcm *tcm, bool en)
-{
-	int retval = 0;
-	struct syna_hw_attn_data *attn = &tcm->hw_if->bdata_attn;
-	uint8_t resp_code;
-	uint8_t heatmap[1] = {REPORT_HEAT_MAP};
-	uint8_t command = en ? CMD_ENABLE_REPORT : CMD_DISABLE_REPORT;
-	uint32_t delay = attn->irq_enabled ?
-			 RESP_IN_ATTN : tcm->tcm_dev->msg_data.default_resp_reading;
-
-	retval = tcm->tcm_dev->write_message(tcm->tcm_dev,
-			command,
-			heatmap,
-			1,
-			1,
-			&resp_code,
-			delay);
-	if (retval < 0) {
-		LOGE("Fail to %s heatmap\n", en ? "enable" : "disable");
-	}
-}
-
-/**
  * syna_dev_restore_feature_setting()
  *
  * Restore the feature settings after the device resume.
@@ -482,8 +495,6 @@ static void syna_dev_restore_feature_setting(struct syna_tcm *tcm, unsigned int 
 #if IS_ENABLED(CONFIG_GOOG_TOUCH_INTERFACE)
 	goog_notify_fw_status_changed(tcm->gti, GTI_FW_STATUS_RESET, NULL);
 #endif
-
-	syna_dev_set_heatmap_mode(tcm, true);
 
 	syna_tcm_set_dynamic_config(tcm->tcm_dev,
 			DC_COMPRESSION_THRESHOLD,
@@ -2142,8 +2153,6 @@ static int syna_dev_suspend(struct device *dev)
 	/* disable irq */
 	if (irq_disabled && (hw_if->ops_enable_irq))
 		hw_if->ops_enable_irq(hw_if, false);
-
-	syna_dev_set_heatmap_mode(tcm, false);
 
 	syna_pinctrl_configure(tcm, false);
 

@@ -262,6 +262,15 @@ enum tcm_int2_production {
 };
 
 /**
+ * @section: Heatmap Mode Configuration
+ *
+ */
+enum tcm_heatmap_mode {
+	HEATMAP_MODE_COORD = 0,
+	HEATMAP_MODE_COMBINED = 4,
+};
+
+/**
  * @section: Field IDs in Dynamic Configuration
  *
  * The codes specify the generic dynamic configuration options.
@@ -296,6 +305,7 @@ enum dynamic_tcm_config_id {
 	DC_CONTINUOUSLY_REPORT = 0xF5,
 	DC_GRIP_DELTA_THRESHOLD = 0xF6,
 	DC_GRIP_BORDER_THRESHOLD = 0xF7,
+	DC_HEATMAP_MODE = 0xFC,
 };
 
 /**
