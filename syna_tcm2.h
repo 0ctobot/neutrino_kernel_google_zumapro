@@ -121,7 +121,15 @@
  *         from suspend.
  *         Set "disable" in default.
  */
-#define RESET_ON_RESUME
+/* #define RESET_ON_RESUME */
+
+/**
+ * @brief: GOOG_INT2_FEATURE
+ *         Open if willing to issue a reset to the touch controller
+ *         from suspend.
+ *         Set "disable" in default.
+ */
+#define GOOG_INT2_FEATURE
 
 /**
  * @brief ENABLE_WAKEUP_GESTURE

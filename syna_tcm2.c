@@ -688,7 +688,11 @@ static void syna_dev_helper_work(struct work_struct *work)
 	struct syna_tcm *tcm =
 			container_of(helper, struct syna_tcm, helper);
 
+#if IS_ENABLED(CONFIG_GOOG_TOUCH_INTERFACE)
+	if (goog_pm_wake_get_locks(tcm->gti) == 0 || tcm->pwr_state != PWR_ON) {
+#else
 	if (tcm->pwr_state != PWR_ON) {
+#endif
 		LOGI("Touch is already off.");
 		goto exit;
 	}
@@ -1864,6 +1868,9 @@ exit:
 static int syna_dev_enter_normal_sensing(struct syna_tcm *tcm)
 {
 	int retval = 0;
+#ifdef GOOG_INT2_FEATURE
+	unsigned short enable;
+#endif
 
 	if (!tcm)
 		return -EINVAL;
@@ -1884,6 +1891,29 @@ static int syna_dev_enter_normal_sensing(struct syna_tcm *tcm)
 		}
 	}
 
+#ifdef GOOG_INT2_FEATURE
+	retval = syna_tcm_get_dynamic_config(tcm->tcm_dev,
+				DC_ENABLE_WAKEUP_GESTURE_MODE,
+				&enable,
+				RESP_IN_POLLING);
+	if (retval < 0) {
+		LOGE("Fail to get low power gesture mode\n");
+		return retval;
+	}
+
+	if (enable) {
+		retval = syna_tcm_set_dynamic_config(tcm->tcm_dev,
+				DC_ENABLE_WAKEUP_GESTURE_MODE,
+				0,
+				RESP_IN_POLLING);
+		if (retval < 0) {
+			LOGE("Fail to exit low power gesture mode\n");
+			return retval;
+		}
+		LOGI("Exit gesture mode.");
+	}
+
+#endif
 	return 0;
 }
 #endif
@@ -2126,11 +2156,13 @@ static int syna_dev_resume(struct device *dev)
 		goto exit;
 	}
 #endif
+#ifndef GOOG_INT2_FEATURE
 	retval = syna_tcm_rezero(tcm->tcm_dev);
 	if (retval < 0) {
 		LOGE("Fail to rezero\n");
 		goto exit;
 	}
+#endif
 #endif
 	tcm->pwr_state = PWR_ON;
 
@@ -2176,7 +2208,7 @@ exit:
 static int syna_dev_suspend(struct device *dev)
 {
 #ifdef POWER_ALIVE_AT_SUSPEND
-	int retval;
+	int retval, retry;
 #endif
 	struct syna_tcm *tcm = dev_get_drvdata(dev);
 	struct syna_hw_interface *hw_if = tcm->hw_if;
@@ -2196,8 +2228,41 @@ static int syna_dev_suspend(struct device *dev)
 	/* clear all input events  */
 	syna_dev_free_input_events(tcm);
 #endif
+	/* once lpwg is enabled, irq should be alive.
+	 * otherwise, disable irq in suspend.
+	 */
+	irq_disabled = (!tcm->lpwg_enabled);
+
+	/* disable irq */
+	if (irq_disabled && (hw_if->ops_enable_irq))
+		hw_if->ops_enable_irq(hw_if, false);
 
 #ifdef POWER_ALIVE_AT_SUSPEND
+#ifdef GOOG_INT2_FEATURE
+	LOGI("Do reset on suspend\n");
+
+	for (retry = 0; retry < 3; retry++) {
+		if (hw_if->ops_hw_reset) {
+			hw_if->ops_hw_reset(hw_if);
+			retval = syna_tcm_get_event_data(tcm->tcm_dev,
+				&status, NULL);
+			if ((retval < 0) || (status != REPORT_IDENTIFY)) {
+				LOGE("Fail to complete hw reset, ret = %d, status = %d\n",
+				     retval, status);
+				continue;
+			}
+			break;
+		} else {
+			retval = syna_tcm_reset(tcm->tcm_dev);
+			if (retval < 0) {
+				LOGE("Fail to do sw reset, ret = %d\n", retval);
+				continue;
+			}
+			break;
+		}
+	}
+#endif
+
 	/* enter power saved mode if power is not off */
 	retval = syna_dev_enter_lowpwr_sensing(tcm);
 	if (retval < 0) {
@@ -2219,15 +2284,6 @@ static int syna_dev_suspend(struct device *dev)
 #else
 	tcm->pwr_state = PWR_OFF;
 #endif
-
-	/* once lpwg is enabled, irq should be alive.
-	 * otherwise, disable irq in suspend.
-	 */
-	irq_disabled = (!tcm->lpwg_enabled);
-
-	/* disable irq */
-	if (irq_disabled && (hw_if->ops_enable_irq))
-		hw_if->ops_enable_irq(hw_if, false);
 
 	syna_pinctrl_configure(tcm, false);
 

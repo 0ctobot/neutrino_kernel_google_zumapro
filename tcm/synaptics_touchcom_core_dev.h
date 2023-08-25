@@ -266,7 +266,7 @@ enum tcm_int2_production {
  *
  */
 enum tcm_heatmap_mode {
-	HEATMAP_MODE_COORD = 0,
+	HEATMAP_MODE_COORD = 1,
 	HEATMAP_MODE_COMBINED = 4,
 };
 
