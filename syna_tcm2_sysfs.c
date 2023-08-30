@@ -999,6 +999,11 @@ static ssize_t syna_sysfs_high_sensitivity_store(struct kobject *kobj,
 
 	tcm->high_sensitivity_mode = input;
 
+#if IS_ENABLED(CONFIG_GOOG_TOUCH_INTERFACE)
+	tcm->gti->cmd.screen_protector_mode_cmd.setting =
+		input ? GTI_SCREEN_PROTECTOR_MODE_ENABLE : GTI_SCREEN_PROTECTOR_MODE_DISABLE;
+#endif
+
 	retval = syna_tcm_set_dynamic_config(tcm->tcm_dev,
 				DC_HIGH_SENSITIVIRY_MODE,
 				input,

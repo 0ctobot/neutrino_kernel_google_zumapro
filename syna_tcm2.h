@@ -437,6 +437,8 @@ struct syna_tcm {
 	struct work_struct set_palm_mode_work;
 	/* Work for setting heatmap mode. */
 	struct work_struct set_heatmap_enabled_work;
+	/* Work for setting screen protector mode. */
+	struct work_struct set_screen_protector_mode_work;
 #else
 	syna_pal_mutex_t tp_event_mutex;
 #endif
