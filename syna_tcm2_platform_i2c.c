@@ -196,7 +196,7 @@ static int syna_i2c_config_gpios(struct syna_hw_interface *hw_if)
 
 	if (rst->reset_gpio > 0) {
 		retval = syna_i2c_request_gpio(rst->reset_gpio,
-				true, 1, !rst->reset_on_state,
+				true, 1, rst->reset_on_state,
 				str_rst_gpio);
 		if (retval < 0) {
 			LOGE("Fail to configure reset GPIO %d\n",
@@ -419,6 +419,34 @@ static int syna_i2c_parse_dt(struct syna_hw_interface *hw_if,
 		bus->switch_state = 1;
 	}
 
+	pwr->avdd_power_on_delay_ms = 0;
+	prop = of_find_property(np, "synaptics,avdd-power-on-delay-ms", NULL);
+	if (prop && prop->length) {
+		of_property_read_u32(np, "synaptics,avdd-power-on-delay-ms",
+				&pwr->avdd_power_on_delay_ms);
+	}
+
+	pwr->vdd_power_on_delay_ms = 0;
+	prop = of_find_property(np, "synaptics,vdd-power-on-delay-ms", NULL);
+	if (prop && prop->length) {
+		of_property_read_u32(np, "synaptics,vdd-power-on-delay-ms",
+				&pwr->vdd_power_on_delay_ms);
+	}
+
+	pwr->avdd_power_off_delay_ms = 0;
+	prop = of_find_property(np, "synaptics,avdd-power-off-delay-ms", NULL);
+	if (prop && prop->length) {
+		of_property_read_u32(np, "synaptics,avdd-power-off-delay-ms",
+				&pwr->avdd_power_off_delay_ms);
+	}
+
+	pwr->vdd_power_off_delay_ms = 0;
+	prop = of_find_property(np, "synaptics,vdd-power-off-delay-ms", NULL);
+	if (prop && prop->length) {
+		of_property_read_u32(np, "synaptics,vdd-power-off-delay-ms",
+				&pwr->vdd_power_off_delay_ms);
+	}
+
 	return 0;
 }
 #endif
@@ -593,13 +621,32 @@ static int syna_i2c_enable_pwr_gpio(struct syna_hw_interface *hw_if,
 		bool en)
 {
 	struct syna_hw_pwr_data *pwr = &hw_if->bdata_pwr;
-	int state = (en) ? pwr->power_on_state : !pwr->power_on_state;
 
-	if (pwr->avdd_gpio > 0)
-		gpio_set_value(pwr->avdd_gpio, state);
+	if (en) {
+		if (pwr->avdd_gpio > 0)
+			gpio_set_value(pwr->avdd_gpio, pwr->power_on_state);
 
-	if (pwr->vdd_gpio > 0)
-		gpio_set_value(pwr->vdd_gpio, state);
+		if (pwr->avdd_power_on_delay_ms > 0)
+			syna_pal_sleep_ms(pwr->avdd_power_on_delay_ms);
+
+		if (pwr->vdd_gpio > 0)
+			gpio_set_value(pwr->vdd_gpio, pwr->power_on_state);
+
+		if (pwr->vdd_power_on_delay_ms > 0)
+			syna_pal_sleep_ms(pwr->vdd_power_on_delay_ms);
+	} else {
+		if (pwr->vdd_gpio > 0)
+			gpio_set_value(pwr->vdd_gpio, !pwr->power_on_state);
+
+		if (pwr->vdd_power_off_delay_ms > 0)
+			syna_pal_sleep_ms(pwr->vdd_power_off_delay_ms);
+
+		if (pwr->avdd_gpio > 0)
+			gpio_set_value(pwr->avdd_gpio, !pwr->power_on_state);
+
+		if (pwr->avdd_power_off_delay_ms > 0)
+			syna_pal_sleep_ms(pwr->avdd_power_off_delay_ms);
+	}
 
 	return 0;
 }
@@ -629,32 +676,45 @@ static int syna_i2c_enable_regulator(struct syna_hw_interface *hw_if,
 		goto disable_pwr_reg;
 	}
 
-	if (vdd_reg) {
-		retval = regulator_enable(vdd_reg);
-		if (retval < 0) {
-			LOGE("Fail to enable vdd regulator\n");
-			goto exit;
-		}
-	}
-
 	if (avdd_reg) {
 		retval = regulator_enable(avdd_reg);
 		if (retval < 0) {
 			LOGE("Fail to enable avdd regulator\n");
+			goto exit;
+		}
+
+		if (pwr->avdd_power_on_delay_ms > 0)
+			syna_pal_sleep_ms(pwr->avdd_power_on_delay_ms);
+	}
+
+	if (vdd_reg) {
+		retval = regulator_enable(vdd_reg);
+		if (retval < 0) {
+			LOGE("Fail to enable vdd regulator\n");
 			goto disable_avdd_reg;
 		}
+
+		if (pwr->vdd_power_on_delay_ms > 0)
+			syna_pal_sleep_ms(pwr->vdd_power_on_delay_ms);
 	}
 
 	return 0;
 
 disable_pwr_reg:
-	if (vdd_reg)
+	if (vdd_reg) {
 		regulator_disable(vdd_reg);
 
+		if (pwr->vdd_power_off_delay_ms > 0)
+			syna_pal_sleep_ms(pwr->vdd_power_off_delay_ms);
+	}
+
 disable_avdd_reg:
-	if (avdd_reg)
+	if (avdd_reg) {
 		regulator_disable(avdd_reg);
 
+		if (pwr->avdd_power_off_delay_ms > 0)
+			syna_pal_sleep_ms(pwr->avdd_power_off_delay_ms);
+	}
 exit:
 	return retval;
 }
@@ -691,7 +751,7 @@ static int syna_i2c_power_on(struct syna_hw_interface *hw_if,
 		return retval;
 	}
 
-	syna_pal_sleep_ms(pwr->power_delay_ms);
+	// syna_pal_sleep_ms(pwr->power_delay_ms);
 
 	LOGI("Device power %s\n", (en) ? "on" : "off");
 

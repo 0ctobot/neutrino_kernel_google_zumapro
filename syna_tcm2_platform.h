@@ -135,6 +135,11 @@ struct syna_hw_pwr_data {
 	int power_on_state;
 	unsigned int power_delay_ms;
 
+	unsigned int avdd_power_on_delay_ms;
+	unsigned int avdd_power_off_delay_ms;
+	unsigned int vdd_power_on_delay_ms;
+	unsigned int vdd_power_off_delay_ms;
+
 	/* voltage */
 	unsigned int vdd;
 	unsigned int vled;

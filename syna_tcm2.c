@@ -828,7 +828,9 @@ static int syna_dev_parse_custom_gesture_cb(const unsigned char code,
 		unsigned short y;
 		unsigned char major;
 		unsigned char minor;
-	} g_pos;
+		unsigned char angle;
+	} __packed;
+	struct custom_gesture_data g_pos = {0};
 
 	bits = config[(*config_offset)++];
 
@@ -872,10 +874,14 @@ static int syna_dev_parse_custom_gesture_cb(const unsigned char code,
 		g_pos.minor = (unsigned short)data;
 		offset += 8;
 
+		syna_tcm_get_touch_data(report, report_size, offset, 8, &data);
+		g_pos.angle = (unsigned short)data;
+		offset += 8;
+
 		*report_offset += bits;
 
-		LOGI("Gesture data x:%d y:%d major:%d minor:%d\n",
-			g_pos.x, g_pos.y, g_pos.major, g_pos.minor);
+		LOGI("Gesture data x:%d y:%d major:%d minor:%d angle:%d\n",
+			g_pos.x, g_pos.y, g_pos.major, g_pos.minor, g_pos.angle);
 	} else {
 		return -EINVAL;
 	}
