@@ -103,17 +103,13 @@ extern struct device *syna_request_managed_device(void);
  * @brief: LOGE
  *         Output the error message
  */
-#define LOGD(log, ...) \
-	pr_debug("[  debug] %s: " log, __func__, ##__VA_ARGS__)
-#define LOGI(log, ...) \
-	pr_info("[   info] %s: " log, __func__, ##__VA_ARGS__)
-#define LOGN(log, ...) \
-	pr_notice("[   info] %s: " log, __func__, ##__VA_ARGS__)
-#define LOGW(log, ...) \
-	pr_warn("[warning] %s: " log, __func__, ##__VA_ARGS__)
-#define LOGE(log, ...) \
-	pr_err("[  error] %s: " log, __func__, ##__VA_ARGS__)
-
+#undef pr_fmt
+#define pr_fmt(fmt) "gtd: syna: " fmt
+#define LOGD(log, ...) pr_debug(log, ##__VA_ARGS__)
+#define LOGI(log, ...) pr_info(log, ##__VA_ARGS__)
+#define LOGN(log, ...) pr_notice(log, ##__VA_ARGS__)
+#define LOGW(log, ...) pr_warn(log, ##__VA_ARGS__)
+#define LOGE(log, ...) pr_err(log, ##__VA_ARGS__)
 
 /**
  * @section: Error Codes returned
