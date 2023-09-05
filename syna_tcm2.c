@@ -2953,7 +2953,8 @@ static int syna_dev_probe(struct platform_device *pdev)
 			(void *)tcm);
 #endif
 
-	LOGI("TouchComm driver, %s ver.: %d.%s, installed\n",
+	LOGI("%s: TouchComm driver, %s ver.: %d.%s, installed\n",
+		__func__,
 		PLATFORM_DRIVER_NAME,
 		SYNAPTICS_TCM_DRIVER_VERSION,
 		SYNAPTICS_TCM_DRIVER_SUBVER);
