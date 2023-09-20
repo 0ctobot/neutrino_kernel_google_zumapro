@@ -135,7 +135,7 @@
  * @brief ENABLE_WAKEUP_GESTURE
  *        Open if having wake-up gesture support.
  */
-/* #define ENABLE_WAKEUP_GESTURE */
+#define ENABLE_WAKEUP_GESTURE
 
 /**
  * @brief REPORT_SWAP_XY
@@ -355,6 +355,7 @@ enum custom_report_type {
  * @brief: Custom gesture type
  */
 enum custom_gesture_type {
+	GESTURE_NONE = 0,
 	GESTURE_SINGLE_TAP = 6,
 	GESTURE_LONG_PRESS = 11,
 };
@@ -364,7 +365,7 @@ enum custom_gesture_type {
 /**
  * @brief: Custom touch entity code
  */
-enum custom_gesture_type {
+enum custom_shape_data {
 	TOUCH_ENTITY_CUSTOM_ANGLE = 0xD1,
 	TOUCH_ENTITY_CUSTOM_MAJOR = 0xD2,
 	TOUCH_ENTITY_CUSTOM_MINOR = 0xD3,

@@ -499,6 +499,116 @@ static void syna_set_screen_protector_mode_work(struct work_struct *work)
 	goog_pm_wake_unlock_nosync(tcm->gti, GTI_PM_WAKELOCK_TYPE_VENDOR_REQUEST);
 }
 
+static u8 syna_gesture_dc_list[GTI_GESTURE_PARAMS_MAX] = {
+	[GTI_STTW_MIN_X] = DC_STTW_MIN_X,
+	[GTI_STTW_MIN_Y] = DC_STTW_MAX_X,
+	[GTI_STTW_MIN_Y] = DC_STTW_MIN_Y,
+	[GTI_STTW_MAX_Y] = DC_STTW_MAX_Y,
+	[GTI_STTW_MIN_FRAME] = DC_STTW_MIN_FRAME,
+	[GTI_STTW_MAX_FRAME] = DC_STTW_MAX_FRAME,
+	[GTI_STTW_JITTER] = DC_STTW_JITTER,
+	[GTI_STTW_MAX_TOUCH_SIZE] = DC_STTW_MAX_TOUCH_SIZE,
+	[GTI_LPTW_MIN_X] = DC_LPTW_MIN_X,
+	[GTI_LPTW_MAX_X] = DC_LPTW_MAX_X,
+	[GTI_LPTW_MIN_Y] = DC_LPTW_MIN_Y,
+	[GTI_LPTW_MAX_Y] = DC_LPTW_MAX_Y,
+	[GTI_LPTW_MIN_FRAME] = DC_LPTW_MIN_FRAME,
+	[GTI_LPTW_JITTER] = DC_LPTW_JITTER,
+	[GTI_LPTW_MAX_TOUCH_SIZE] = DC_LPTW_MAX_TOUCH_SIZE,
+	[GTI_LPTW_MARGINAL_MIN_X] = DC_LPTW_MARGINAL_MIN_X,
+	[GTI_LPTW_MARGINAL_MAX_X] = DC_LPTW_MARGINAL_MAX_X,
+	[GTI_LPTW_MARGINAL_MIN_Y] = DC_LPTW_MARGINAL_MIN_Y,
+	[GTI_LPTW_MARGINAL_MAX_Y] = DC_LPTW_MARGINAL_MAX_Y,
+	[GTI_LPTW_MONITOR_CH_MIN_TX] = DC_LPTW_MONITOR_CH_MIN_TX,
+	[GTI_LPTW_MONITOR_CH_MAX_TX] = DC_LPTW_MONITOR_CH_MAX_TX,
+	[GTI_LPTW_MONITOR_CH_MIN_RX] = DC_LPTW_MONITOR_CH_MIN_RX,
+	[GTI_LPTW_MONITOR_CH_MAX_RX] = DC_LPTW_MONITOR_CH_MAX_RX,
+	[GTI_LPTW_NODE_COUNT_MIN] = DC_LPTW_NODE_COUNT_MIN,
+	[GTI_LPTW_MOTION_BOUNDARY] = DC_LPTW_MOTION_BOUNDARY,
+};
+
+static int syna_set_gesture_type(struct syna_tcm *tcm, u8 gesture_type)
+{
+	int retval = 0;
+	unsigned short set_gesture_type = 0;
+
+	if (gesture_type == GTI_GESTURE_DISABLE) {
+		retval = syna_tcm_set_dynamic_config(tcm->tcm_dev,
+				DC_ENABLE_WAKEUP_GESTURE_MODE,
+				0,
+				RESP_IN_POLLING);
+		if (retval)
+			goto exit;
+
+		retval = syna_tcm_set_dynamic_config(tcm->tcm_dev,
+				DC_HEATMAP_MODE,
+				HEATMAP_MODE_COMBINED,
+				RESP_IN_POLLING);
+	} else {
+		if (gesture_type == GTI_GESTURE_STTW) {
+			set_gesture_type = GESTURE_TYPE_STTW;
+		} else if (gesture_type == GTI_GESTURE_LPTW) {
+			set_gesture_type = GESTURE_TYPE_LPTW;
+		} else if (gesture_type == GTI_GESTURE_STTW_AND_LPTW) {
+			set_gesture_type = GESTURE_TYPE_STTW_AND_LPTW;
+		} else {
+			LOGE("Unsuppoted gesture type %d", gesture_type);
+			retval = -EINVAL;
+			goto exit;
+		}
+
+		retval = syna_tcm_set_dynamic_config(tcm->tcm_dev,
+				DC_ENABLE_WAKEUP_GESTURE_MODE,
+				1,
+				RESP_IN_POLLING);
+		if (retval)
+			goto exit;
+
+		retval = syna_tcm_set_dynamic_config(tcm->tcm_dev,
+				DC_GESTURE_TYPE,
+				gesture_type,
+				RESP_IN_POLLING);
+		if (retval)
+			goto exit;
+
+		retval = syna_tcm_set_dynamic_config(tcm->tcm_dev,
+				DC_HEATMAP_MODE,
+				HEATMAP_MODE_COORD,
+				RESP_IN_POLLING);
+	}
+
+exit:
+	return retval;
+}
+
+static int syna_set_gesture_config(void *private_data, struct gti_gesture_config_cmd *cmd)
+{
+	struct syna_tcm *tcm = private_data;
+	int retval = 0;
+	int i = 0;
+	unsigned short gesture_type;
+
+	LOGI("Set gesture config");
+
+	for (i = 0; i < GTI_GESTURE_PARAMS_MAX; i++) {
+		if (cmd->updating_params[i]) {
+			if (i == GTI_GESTURE_TYPE) {
+				syna_set_gesture_type(tcm, cmd->params[i]);
+			} else {
+				retval = syna_tcm_set_dynamic_config(tcm->tcm_dev,
+						syna_gesture_dc_list[i],
+						cmd->params[i],
+						RESP_IN_POLLING);
+			}
+
+			if (retval)
+				goto exit;
+		}
+	}
+
+exit:
+	return retval;
+}
 static void syna_gti_init(struct syna_tcm *tcm)
 {
 	int retval = 0;
@@ -528,6 +638,7 @@ static void syna_gti_init(struct syna_tcm *tcm)
 	options->set_heatmap_enabled = syna_set_heatmap_enabled;
 	options->set_screen_protector_mode = syna_set_screen_protector_mode;
 	options->get_screen_protector_mode = syna_get_screen_protector_mode;
+	options->set_gesture_config = syna_set_gesture_config;
 
 	tcm->gti = goog_touch_interface_probe(
 		tcm, &pdev->dev, tcm->input_dev, gti_default_handler, options);
@@ -843,6 +954,8 @@ static int syna_dev_parse_custom_gesture_cb(const unsigned char code,
 		syna_tcm_get_touch_data(report, report_size, offset, bits, &data);
 
 		switch (data) {
+		case GESTURE_NONE:
+			break;
 		case GESTURE_SINGLE_TAP:
 			LOGI("Gesture single tap detected\n");
 			break;
@@ -853,6 +966,7 @@ static int syna_dev_parse_custom_gesture_cb(const unsigned char code,
 			LOGW("Unknown gesture id %d\n", data);
 			break;
 		}
+		tcm->tp_data.gesture_id = data;
 
 		*report_offset += bits;
 
@@ -885,8 +999,10 @@ static int syna_dev_parse_custom_gesture_cb(const unsigned char code,
 
 		*report_offset += bits;
 
-		LOGI("Gesture data x:%d y:%d major:%d minor:%d angle:%d\n",
-			g_pos.x, g_pos.y, g_pos.major, g_pos.minor, g_pos.angle);
+		if (tcm->tp_data.gesture_id != GESTURE_NONE) {
+			LOGI("Gesture data x:%d y:%d major:%d minor:%d angle:%d\n",
+				g_pos.x, g_pos.y, g_pos.major, g_pos.minor, g_pos.angle);
+		}
 	} else {
 		return -EINVAL;
 	}
@@ -2713,7 +2829,7 @@ static int syna_dev_probe(struct platform_device *pdev)
 	tcm->helper_enabled = false;
 #endif
 #ifdef ENABLE_WAKEUP_GESTURE
-	tcm->lpwg_enabled = true;
+	tcm->lpwg_enabled = false;
 #else
 	tcm->lpwg_enabled = false;
 #endif
