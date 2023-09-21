@@ -1797,7 +1797,10 @@ static void syna_dev_reflash_startup_work(struct work_struct *work)
 			tcm->pdev->dev.parent);
 	if (retval < 0) {
 		LOGE("Fail to request %s\n", tcm->hw_if->fw_name);
-		goto exit;
+		if (tcm->input_dev)
+			goto skip_fw_update;
+		else
+			goto exit;
 	}
 
 	fw_image = fw_entry->data;
@@ -1847,6 +1850,7 @@ static void syna_dev_reflash_startup_work(struct work_struct *work)
 		goto exit;
 	}
 
+skip_fw_update:
 	syna_gti_init(tcm);
 exit:
 	fw_image = NULL;
