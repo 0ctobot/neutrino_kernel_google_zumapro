@@ -42,7 +42,9 @@
 #define _SYNAPTICS_TCM2_PLATFORM_H_
 
 #include "syna_tcm2_runtime.h"
-
+#if IS_ENABLED(CONFIG_SPI_S3C64XX_GS)
+#include <linux/platform_data/spi-s3c64xx-gs.h>
+#endif
 /**
  * @section: The capability of bus transferred
  *
@@ -161,7 +163,9 @@ struct syna_hw_pwr_data {
 struct syna_hw_interface {
 	/* The handle of hardware device */
 	void *pdev;
-
+#if IS_ENABLED(CONFIG_SPI_S3C64XX_GS)
+	struct s3c64xx_spi_info *s3c64xx_sci;
+#endif
 	/* Hardware specific data */
 	struct syna_hw_bus_data bdata_io;
 	struct syna_hw_attn_data bdata_attn;
@@ -194,6 +198,7 @@ struct syna_hw_interface {
 	int udfps_x;
 	int udfps_y;
 #endif
+	bool dma_mode;
 	bool dynamic_report_rate;
 
 	/* Operation to read data from bus

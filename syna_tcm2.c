@@ -2398,6 +2398,14 @@ static void syna_dev_reflash_startup_work(struct work_struct *work)
 
 	pm_stay_awake(&tcm->pdev->dev);
 
+	/* Use CPU mode for the firmware update because it cannot fit the 4 bytes alignment.*/
+#if IS_ENABLED(CONFIG_GOOG_TOUCH_INTERFACE) && IS_ENABLED(CONFIG_SPI_S3C64XX_GS)
+	if (goog_check_spi_dma_enabled(tcm->hw_if->pdev) && tcm->hw_if->s3c64xx_sci) {
+		tcm->hw_if->dma_mode = 0;
+		tcm->hw_if->s3c64xx_sci->dma_mode = CPU_MODE;
+	}
+#endif
+
 	/* get firmware image */
 	retval = request_firmware(&fw_entry,
 			tcm->hw_if->fw_name,
@@ -2460,6 +2468,13 @@ static void syna_dev_reflash_startup_work(struct work_struct *work)
 skip_fw_update:
 	syna_gti_init(tcm);
 exit:
+	/* Restore DMA mode */
+#if IS_ENABLED(CONFIG_GOOG_TOUCH_INTERFACE) && IS_ENABLED(CONFIG_SPI_S3C64XX_GS)
+	if (goog_check_spi_dma_enabled(tcm->hw_if->pdev) && tcm->hw_if->s3c64xx_sci) {
+		tcm->hw_if->dma_mode = 1;
+		tcm->hw_if->s3c64xx_sci->dma_mode = DMA_MODE;
+	}
+#endif
 	fw_image = NULL;
 
 	if (fw_entry) {

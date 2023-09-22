@@ -1870,6 +1870,14 @@ static int syna_cdev_open(struct inode *inp, struct file *filp)
 #endif
 	syna_pal_mutex_unlock(&g_cdev_data.mutex);
 
+	/* Force to use CPU mode in case some command cannot fit the 4 bytes alignment */
+#if IS_ENABLED(CONFIG_GOOG_TOUCH_INTERFACE) && IS_ENABLED(CONFIG_SPI_S3C64XX_GS)
+	if (goog_check_spi_dma_enabled(tcm->hw_if->pdev) && tcm->hw_if->s3c64xx_sci) {
+		tcm->hw_if->dma_mode = 0;
+		tcm->hw_if->s3c64xx_sci->dma_mode = CPU_MODE;
+	}
+#endif
+
 	LOGI("CDevice open\n");
 
 	return 0;
@@ -1909,6 +1917,14 @@ static int syna_cdev_release(struct inode *inp, struct file *filp)
 	g_cdev_data.io_polling_interval = 0;
 	g_cdev_data.fifo_depth = 0;
 	g_cdev_data.extra_bytes = 0;
+
+	/* Restore DMA mode */
+#if IS_ENABLED(CONFIG_GOOG_TOUCH_INTERFACE) && IS_ENABLED(CONFIG_SPI_S3C64XX_GS)
+	if (goog_check_spi_dma_enabled(tcm->hw_if->pdev) && tcm->hw_if->s3c64xx_sci) {
+		tcm->hw_if->dma_mode = 1;
+		tcm->hw_if->s3c64xx_sci->dma_mode = DMA_MODE;
+	}
+#endif
 
 	LOGI("CDevice close\n");
 

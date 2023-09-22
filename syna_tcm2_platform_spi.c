@@ -869,6 +869,7 @@ static int syna_spi_read(struct syna_hw_interface *hw_if,
 	struct spi_message msg;
 	struct spi_device *spi = hw_if->pdev;
 	struct syna_hw_bus_data *bus = &hw_if->bdata_io;
+	unsigned int data_len = rd_len;
 
 	if (!spi) {
 		LOGE("Invalid bus io device\n");
@@ -883,6 +884,11 @@ static int syna_spi_read(struct syna_hw_interface *hw_if,
 		goto exit;
 	}
 
+#if IS_ENABLED(CONFIG_SPI_S3C64XX_GS)
+	if (hw_if->dma_mode && rd_len >= 64)
+		rd_len = ALIGN(rd_len, 4);
+#endif
+
 	spi_message_init(&msg);
 
 	if (bus->spi_byte_delay_us == 0)
@@ -895,10 +901,13 @@ static int syna_spi_read(struct syna_hw_interface *hw_if,
 	}
 
 	if (bus->spi_byte_delay_us == 0) {
-		syna_pal_mem_set(tx_buf, 0xff, rd_len);
 		xfer[0].len = rd_len;
-		xfer[0].tx_buf = tx_buf;
+		xfer[0].tx_buf = NULL;
 		xfer[0].rx_buf = rx_buf;
+#if IS_ENABLED(CONFIG_SPI_S3C64XX_GS)
+		if (hw_if->dma_mode)
+			xfer[0].bits_per_word = rd_len >= 64 ? 32 : 8;
+#endif
 #ifndef SPI_NO_DELAY_USEC
 		if (bus->spi_block_delay_us) {
 			xfer[0].delay.unit = SPI_DELAY_UNIT_USECS;
@@ -929,13 +938,13 @@ static int syna_spi_read(struct syna_hw_interface *hw_if,
 		LOGE("Failed to complete SPI transfer, error = %d\n", retval);
 		goto exit;
 	}
-	retval = syna_pal_mem_cpy(rd_data, rd_len, rx_buf, rd_len, rd_len);
+	retval = syna_pal_mem_cpy(rd_data, data_len, rx_buf, rd_len, data_len);
 	if (retval < 0) {
 		LOGE("Fail to copy rx_buf to rd_data\n");
 		goto exit;
 	}
 
-	retval = rd_len;
+	retval = data_len;
 
 exit:
 	syna_pal_mutex_unlock(&bus->io_mutex);
@@ -965,6 +974,7 @@ static int syna_spi_write(struct syna_hw_interface *hw_if,
 	struct spi_message msg;
 	struct spi_device *spi = hw_if->pdev;
 	struct syna_hw_bus_data *bus = &hw_if->bdata_io;
+	unsigned int data_len = wr_len;
 
 	if (!spi) {
 		LOGE("Invalid bus io device\n");
@@ -979,6 +989,11 @@ static int syna_spi_write(struct syna_hw_interface *hw_if,
 		goto exit;
 	}
 
+#if IS_ENABLED(CONFIG_SPI_S3C64XX_GS)
+	if (hw_if->dma_mode && wr_len >= 64)
+		wr_len = ALIGN(wr_len, 4);
+#endif
+
 	spi_message_init(&msg);
 
 	if (bus->spi_byte_delay_us == 0)
@@ -990,7 +1005,7 @@ static int syna_spi_write(struct syna_hw_interface *hw_if,
 		goto exit;
 	}
 
-	retval = syna_pal_mem_cpy(tx_buf, wr_len, wr_data, wr_len, wr_len);
+	retval = syna_pal_mem_cpy(tx_buf, wr_len, wr_data, data_len, data_len);
 	if (retval < 0) {
 		LOGE("Fail to copy wr_data to tx_buf\n");
 		goto exit;
@@ -999,6 +1014,10 @@ static int syna_spi_write(struct syna_hw_interface *hw_if,
 	if (bus->spi_byte_delay_us == 0) {
 		xfer[0].len = wr_len;
 		xfer[0].tx_buf = tx_buf;
+#if IS_ENABLED(CONFIG_SPI_S3C64XX_GS)
+		if (hw_if->dma_mode)
+			xfer[0].bits_per_word = wr_len >= 64 ? 32 : 8;
+#endif
 #ifndef SPI_NO_DELAY_USEC
 		if (bus->spi_block_delay_us) {
 			xfer[0].delay.unit = SPI_DELAY_UNIT_USECS;
@@ -1477,6 +1496,9 @@ static int syna_spi_probe(struct spi_device *spi)
 	int retval;
 	struct syna_hw_attn_data *attn = &syna_spi_hw_if.bdata_attn;
 	struct syna_hw_bus_data *bus = &syna_spi_hw_if.bdata_io;
+#if IS_ENABLED(CONFIG_SPI_S3C64XX_GS)
+	struct s3c64xx_spi_driver_data *s3c64xx_sdd;
+#endif
 
 	if (spi->master->flags & SPI_MASTER_HALF_DUPLEX) {
 		LOGE("Full duplex not supported by host\n");
@@ -1527,6 +1549,15 @@ static int syna_spi_probe(struct spi_device *spi)
 		LOGE("Fail to set up SPI protocol driver\n");
 		return retval;
 	}
+
+#if IS_ENABLED(CONFIG_GOOG_TOUCH_INTERFACE)
+	syna_spi_hw_if.dma_mode = goog_check_spi_dma_enabled(spi);
+	LOGI("dma_mode %s", syna_spi_hw_if.dma_mode ? "enabled" : "disabled");
+#endif
+#if IS_ENABLED(CONFIG_SPI_S3C64XX_GS)
+	s3c64xx_sdd = spi_master_get_devdata(spi->master);
+	syna_spi_hw_if.s3c64xx_sci = s3c64xx_sdd->cntrlr_info;
+#endif
 
 	/* initialize power unit */
 	retval = syna_spi_config_psu(&syna_spi_hw_if);
