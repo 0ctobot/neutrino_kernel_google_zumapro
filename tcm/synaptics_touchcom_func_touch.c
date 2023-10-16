@@ -29,7 +29,7 @@
  * DOLLARS.
  */
 
-/**
+/*
  * @file synaptics_tcm2_func_touch.c
  *
  * This file implements the touch report handling functions.
@@ -38,7 +38,7 @@
 
 #include "synaptics_touchcom_func_touch.h"
 
-/**
+/*
  * syna_tcm_get_touch_data()
  *
  * Get data entity from the received report according to bit offset and bit
@@ -110,7 +110,7 @@ int syna_tcm_get_touch_data(const unsigned char *report,
 	return 0;
 }
 
-/**
+/*
  * syna_tcm_get_knob_calib_data()
  *
  * The contents of the knob calibration data entity
@@ -134,7 +134,6 @@ static int syna_tcm_get_knob_calib_data(const unsigned char *report,
 	unsigned int idx;
 	unsigned int slug;
 	unsigned int data;
-	unsigned int data_end;
 
 	if (!report) {
 		LOGE("Invalid report data\n");
@@ -143,8 +142,6 @@ static int syna_tcm_get_knob_calib_data(const unsigned char *report,
 
 	if ((offset + bits) / 8 > report_size)
 		return 0;
-
-	data_end = offset + bits;
 
 	for (idx = 0; idx < MAX_NUM_KNOB_OBJECTS; idx++) {
 		for (slug = 0; slug < 3; slug++) {
@@ -189,7 +186,7 @@ static int syna_tcm_get_knob_calib_data(const unsigned char *report,
 	return 0;
 }
 
-/**
+/*
  * syna_tcm_get_knob_data()
  *
  * The contents of the knob data entity
@@ -212,7 +209,6 @@ static int syna_tcm_get_knob_data(const unsigned char *report,
 	int retval;
 	unsigned int idx;
 	unsigned int data;
-	unsigned int data_end;
 
 	if (!report) {
 		LOGE("Invalid report data\n");
@@ -221,8 +217,6 @@ static int syna_tcm_get_knob_data(const unsigned char *report,
 
 	if ((offset + bits) / 8 > report_size)
 		return 0;
-
-	data_end = offset + bits;
 
 	for (idx = 0; idx < MAX_NUM_KNOB_OBJECTS; idx++) {
 		if (bits - 16 <= 0)
@@ -280,7 +274,7 @@ static int syna_tcm_get_knob_data(const unsigned char *report,
 	return 0;
 }
 
-/**
+/*
  * syna_tcm_get_gesture_data()
  *
  * The contents of the gesture data entity depend on which gesture
@@ -357,7 +351,7 @@ static int syna_tcm_get_gesture_data(const unsigned char *report,
 	return 0;
 }
 
-/**
+/*
  * syna_tcm_parse_touch_report()
  *
  * Traverse through touch report configuration and parse the contents of
@@ -395,7 +389,6 @@ int syna_tcm_parse_touch_report(struct tcm_dev *tcm_dev,
 	unsigned int config_size;
 	unsigned char *config_data;
 	struct tcm_objects_data_blob *object_data;
-	unsigned int bits_in_obj_loop;
 	unsigned int bits_tailing;
 
 	if (!tcm_dev) {
@@ -438,7 +431,6 @@ int syna_tcm_parse_touch_report(struct tcm_dev *tcm_dev,
 
 	num_of_active_objects = false;
 
-	bits_in_obj_loop = tcm_dev->bits_config_loop;
 	bits_tailing = tcm_dev->bits_config_tailing;
 	loop_end = tcm_dev->end_config_loop;
 
@@ -841,7 +833,7 @@ exit:
 	return 0;
 }
 
-/**
+/*
  * syna_tcm_set_touch_report_config()
  *
  * Setup the format and content of touch report if needed.
@@ -927,7 +919,7 @@ exit:
 	return retval;
 }
 
-/**
+/*
  * syna_tcm_preserve_touch_report_config()
  *
  * Retrieve and preserve the current touch report configuration.
@@ -1054,7 +1046,7 @@ exit:
 	return retval;
 }
 
-/**
+/*
  * syna_tcm_set_custom_touch_entity_callback()
  *
  * Set up callback function to handle custom touch data.
@@ -1086,7 +1078,7 @@ int syna_tcm_set_custom_touch_entity_callback(struct tcm_dev *tcm_dev,
 	return 0;
 }
 
-/**
+/*
  * syna_tcm_set_custom_gesture_callback()
  *
  * Set up callback function to handle the gesture data defined as the

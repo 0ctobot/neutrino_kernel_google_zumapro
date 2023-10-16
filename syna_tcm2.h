@@ -588,11 +588,7 @@ void syna_sysfs_remove_dir(struct syna_tcm *tcm);
 
 #endif
 
-static irqreturn_t syna_dev_isr(int irq, void *handle);
-static irqreturn_t syna_dev_interrupt_thread(int irq, void *data);
-static void syna_dev_release_irq(struct syna_tcm *tcm);
 ssize_t syna_get_fw_info(struct syna_tcm *tcm, char *buf, size_t buf_size);
-static void syna_dev_restore_feature_setting(struct syna_tcm *tcm, unsigned int delay_ms_resp);
 
 #endif /* end of _SYNAPTICS_TCM2_DRIVER_H_ */
 

@@ -29,7 +29,7 @@
  * DOLLARS.
  */
 
-/**
+/*
  * @file syna_tcm2_cdev.c
  *
  * This file implements cdev and ioctl interface in the reference driver.
@@ -143,7 +143,7 @@ struct fifo_queue {
 
 
 #ifdef ENABLE_EXTERNAL_FRAME_PROCESS
-/**
+/*
  * syna_cdev_insert_fifo()
  *
  * Insert/Push the data to the queue.
@@ -234,7 +234,7 @@ exit:
 	return retval;
 }
 #endif
-/**
+/*
  * syna_cdev_ioctl_do_hw_reset()
  *
  * Perform the hardware reset with the selected reset method. The reset
@@ -333,7 +333,7 @@ static int syna_cdev_ioctl_do_hw_reset(struct syna_tcm *tcm,
 exit:
 	return retval;
 }
-/**
+/*
  * syna_cdev_ioctl_application_info()
  *
  * To keep the userspace application information, the user shall apply
@@ -397,7 +397,7 @@ static int syna_cdev_ioctl_application_info(struct syna_tcm *tcm,
 exit:
 	return retval;
 }
-/**
+/*
  * syna_cdev_ioctl_check_frame()
  *
  * Check the queuing status and wait for the data if it's empty.
@@ -482,7 +482,7 @@ exit:
 	return retval;
 }
 
-/**
+/*
  * syna_cdev_clean_queue()
  *
  * Clean the data queue.
@@ -516,7 +516,7 @@ static void syna_cdev_clean_queue(struct syna_tcm *tcm)
 
 	syna_pal_mutex_unlock(&g_cdev_data.queue_mutex);
 }
-/**
+/*
  * syna_cdev_ioctl_get_frame()
  *
  * Read the data from the queue and return to userspace if data is
@@ -658,7 +658,7 @@ exit:
 	return retval;
 }
 
-/**
+/*
  * syna_cdev_ioctl_set_reports()
  *
  * Assign the report types for queuing. The enabled reports will be queued
@@ -730,7 +730,7 @@ static int syna_cdev_ioctl_set_reports(struct syna_tcm *tcm,
 exit:
 	return retval;
 }
-/**
+/*
  * syna_cdev_ioctl_send_message()
  *
  * Send the command/message from userspace.
@@ -924,7 +924,7 @@ exit:
 	return retval;
 }
 
-/**
+/*
  * syna_cdev_ioctl_enable_irq()
  *
  * Enable or disable the irq via IOCTL.
@@ -1030,7 +1030,7 @@ static int syna_cdev_ioctl_enable_irq(struct syna_tcm *tcm,
 
 	return 0;
 }
-/**
+/*
  * syna_cdev_ioctl_store_pid()
  *
  * Save PID through IOCTL interface
@@ -1106,7 +1106,7 @@ exit:
 
 	return retval;
 }
-/**
+/*
  * syna_cdev_ioctl_raw_read()
  *
  * Read the data from device directly without routing to command wrapper
@@ -1176,7 +1176,7 @@ exit:
 
 	return retval;
 }
-/**
+/*
  * syna_cdev_ioctl_raw_write()
  *
  * Write the given data to device directly without routing to command wrapper
@@ -1250,7 +1250,7 @@ exit:
 
 	return retval;
 }
-/**
+/*
  * syna_cdev_ioctl_get_config_params()
  *
  * Return current configuration settings to user-space
@@ -1279,7 +1279,7 @@ static int syna_cdev_ioctl_get_config_params(struct syna_tcm *tcm,
 	}
 
 	if (size < sizeof(struct drv_param)) {
-		LOGE("Invalid data input, size: %d (expected: %d)\n",
+		LOGE("Invalid data input, size: %d (expected: %zd)\n",
 			size, sizeof(struct drv_param));
 		return -EINVAL;
 	}
@@ -1289,7 +1289,7 @@ static int syna_cdev_ioctl_get_config_params(struct syna_tcm *tcm,
 
 	retval = syna_tcm_buf_alloc(caller, sizeof(struct drv_param));
 	if (retval < 0) {
-		LOGE("Fail to allocate memory for caller buf, size: %d\n",
+		LOGE("Fail to allocate memory for caller buf, size: %zd\n",
 			sizeof(struct drv_param));
 		goto exit;
 	}
@@ -1333,7 +1333,7 @@ exit:
 
 	return retval;
 }
-/**
+/*
  * syna_cdev_ioctl_set_config()
  *
  * Set up and connect to touch controller.
@@ -1366,7 +1366,7 @@ static int syna_cdev_ioctl_set_config(struct syna_tcm *tcm,
 	}
 
 	if (in_size < sizeof(struct drv_param)) {
-		LOGE("Invalid data input, size: %d (expected: %d)\n",
+		LOGE("Invalid data input, size: %d (expected: %zd)\n",
 			in_size, sizeof(struct drv_param));
 		return -EINVAL;
 	}
@@ -1376,7 +1376,7 @@ static int syna_cdev_ioctl_set_config(struct syna_tcm *tcm,
 
 	retval = syna_tcm_buf_alloc(caller, sizeof(struct drv_param));
 	if (retval < 0) {
-		LOGE("Fail to allocate memory for caller buf, size: %d\n",
+		LOGE("Fail to allocate memory for caller buf, size: %zd\n",
 			sizeof(struct drv_param));
 		goto exit;
 	}
@@ -1440,7 +1440,7 @@ exit:
 
 	return retval;
 }
-/**
+/*
  * syna_cdev_ioctl_dispatch()
  *
  * Dispatch the IOCTLs operation based on the given code
@@ -1521,7 +1521,7 @@ static int syna_cdev_ioctl_dispatch(struct syna_tcm *tcm,
 
 	return retval;
 }
-/**
+/*
  * syna_cdev_ioctl_old_dispatch()
  *
  * Dispatch the old IOCTLs operation based on the given code
@@ -1583,7 +1583,7 @@ static int syna_cdev_ioctl_old_dispatch(struct syna_tcm *tcm,
 	return retval;
 }
 
-/**
+/*
  * syna_cdev_ioctls()
  *
  * Used to implements the IOCTL operations
@@ -1665,7 +1665,7 @@ exit:
 }
 
 #ifdef USE_COMPAT_IOCTL
-/**
+/*
  * syna_cdev_compat_ioctls()
  *
  * Used to implements the IOCTL compatible operations
@@ -1738,7 +1738,7 @@ exit:
 }
 #endif
 
-/**
+/*
  * syna_cdev_llseek()
  *
  * Used to change the current position in a file.
@@ -1756,7 +1756,7 @@ static loff_t syna_cdev_llseek(struct file *filp,
 {
 	return -EINVAL;
 }
-/**
+/*
  * syna_cdev_read()
  *
  * Used to read data through the device file.
@@ -1793,7 +1793,7 @@ static ssize_t syna_cdev_read(struct file *filp,
 
 	return retval;
 }
-/**
+/*
  * syna_cdev_write()
  *
  * Used to send data to device through the device file.
@@ -1830,7 +1830,7 @@ static ssize_t syna_cdev_write(struct file *filp,
 
 	return retval;
 }
-/**
+/*
  * syna_cdev_open()
  *
  * Invoked when the device file is being open, which should be
@@ -1874,7 +1874,7 @@ static int syna_cdev_open(struct inode *inp, struct file *filp)
 
 	return 0;
 }
-/**
+/*
  * syna_cdev_release()
  *
  * Invoked when the device file is being released
@@ -1921,7 +1921,7 @@ static int syna_cdev_release(struct inode *inp, struct file *filp)
 	return 0;
 }
 
-/**
+/*
  * Declare the operations of TouchCom device file
  */
 static const struct file_operations device_fops = {
@@ -1941,7 +1941,7 @@ static const struct file_operations device_fops = {
 	.release = syna_cdev_release,
 };
 #ifdef ENABLE_EXTERNAL_FRAME_PROCESS
-/**
+/*
  * syna_cdev_update_report_queue()
  *
  * Push the selected data to the queue.
@@ -2067,7 +2067,7 @@ exit:
 	syna_pal_mem_free((void *)frame_buffer);
 }
 #endif
-/**
+/*
  * syna_cdev_devnode()
  *
  * Provide the declaration of devtmpfs
@@ -2089,7 +2089,7 @@ static char *syna_cdev_devnode(struct device *dev, umode_t *mode)
 
 	return kasprintf(GFP_KERNEL, "%s", dev_name(dev));
 }
-/**
+/*
  * syna_cdev_create()
  *
  * Create a device node and register it with sysfs.
@@ -2209,7 +2209,7 @@ err_alloc_chrdev_region:
 err_register_chrdev_region:
 	return retval;
 }
-/**
+/*
  * syna_cdev_remove()
  *
  * Remove the allocate cdev device node and release the resource

@@ -51,6 +51,11 @@
 #endif
 #endif
 
+static irqreturn_t syna_dev_interrupt_thread(int irq, void *data);
+static irqreturn_t syna_dev_isr(int irq, void *handle);
+static void syna_dev_release_irq(struct syna_tcm *tcm);
+static void syna_dev_restore_feature_setting(struct syna_tcm *tcm, unsigned int delay_ms_resp);
+
 /**
  * @section: USE_CUSTOM_TOUCH_REPORT_CONFIG
  *           Open if willing to set up the format of touch report.
@@ -1451,7 +1456,6 @@ static irqreturn_t syna_dev_interrupt_thread(int irq, void *data)
 	unsigned char *touch_data = 0;
 	unsigned short touch_data_size = 0;
 	unsigned char *heatmap_data_start = 0;
-	unsigned char *heatmap_data = 0;
 	unsigned short heatmap_data_size = 0;
 
 	if (unlikely(gpio_get_value(attn->irq_gpio) != attn->irq_on_state))
@@ -1547,7 +1551,6 @@ static irqreturn_t syna_dev_interrupt_thread(int irq, void *data)
 		/* heatmap data */
 		heatmap_data_start = touch_data + touch_data_size;
 		heatmap_data_size = (heatmap_data_start[1] << 8) | heatmap_data_start[0];
-		heatmap_data = touch_data + touch_data_size + 2;
 
 		LOGD("$c5 Heat map data received, size:%d\n", heatmap_data_size);
 
@@ -2105,7 +2108,6 @@ static void syna_check_finger_status(struct syna_tcm *tcm)
 static int syna_dev_resume(struct device *dev)
 {
 	int retval = 0;
-	int retry = 0;
 	struct syna_tcm *tcm = dev_get_drvdata(dev);
 	struct syna_hw_interface *hw_if = tcm->hw_if;
 	bool irq_enabled = true;

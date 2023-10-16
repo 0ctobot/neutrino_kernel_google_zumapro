@@ -29,7 +29,7 @@
  * DOLLARS.
  */
 
-/**
+/*
  * @file syna_tcm2_sysfs.c
  *
  * This file implements sysfs attributes in the reference driver.
@@ -48,7 +48,7 @@
  */
 static struct kobject *g_sysfs_dir;
 
-/**
+/*
  * syna_get_fw_info()
  *
  * Output the device and driver information.
@@ -246,7 +246,7 @@ exit:
 
 	return retval;
 }
-/**
+/*
  * syna_sysfs_info_show()
  *
  * Attribute to show the device and driver information to the console.
@@ -263,7 +263,6 @@ exit:
 static ssize_t syna_sysfs_info_show(struct kobject *kobj,
 		struct kobj_attribute *attr, char *buf)
 {
-	int retval;
 	struct device *p_dev;
 	struct kobject *p_kobj;
 	struct syna_tcm *tcm;
@@ -272,16 +271,13 @@ static ssize_t syna_sysfs_info_show(struct kobject *kobj,
 	p_dev = container_of(p_kobj, struct device, kobj);
 	tcm = dev_get_drvdata(p_dev);
 
-	retval = syna_get_fw_info(tcm, buf, PAGE_SIZE);
-
-exit:
-	return retval;
+	return syna_get_fw_info(tcm, buf, PAGE_SIZE);
 }
 
 static struct kobj_attribute kobj_attr_info =
 	__ATTR(info, 0444, syna_sysfs_info_show, NULL);
 
-/**
+/*
  * syna_sysfs_irq_en_store()
  *
  * Attribute to disable/enable the irq
@@ -354,7 +350,7 @@ exit:
 static struct kobj_attribute kobj_attr_irq_en =
 	__ATTR(irq_en, 0220, NULL, syna_sysfs_irq_en_store);
 
-/**
+/*
  * syna_sysfs_int2_store()
  *
  * Attribute to set int2.
@@ -417,7 +413,7 @@ exit:
 	return retval;
 }
 
-/**
+/*
  * syna_sysfs_int2_show()
  *
  * Attribute to show the int2 status.
@@ -470,7 +466,7 @@ static ssize_t syna_sysfs_int2_show(struct kobject *kobj,
 static struct kobj_attribute kobj_attr_int2 =
 	__ATTR(int2, 0644, syna_sysfs_int2_show, syna_sysfs_int2_store);
 
-/**
+/*
  * syna_sysfs_reset_store()
  *
  * Attribute to issue a reset.
@@ -554,7 +550,7 @@ static struct kobj_attribute kobj_attr_reset =
 	__ATTR(reset, 0220, NULL, syna_sysfs_reset_store);
 
 
-/**
+/*
  * syna_sysfs_pwr_store()
  *
  * Attribute to change the power state.
@@ -606,7 +602,7 @@ exit:
 static struct kobj_attribute kobj_attr_pwr =
 	__ATTR(power_state, 0220, NULL, syna_sysfs_pwr_store);
 
-/**
+/*
  * syna_sysfs_scan_mode_store()
  *
  * Attribute to set different scan mode.
@@ -698,7 +694,7 @@ static struct kobj_attribute kobj_attr_scan_mode =
 	__ATTR(scan_mode, 0220, NULL, syna_sysfs_scan_mode_store);
 
 #if IS_ENABLED(CONFIG_GOOG_TOUCH_INTERFACE)
-/**
+/*
  * syna_sysfs_force_active_store()
  *
  * Attribute to set different scan mode.
@@ -787,7 +783,7 @@ static struct kobj_attribute kobj_attr_force_active =
 	__ATTR(force_active, 0220, NULL, syna_sysfs_force_active_store);
 #endif
 
-/**
+/*
  * syna_sysfs_get_raw_data_show()
  *
  * Attribute to show the rawdata.
@@ -872,7 +868,7 @@ exit:
 	return retval;
 }
 
-/**
+/*
  * syna_sysfs_get_raw_data_store()
  *
  * Attribute to enable the rawdata report type.
@@ -934,7 +930,7 @@ exit:
 static struct kobj_attribute kobj_attr_get_raw_data =
 	__ATTR(get_raw_data, 0644, syna_sysfs_get_raw_data_show, syna_sysfs_get_raw_data_store);
 
-/**
+/*
  * syna_sysfs_high_sensitivity_show()
  *
  * Attribute to show current sensitivity mode.
@@ -965,7 +961,7 @@ static ssize_t syna_sysfs_high_sensitivity_show(struct kobject *kobj,
 	return retval;
 }
 
-/**
+/*
  * syna_sysfs_high_sensitivity_store()
  *
  * Attribute to set high sensitivity mode.
@@ -1021,7 +1017,7 @@ static struct kobj_attribute kobj_attr_high_sensitivity =
 	__ATTR(high_sensitivity, 0644, syna_sysfs_high_sensitivity_show,
 	       syna_sysfs_high_sensitivity_store);
 
-/**
+/*
  * syna_sysfs_fw_grip_show()
  *
  * Attribute to show current grip suppression mode.
@@ -1052,7 +1048,7 @@ static ssize_t syna_sysfs_fw_grip_show(struct kobject *kobj,
 	return retval;
 }
 
-/**
+/*
  * syna_sysfs_fw_grip_store()
  *
  * Attribute to set grip suppression mode.
@@ -1111,7 +1107,7 @@ static struct kobj_attribute kobj_attr_fw_grip =
 	__ATTR(fw_grip, 0644, syna_sysfs_fw_grip_show,
 	       syna_sysfs_fw_grip_store);
 
-/**
+/*
  * syna_sysfs_fw_palm_show()
  *
  * Attribute to show current palm rejection mode.
@@ -1142,7 +1138,7 @@ static ssize_t syna_sysfs_fw_palm_show(struct kobject *kobj,
 	return retval;
 }
 
-/**
+/*
  * syna_sysfs_fw_palm_store()
  *
  * Attribute to set palm rejection mode.
@@ -1201,7 +1197,7 @@ static struct kobj_attribute kobj_attr_fw_palm =
 	__ATTR(fw_palm, 0644, syna_sysfs_fw_palm_show,
 	       syna_sysfs_fw_palm_store);
 
-/**
+/*
  * syna_sysfs_compression_threshold_show()
  *
  * Attribute get the heatmap compression threshold.
@@ -1232,7 +1228,7 @@ static ssize_t syna_sysfs_compression_threshold_show(struct kobject *kobj,
 	return retval;
 }
 
-/**
+/*
  * syna_sysfs_compression_threshold_store()
  *
  * Attribute set the heatmap compression threshold.
@@ -1281,7 +1277,7 @@ static struct kobj_attribute kobj_attr_compression_threshold =
 	__ATTR(compression_threshold, 0644, syna_sysfs_compression_threshold_show,
 	       syna_sysfs_compression_threshold_store);
 
-/**
+/*
  * declaration of sysfs attributes
  */
 static struct attribute *attrs[] = {
@@ -1307,7 +1303,7 @@ static struct attribute_group attr_group = {
 	.attrs = attrs,
 };
 
-/**
+/*
  * syna_sysfs_create_dir()
  *
  * Create a directory and register it with sysfs.
@@ -1355,7 +1351,7 @@ int syna_sysfs_create_dir(struct syna_tcm *tcm,
 
 	return 0;
 }
-/**
+/*
  * syna_sysfs_remove_dir()
  *
  * Remove the allocate sysfs directory

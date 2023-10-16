@@ -418,7 +418,7 @@ static int syna_spi_parse_dt(struct syna_hw_interface *hw_if,
 		struct device *dev)
 {
 	int retval;
-	int index;
+	int index = 0;
 	u32 value;
 	u32 coords[2];
 	struct property *prop;
