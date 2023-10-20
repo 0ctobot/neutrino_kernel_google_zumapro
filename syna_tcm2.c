@@ -501,7 +501,7 @@ static void syna_set_screen_protector_mode_work(struct work_struct *work)
 
 static u8 syna_gesture_dc_list[GTI_GESTURE_PARAMS_MAX] = {
 	[GTI_STTW_MIN_X] = DC_STTW_MIN_X,
-	[GTI_STTW_MIN_Y] = DC_STTW_MAX_X,
+	[GTI_STTW_MAX_X] = DC_STTW_MAX_X,
 	[GTI_STTW_MIN_Y] = DC_STTW_MIN_Y,
 	[GTI_STTW_MAX_Y] = DC_STTW_MAX_Y,
 	[GTI_STTW_MIN_FRAME] = DC_STTW_MIN_FRAME,
@@ -566,7 +566,7 @@ static int syna_set_gesture_type(struct syna_tcm *tcm, u8 gesture_type)
 
 		retval = syna_tcm_set_dynamic_config(tcm->tcm_dev,
 				DC_GESTURE_TYPE,
-				gesture_type,
+				set_gesture_type,
 				RESP_IN_POLLING);
 		if (retval)
 			goto exit;
@@ -586,7 +586,6 @@ static int syna_set_gesture_config(void *private_data, struct gti_gesture_config
 	struct syna_tcm *tcm = private_data;
 	int retval = 0;
 	int i = 0;
-	unsigned short gesture_type;
 
 	LOGI("Set gesture config");
 
