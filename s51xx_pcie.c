@@ -199,7 +199,7 @@ void s51xx_pcie_save_state(struct pci_dev *pdev)
 {
 	struct s51xx_pcie *s51xx_pcie = pci_get_drvdata(pdev);
 
-	dev_info(&pdev->dev, "[%s]\n", __func__);
+	dev_dbg(&pdev->dev, "[%s]\n", __func__);
 
 	if (s51xx_check_pcie_link_status(s51xx_pcie->pcie_channel_num) == 0) {
 		mif_err("It's not Linked - Ignore restore state!!!\n");
@@ -240,7 +240,7 @@ void s51xx_pcie_restore_state(struct pci_dev *pdev, bool boot_on,
 	int ret;
 	u32 val = 0;
 
-	dev_info(&pdev->dev, "[%s]\n", __func__);
+	dev_dbg(&pdev->dev, "[%s]\n", __func__);
 
 	if (s51xx_check_pcie_link_status(s51xx_pcie->pcie_channel_num) == 0) {
 		mif_err("It's not Linked - Ignore restore state!!!\n");
