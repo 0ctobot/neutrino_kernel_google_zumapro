@@ -608,12 +608,228 @@ static int syna_set_gesture_config(void *private_data, struct gti_gesture_config
 exit:
 	return retval;
 }
+
+static int syna_get_mutual_sensor_data(void *private_data, struct gti_sensor_data_cmd *cmd)
+{
+	struct syna_tcm *tcm = private_data;
+	unsigned char report_code = 0;
+	int ret = 0;
+	int i, j;
+	unsigned int rows = tcm->tcm_dev->rows;
+	unsigned int cols = tcm->tcm_dev->cols;
+
+	if (cmd->type == GTI_SENSOR_DATA_TYPE_MS) {
+		cmd->buffer = (u8 *)tcm->mutual_data;
+		cmd->size = rows * cols * sizeof(uint16_t);
+		return 0;
+	}
+
+	if (cmd->type == GTI_SENSOR_DATA_TYPE_MS_DIFF)
+		report_code = REPORT_DELTA;
+	else if (cmd->type == GTI_SENSOR_DATA_TYPE_MS_RAW)
+		report_code = REPORT_RAW;
+	else if (cmd->type == GTI_SENSOR_DATA_TYPE_MS_BASELINE)
+		report_code = REPORT_BASELINE;
+
+	reinit_completion(&tcm->raw_data_completion);
+
+	syna_tcm_set_dynamic_config(tcm->tcm_dev, DC_DISABLE_DOZE, 1, RESP_IN_ATTN);
+
+	tcm->raw_data_report_code = report_code;
+	syna_tcm_enable_report(tcm->tcm_dev, tcm->raw_data_report_code, true);
+
+	if (wait_for_completion_timeout(&tcm->raw_data_completion, msecs_to_jiffies(500)) == 0) {
+		LOGE("Wait for sensor data %#x timeout.", cmd->type);
+		ret = -ETIMEDOUT;
+		goto exit;
+	}
+
+	syna_pal_mutex_lock(&tcm->raw_data_mutex);
+	for (i = 0; i < cols; i++) {
+		for (j = 0; j < rows; j++) {
+			tcm->mutual_data_manual[i * rows + j] =
+					(u16) (tcm->raw_data_buffer[j * cols + i]);
+		}
+	}
+	syna_pal_mutex_unlock(&tcm->raw_data_mutex);
+
+	cmd->buffer = (u8 *)tcm->mutual_data_manual;
+	cmd->size = rows * cols * sizeof(u16);
+exit:
+	syna_tcm_set_dynamic_config(tcm->tcm_dev, DC_DISABLE_DOZE, 0, RESP_IN_ATTN);
+	syna_tcm_enable_report(tcm->tcm_dev, tcm->raw_data_report_code, false);
+
+	return ret;
+}
+
+static int syna_get_self_sensor_data(void *private_data, struct gti_sensor_data_cmd *cmd)
+{
+	struct syna_tcm *tcm = private_data;
+	unsigned char report_code = 0;
+	int ret = 0;
+	int i;
+	unsigned int rows = tcm->tcm_dev->rows;
+	unsigned int cols = tcm->tcm_dev->cols;
+
+	if (cmd->type == GTI_SENSOR_DATA_TYPE_SS) {
+		cmd->buffer = (u8 *)tcm->self_data;
+		cmd->size = (rows + cols) * sizeof(uint16_t);
+		return 0;
+	}
+
+	if (cmd->type == GTI_SENSOR_DATA_TYPE_SS_DIFF)
+		report_code = REPORT_DELTA;
+	else if (cmd->type == GTI_SENSOR_DATA_TYPE_SS_RAW)
+		report_code = REPORT_RAW;
+	else if (cmd->type == GTI_SENSOR_DATA_TYPE_SS_BASELINE)
+		report_code = REPORT_BASELINE;
+
+	reinit_completion(&tcm->raw_data_completion);
+
+	syna_tcm_set_dynamic_config(tcm->tcm_dev, DC_DISABLE_DOZE, 1, RESP_IN_ATTN);
+
+	tcm->raw_data_report_code = report_code;
+	syna_tcm_enable_report(tcm->tcm_dev, tcm->raw_data_report_code, true);
+
+	if (wait_for_completion_timeout(&tcm->raw_data_completion, msecs_to_jiffies(500)) == 0) {
+		LOGE("Wait for sensor data %#x timeout.", cmd->type);
+		ret = -ETIMEDOUT;
+		goto exit;
+	}
+
+	syna_pal_mutex_lock(&tcm->raw_data_mutex);
+	for (i = 0; i < rows; i++)
+		tcm->self_data_manual[i] = (u16) (tcm->raw_data_buffer[rows * cols + cols + i]);
+
+	for (i = 0; i < cols; i++)
+		tcm->self_data_manual[rows + i] = (u16) (tcm->raw_data_buffer[rows * cols + i]);
+	syna_pal_mutex_unlock(&tcm->raw_data_mutex);
+
+	cmd->buffer = (u8 *)tcm->self_data_manual;
+	cmd->size = (rows + cols) * sizeof(u16);
+exit:
+	syna_tcm_set_dynamic_config(tcm->tcm_dev, DC_DISABLE_DOZE, 0, RESP_IN_ATTN);
+	syna_tcm_enable_report(tcm->tcm_dev, tcm->raw_data_report_code, false);
+
+	return ret;
+}
+
+static int syna_dev_ptflib_decoder(struct syna_tcm *tcm, const u16 *in_array,
+				   const int in_array_size, u16 *out_array,
+				   const int out_array_max_size)
+{
+	const u16 ESCAPE_MASK = 0xF000;
+	const u16 ESCAPE_BIT = 0x8000;
+
+	int i;
+	int j;
+	int out_array_size = 0;
+	u16 prev_word = 0;
+	u16 repetition = 0;
+	u16 *temp_out_array = out_array;
+
+	for (i = 0; i < in_array_size; i++) {
+		u16 curr_word = in_array[i];
+		if ((curr_word & ESCAPE_MASK) == ESCAPE_BIT) {
+			repetition = (curr_word & ~ESCAPE_MASK);
+			if (out_array_size + repetition > out_array_max_size)
+				break;
+			for (j = 0; j < repetition; j++) {
+				*temp_out_array++ = prev_word;
+				out_array_size++;
+			}
+		} else {
+			if (out_array_size >= out_array_max_size)
+				break;
+			*temp_out_array++ = curr_word;
+			out_array_size++;
+			prev_word = curr_word;
+		}
+	}
+
+	if (i != in_array_size || out_array_size != out_array_max_size) {
+		LOGE("%d (in=%d, out=%d, rep=%d, out_max=%d).\n",
+			i, in_array_size, out_array_size,
+			repetition, out_array_max_size);
+		memset(out_array, 0, out_array_max_size * sizeof(u16));
+		return -1;
+	}
+
+	return out_array_size;
+}
+
+static void syna_parse_heatmap(struct syna_tcm *tcm, unsigned char *heatmap_data,
+		unsigned short heatmap_data_size)
+{
+	int i, j;
+	uint16_t *temp_buffer;
+	unsigned int rows = tcm->tcm_dev->rows;
+	unsigned int cols = tcm->tcm_dev->cols;
+
+	temp_buffer = kcalloc(cols * rows, sizeof(u_int16_t), GFP_KERNEL);
+	if (!temp_buffer) {
+		LOGE("Failed to allocate temp_buffer");
+		return;
+	}
+
+	if (!tcm->self_data || !tcm->mutual_data) {
+		LOGE("There is no self_data or mutual_data");
+		return;
+	}
+
+	/* Parse self data. */
+	for (i = 0; i < rows; i++)
+		tcm->self_data[i] = ((uint16_t *) heatmap_data)[cols + i];
+
+	for (i = 0; i < cols; i++)
+		tcm->self_data[rows + i] = ((uint16_t *) heatmap_data)[i];
+
+	/* Parse mutual data. */
+	syna_dev_ptflib_decoder(tcm, &((u16 *) heatmap_data)[cols + rows],
+			heatmap_data_size / 2 - cols - rows, temp_buffer, cols * rows);
+
+	for (i = 0; i < cols; i++) {
+		for (j = 0; j < rows; j++)
+			tcm->mutual_data[rows * i + j] = temp_buffer[cols * j + i];
+	}
+
+	kfree(temp_buffer);
+}
+
 static void syna_gti_init(struct syna_tcm *tcm)
 {
 	int retval = 0;
 	struct gti_optional_configuration *options;
 	struct platform_device *pdev = tcm->pdev;
 	struct syna_hw_attn_data *attn = &tcm->hw_if->bdata_attn;
+	unsigned int mutual_data_size =
+			sizeof(u_int16_t) * (tcm->tcm_dev->rows * tcm->tcm_dev->cols);
+	unsigned int self_data_size =
+			sizeof(u_int16_t) * (tcm->tcm_dev->rows + tcm->tcm_dev->cols);
+
+	tcm->mutual_data = devm_kzalloc(&pdev->dev, mutual_data_size, GFP_KERNEL);
+	if (!tcm->mutual_data) {
+		LOGE("Failed to allocate mutual_sensing_data");
+		return;
+	}
+
+	tcm->self_data = devm_kzalloc(&pdev->dev, self_data_size, GFP_KERNEL);
+	if (!tcm->self_data) {
+		LOGE("Failed to allocate self_sensing_data");
+		return;
+	}
+
+	tcm->mutual_data_manual = devm_kzalloc(&pdev->dev, mutual_data_size, GFP_KERNEL);
+	if (!tcm->mutual_data) {
+		LOGE("Failed to allocate mutual_sensing_data");
+		return;
+	}
+
+	tcm->self_data_manual = devm_kzalloc(&pdev->dev, self_data_size, GFP_KERNEL);
+	if (!tcm->self_data) {
+		LOGE("Failed to allocate self_sensing_data");
+		return;
+	}
 
 	/* release the interrupt and register the gti irq later. */
 	syna_dev_release_irq(tcm);
@@ -638,6 +854,8 @@ static void syna_gti_init(struct syna_tcm *tcm)
 	options->set_screen_protector_mode = syna_set_screen_protector_mode;
 	options->get_screen_protector_mode = syna_get_screen_protector_mode;
 	options->set_gesture_config = syna_set_gesture_config;
+	options->get_mutual_sensor_data = syna_get_mutual_sensor_data;
+	options->get_self_sensor_data = syna_get_self_sensor_data;
 
 	tcm->gti = goog_touch_interface_probe(
 		tcm, &pdev->dev, tcm->input_dev, gti_default_handler, options);
@@ -1497,52 +1715,6 @@ exit:
 	return retval;
 }
 
-#if 0
-static int syna_dev_ptflib_decoder(struct syna_tcm *tcm, const u16 *in_array,
-				   const int in_array_size, u16 *out_array,
-				   const int out_array_max_size)
-{
-	const u16 ESCAPE_MASK = 0xF000;
-	const u16 ESCAPE_BIT = 0x8000;
-
-	int i;
-	int j;
-	int out_array_size = 0;
-	u16 prev_word = 0;
-	u16 repetition = 0;
-	u16 *temp_out_array = out_array;
-
-	for (i = 0; i < in_array_size; i++) {
-		u16 curr_word = in_array[i];
-		if ((curr_word & ESCAPE_MASK) == ESCAPE_BIT) {
-			repetition = (curr_word & ~ESCAPE_MASK);
-			if (out_array_size + repetition > out_array_max_size)
-				break;
-			for (j = 0; j < repetition; j++) {
-				*temp_out_array++ = prev_word;
-				out_array_size++;
-			}
-		} else {
-			if (out_array_size >= out_array_max_size)
-				break;
-			*temp_out_array++ = curr_word;
-			out_array_size++;
-			prev_word = curr_word;
-		}
-	}
-
-	if (i != in_array_size || out_array_size != out_array_max_size) {
-		LOGE("%d (in=%d, out=%d, rep=%d, out_max=%d).\n",
-			i, in_array_size, out_array_size,
-			repetition, out_array_max_size);
-		memset(out_array, 0, out_array_max_size * sizeof(u16));
-		return -1;
-	}
-
-	return out_array_size;
-}
-#endif
-
 static irqreturn_t syna_dev_isr(int irq, void *handle)
 {
 	struct syna_tcm *tcm = handle;
@@ -1577,6 +1749,7 @@ static irqreturn_t syna_dev_interrupt_thread(int irq, void *data)
 	unsigned char *touch_data = 0;
 	unsigned short touch_data_size = 0;
 	unsigned char *heatmap_data_start = 0;
+	unsigned char *heatmap_data = 0;
 	unsigned short heatmap_data_size = 0;
 
 	if (unlikely(gpio_get_value(attn->irq_gpio) != attn->irq_on_state))
@@ -1633,8 +1806,10 @@ static irqreturn_t syna_dev_interrupt_thread(int irq, void *data)
 		}
 		if (tcm->event_data.data_length == sizeof(u16) * (tcm_dev->rows * tcm_dev->cols +
 								  tcm_dev->rows + tcm_dev->cols)) {
+			syna_pal_mutex_lock(&tcm->raw_data_mutex);
 			memcpy(tcm->raw_data_buffer, tcm->event_data.buf,
 			       tcm->event_data.data_length);
+			syna_pal_mutex_unlock(&tcm->raw_data_mutex);
 			complete_all(&tcm->raw_data_completion);
 		} else {
 			LOGE("Raw data length: %d is incorrect.\n", tcm->event_data.data_length);
@@ -1672,6 +1847,9 @@ static irqreturn_t syna_dev_interrupt_thread(int irq, void *data)
 		/* heatmap data */
 		heatmap_data_start = touch_data + touch_data_size;
 		heatmap_data_size = (heatmap_data_start[1] << 8) | heatmap_data_start[0];
+		heatmap_data = touch_data + touch_data_size + 2;
+
+		syna_parse_heatmap(tcm, heatmap_data, heatmap_data_size);
 
 		LOGD("$c5 Heat map data received, size:%d\n", heatmap_data_size);
 
@@ -2812,6 +2990,7 @@ static int syna_dev_probe(struct platform_device *pdev)
 #if !IS_ENABLED(CONFIG_GOOG_TOUCH_INTERFACE)
 	syna_pal_mutex_alloc(&tcm->tp_event_mutex);
 #endif
+	syna_pal_mutex_alloc(&tcm->raw_data_mutex);
 
 #ifdef USE_CUSTOM_TOUCH_REPORT_CONFIG
 	tcm->has_custom_tp_config = true;

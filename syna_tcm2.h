@@ -439,6 +439,10 @@ struct syna_tcm {
 
 #if IS_ENABLED(CONFIG_GOOG_TOUCH_INTERFACE)
 	unsigned short heatmap_mode;
+	uint16_t *mutual_data;
+	uint16_t *self_data;
+	uint16_t *mutual_data_manual;
+	uint16_t *self_data_manual;
 	struct goog_touch_interface *gti;
 	/* Work for setting firmware grip mode. */
 	struct work_struct set_grip_mode_work;
@@ -451,6 +455,7 @@ struct syna_tcm {
 #else
 	syna_pal_mutex_t tp_event_mutex;
 #endif
+	syna_pal_mutex_t raw_data_mutex;
 
 	/* Payload for continuously report. */
 	u16 set_continuously_report;

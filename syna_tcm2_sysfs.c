@@ -829,6 +829,7 @@ static ssize_t syna_sysfs_get_raw_data_show(struct kobject *kobj,
 		goto exit;
 	}
 
+	syna_pal_mutex_lock(&tcm->raw_data_mutex);
 	/* Mutual raw. */
 	count += scnprintf(buf + count, PAGE_SIZE - count, "Mutual\n");
 	for (i = 0; i < tcm_dev->rows; i++) {
@@ -858,6 +859,8 @@ static ssize_t syna_sysfs_get_raw_data_show(struct kobject *kobj,
 				      (u16) (tcm->raw_data_buffer[mutual_length + i + j]));
 	}
 	count += scnprintf(buf + count, PAGE_SIZE - count, "\n");
+
+	syna_pal_mutex_unlock(&tcm->raw_data_mutex);
 
 	LOGI("Got raw data, report code %#x\n", tcm->raw_data_report_code);
 
