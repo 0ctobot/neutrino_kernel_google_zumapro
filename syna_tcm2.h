@@ -439,6 +439,7 @@ struct syna_tcm {
 
 #if IS_ENABLED(CONFIG_GOOG_TOUCH_INTERFACE)
 	unsigned short heatmap_mode;
+	bool set_continuously_report;
 	uint16_t *mutual_data;
 	uint16_t *self_data;
 	uint16_t *mutual_data_manual;
@@ -452,15 +453,12 @@ struct syna_tcm {
 	struct work_struct set_heatmap_enabled_work;
 	/* Work for setting screen protector mode. */
 	struct work_struct set_screen_protector_mode_work;
+	/* Work for continuous report commands. */
+	struct work_struct set_continuous_report_work;
 #else
 	syna_pal_mutex_t tp_event_mutex;
 #endif
 	syna_pal_mutex_t raw_data_mutex;
-
-	/* Payload for continuously report. */
-	u16 set_continuously_report;
-	/* Work for motion filter commands. */
-	struct work_struct motion_filter_work;
 
 	/* IOCTL-related variables */
 	pid_t proc_pid;

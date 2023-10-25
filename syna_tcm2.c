@@ -609,6 +609,52 @@ exit:
 	return retval;
 }
 
+static int syna_set_continuous_report(void *private_data, struct gti_continuous_report_cmd *cmd)
+{
+	struct syna_tcm *tcm = private_data;
+
+	if (goog_pm_wake_get_locks(tcm->gti) == 0 || tcm->pwr_state != PWR_ON) {
+		LOGI("Connot set continuous report because touch is off");
+		return -EPERM;
+	}
+
+	tcm->set_continuously_report = cmd->setting == GTI_CONTINUOUS_REPORT_ENABLE ? 1 : 0;
+
+	if (tcm->hw_if->bdata_attn.irq_enabled) {
+		queue_work(tcm->event_wq, &tcm->set_continuous_report_work);
+	} else {
+		LOGI("%s continuous report.\n",
+				tcm->set_continuously_report ? "Enable" : "Disable");
+		syna_tcm_set_dynamic_config(tcm->tcm_dev,
+				DC_CONTINUOUSLY_REPORT,
+				tcm->set_continuously_report,
+				RESP_IN_POLLING);
+	}
+
+	return 0;
+}
+
+static void syna_set_continuous_report_work(struct work_struct *work)
+{
+	struct syna_tcm *tcm = container_of(work, struct syna_tcm, set_continuous_report_work);
+	int retval = 0;
+
+	retval = goog_pm_wake_lock(tcm->gti, GTI_PM_WAKELOCK_TYPE_VENDOR_REQUEST, true);
+	if (retval) {
+		LOGE("Failed to obtain wake lock, ret = %d", retval);
+		return;
+	}
+
+	/* Send command to update continuous report state */
+	LOGD("%s continuous report.\n", tcm->set_continuously_report ? "Enable" : "Disable");
+	syna_tcm_set_dynamic_config(tcm->tcm_dev,
+			DC_CONTINUOUSLY_REPORT,
+			tcm->set_continuously_report,
+			RESP_IN_ATTN);
+
+	goog_pm_wake_unlock_nosync(tcm->gti, GTI_PM_WAKELOCK_TYPE_VENDOR_REQUEST);
+}
+
 static int syna_get_mutual_sensor_data(void *private_data, struct gti_sensor_data_cmd *cmd)
 {
 	struct syna_tcm *tcm = private_data;
@@ -838,6 +884,7 @@ static void syna_gti_init(struct syna_tcm *tcm)
 	INIT_WORK(&tcm->set_palm_mode_work, syna_set_palm_mode_work);
 	INIT_WORK(&tcm->set_heatmap_enabled_work, syna_set_heatmap_enabled_work);
 	INIT_WORK(&tcm->set_screen_protector_mode_work, syna_set_screen_protector_mode_work);
+	INIT_WORK(&tcm->set_continuous_report_work, syna_set_continuous_report_work);
 
 	pdev->dev.of_node = pdev->dev.parent->of_node;
 	options = devm_kzalloc(&pdev->dev, sizeof(struct gti_optional_configuration), GFP_KERNEL);
@@ -854,6 +901,7 @@ static void syna_gti_init(struct syna_tcm *tcm)
 	options->set_screen_protector_mode = syna_set_screen_protector_mode;
 	options->get_screen_protector_mode = syna_get_screen_protector_mode;
 	options->set_gesture_config = syna_set_gesture_config;
+	options->set_continuous_report = syna_set_continuous_report;
 	options->get_mutual_sensor_data = syna_get_mutual_sensor_data;
 	options->get_self_sensor_data = syna_get_self_sensor_data;
 
@@ -925,24 +973,6 @@ static void syna_dev_restore_feature_setting(struct syna_tcm *tcm, unsigned int 
 				tcm->touch_report_rate_config,
 				delay_ms_resp);
 	}
-}
-
-static void syna_motion_filter_work(struct work_struct *work)
-{
-	struct syna_tcm *tcm = container_of(work, struct syna_tcm, motion_filter_work);
-
-	if (tcm->pwr_state != PWR_ON) {
-		LOGI("Touch is already off.");
-		return;
-	}
-
-	/* Send command to update filter state */
-	LOGD("setting motion filter = %s.\n",
-		 tcm->set_continuously_report ? "false" : "true");
-	syna_tcm_set_dynamic_config(tcm->tcm_dev,
-			DC_CONTINUOUSLY_REPORT,
-			tcm->set_continuously_report,
-			RESP_IN_ATTN);
 }
 
 static void syna_set_report_rate_work(struct work_struct *work)
@@ -3065,8 +3095,6 @@ static int syna_dev_probe(struct platform_device *pdev)
 	init_completion(&tcm->raw_data_completion);
 	complete_all(&tcm->raw_data_completion);
 
-	INIT_WORK(&tcm->motion_filter_work, syna_motion_filter_work);
-
 	tcm->touch_report_rate_config = CONFIG_HIGH_REPORT_RATE;
 	INIT_DELAYED_WORK(&tcm->set_report_rate_work, syna_set_report_rate_work);
 
@@ -3196,8 +3224,10 @@ static int syna_dev_remove(struct platform_device *pdev)
 #if IS_ENABLED(CONFIG_GOOG_TOUCH_INTERFACE)
 	cancel_work_sync(&tcm->set_grip_mode_work);
 	cancel_work_sync(&tcm->set_palm_mode_work);
+	cancel_work_sync(&tcm->set_heatmap_enabled_work);
+	cancel_work_sync(&tcm->set_screen_protector_mode_work);
+	cancel_work_sync(&tcm->set_continuous_report_work);
 #endif
-	cancel_work_sync(&tcm->motion_filter_work);
 	cancel_delayed_work_sync(&tcm->set_report_rate_work);
 
 #if defined(ENABLE_DISP_NOTIFIER)
