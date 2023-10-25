@@ -946,6 +946,9 @@ static int syna_dev_parse_custom_gesture_cb(const unsigned char code,
 		unsigned char angle;
 	} __packed;
 	struct custom_gesture_data g_pos = {0};
+	int major = 0;
+	int minor = 0;
+	int angle = 0;
 
 	bits = config[(*config_offset)++];
 
@@ -985,22 +988,25 @@ static int syna_dev_parse_custom_gesture_cb(const unsigned char code,
 		offset += 16;
 
 		syna_tcm_get_touch_data(report, report_size, offset, 8, &data);
-		g_pos.major = (unsigned short)data;
+		g_pos.minor = (unsigned char)data;
+		minor = g_pos.minor * tcm->hw_if->pixels_per_mm;
 		offset += 8;
 
 		syna_tcm_get_touch_data(report, report_size, offset, 8, &data);
-		g_pos.minor = (unsigned short)data;
+		g_pos.major = (unsigned char)data;
+		major = g_pos.major * tcm->hw_if->pixels_per_mm;
 		offset += 8;
 
 		syna_tcm_get_touch_data(report, report_size, offset, 8, &data);
-		g_pos.angle = (unsigned short)data;
+		g_pos.angle = (unsigned char) data;
+		angle = (int) (((s8) g_pos.angle) * 2048 / 45);
 		offset += 8;
 
 		*report_offset += bits;
 
 		if (tcm->tp_data.gesture_id != GESTURE_NONE) {
-			LOGI("Gesture data x:%d y:%d major:%d minor:%d angle:%d\n",
-				g_pos.x, g_pos.y, g_pos.major, g_pos.minor, g_pos.angle);
+			LOGI("Gesture data x:%u y:%u major:%d minor:%d  angle:%d\n",
+				g_pos.x, g_pos.y, major, minor, angle);
 		}
 	} else {
 		return -EINVAL;
