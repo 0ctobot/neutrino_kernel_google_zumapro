@@ -522,6 +522,94 @@ static int register_cp2ap_wakeup_interrupt(struct modem_ctl *mc)
 	return ret;
 }
 
+static ssize_t tp_threshold_show(struct device *dev,
+			       struct device_attribute *attr, char *buf)
+{
+	struct modem_ctl *mc = dev_get_drvdata(dev);
+
+	return scnprintf(buf, PAGE_SIZE, "%d\n", mc->tp_threshold);
+}
+
+static ssize_t tp_threshold_store(struct device *dev,
+				struct device_attribute *attr,
+				const char *buf, size_t count)
+{
+	u32 threshold;
+	struct modem_ctl *mc = dev_get_drvdata(dev);
+
+	if (!buf || sscanf(buf, "%10u", &threshold) != 1)
+		return -EINVAL;
+
+	dev_info(dev, "Dynamic PCIe link speed: Change threshold to %dMbps\n", threshold);
+	mc->tp_threshold = threshold;
+
+	return count;
+}
+
+static ssize_t tp_hysteresis_show(struct device *dev,
+			       struct device_attribute *attr, char *buf)
+{
+	struct modem_ctl *mc = dev_get_drvdata(dev);
+
+	return scnprintf(buf, PAGE_SIZE, "%d\n", mc->tp_hysteresis);
+}
+
+static ssize_t tp_hysteresis_store(struct device *dev,
+				struct device_attribute *attr,
+				const char *buf, size_t count)
+{
+	u32 hysteresis;
+	struct modem_ctl *mc = dev_get_drvdata(dev);
+
+	if (!buf || sscanf(buf, "%10u", &hysteresis) != 1)
+		return -EINVAL;
+
+	dev_info(dev, "Dynamic PCIe link speed: Change hysteresis to %dMbps\n", hysteresis);
+	mc->tp_hysteresis = hysteresis;
+
+	return count;
+}
+
+static ssize_t dynamic_spd_enable_show(struct device *dev,
+			       struct device_attribute *attr, char *buf)
+{
+	struct modem_ctl *mc = dev_get_drvdata(dev);
+
+	return scnprintf(buf, PAGE_SIZE, "%d\n", mc->pcie_dynamic_spd_enabled);
+}
+
+static ssize_t dynamic_spd_enable_store(struct device *dev,
+				struct device_attribute *attr,
+				const char *buf, size_t count)
+{
+	int enable;
+	struct modem_ctl *mc = dev_get_drvdata(dev);
+
+	if (!buf || sscanf(buf, "%10u", &enable) != 1)
+		return -EINVAL;
+
+	dev_info(dev, "Dynamic PCIe link speed is %s\n", enable ? "enabled" : "not enabled");
+	mc->pcie_dynamic_spd_enabled = enable;
+
+	return count;
+}
+
+static DEVICE_ATTR_RW(tp_threshold);
+static DEVICE_ATTR_RW(tp_hysteresis);
+static DEVICE_ATTR_RW(dynamic_spd_enable);
+
+static struct attribute *dynamic_pcie_spd_attrs[] = {
+	&dev_attr_tp_threshold.attr,
+	&dev_attr_tp_hysteresis.attr,
+	&dev_attr_dynamic_spd_enable.attr,
+	NULL,
+};
+
+static const struct attribute_group dynamic_pcie_spd_group = {
+	.attrs = dynamic_pcie_spd_attrs,
+	.name = "dynamic_pcie_spd",
+};
+
 static int ds_detect = 2;
 module_param(ds_detect, int, 0664);
 MODULE_PARM_DESC(ds_detect, "Dual SIM detect");
@@ -2536,6 +2624,10 @@ int s5100_init_modemctl_device(struct modem_ctl *mc, struct modem_data *pdata)
 	}
 #endif
 
+	if (mc->pcie_dynamic_spd_enabled &&
+		sysfs_create_group(&pdev->dev.kobj, &dynamic_pcie_spd_group))
+		mif_err("failed to create sysfs node for dynamic_pcie_spd\n");
+
 	if (sysfs_create_group(&pdev->dev.kobj, &sim_group))
 		mif_err("failed to create sysfs node related sim\n");
 
@@ -2553,6 +2645,8 @@ int s5100_init_modemctl_device(struct modem_ctl *mc, struct modem_data *pdata)
 err_dev_create_file:
 	sysfs_remove_group(&pdev->dev.kobj, &modem_group);
 	sysfs_remove_group(&pdev->dev.kobj, &sim_group);
+	if (mc->pcie_dynamic_spd_enabled)
+		sysfs_remove_group(&pdev->dev.kobj, &dynamic_pcie_spd_group);
 #if IS_ENABLED(CONFIG_CPIF_AP_SUSPEND_DURING_VOICE_CALL)
 	unregister_modem_voice_call_event_notifier(&mc->call_state_nb);
 err_modem_vce_notifier:
@@ -2582,6 +2676,8 @@ void s5100_uninit_modemctl_device(struct modem_ctl *mc, struct modem_data *pdata
 	device_remove_file(dev, &dev_attr_s5100_wake_lock);
 	sysfs_remove_group(&dev->kobj, &modem_group);
 	sysfs_remove_group(&dev->kobj, &sim_group);
+	if (mc->pcie_dynamic_spd_enabled)
+		sysfs_remove_group(&dev->kobj, &dynamic_pcie_spd_group);
 #if IS_ENABLED(CONFIG_CPIF_AP_SUSPEND_DURING_VOICE_CALL)
 	unregister_modem_voice_call_event_notifier(&mc->call_state_nb);
 #endif
