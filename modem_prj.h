@@ -780,6 +780,10 @@ struct modem_ctl {
 	atomic_t mark_skb_wakeup;
 #endif
 	struct logbuffer *log;
+
+	u32 tp_threshold;
+	u32 tp_hysteresis;
+	bool pcie_dynamic_spd_enabled;
 };
 
 static inline bool cp_offline(struct modem_ctl *mc)

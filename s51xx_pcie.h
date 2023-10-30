@@ -54,6 +54,7 @@ extern int exynos_pcie_poweron(int ch_num, int spd, int width);
 extern int exynos_pcie_poweroff(int ch_num);
 extern int exynos_pcie_get_max_link_speed(int ch_num);
 extern int exynos_pcie_get_max_link_width(int ch_num);
+extern int exynos_pcie_rc_change_link_speed(int ch_num, int target_speed);
 extern void exynos_pcie_set_perst_gpio(int ch_num, bool on);
 extern void exynos_pcie_set_ready_cto_recovery(int ch_num);
 /* not used: extern int exynos_pcie_gpio_onoff(int ch_num, int val); */

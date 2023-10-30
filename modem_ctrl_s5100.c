@@ -51,6 +51,9 @@ static int s5100_lcd_notifier(struct notifier_block *notifier,
 
 #define RUNTIME_PM_AFFINITY_CORE 2
 
+#define DEFAULT_TP_THRESHOLD 500 /* Mbps */
+#define DEFAULT_TP_HYSTERESIS 100 /* Mbps */
+
 static struct modem_ctl *g_mc;
 
 static int s5100_poweroff_pcie(struct modem_ctl *mc, bool force_off);
@@ -2004,7 +2007,12 @@ int s5100_poweron_pcie(struct modem_ctl *mc, enum link_mode mode)
 		speed = LINK_SPEED_GEN1;
 		width = 1;
 	} else {
-		speed = exynos_pcie_get_max_link_speed(mc->pcie_ch_num);
+		// Set default speed to GEN1 if dynamic speed adapation enabled
+		if (mode == LINK_MODE_ADAPTIVE_SPEED_BOOTED
+			&& mc->pcie_dynamic_spd_enabled)
+			speed = LINK_SPEED_GEN1;
+		else
+			speed = exynos_pcie_get_max_link_speed(mc->pcie_ch_num);
 		width = exynos_pcie_get_max_link_width(mc->pcie_ch_num);
 	}
 
@@ -2335,6 +2343,20 @@ static int s5100_get_pdata(struct modem_ctl *mc, struct modem_data *pdata)
 
 	mc->sbi_ds_det_mask = pdata->sbi_ds_det_mask;
 	mc->sbi_ds_det_pos = pdata->sbi_ds_det_pos;
+
+	/* PCIe dynamic speed change parameters */
+	mc->pcie_dynamic_spd_enabled = of_property_read_bool(np, "use-dynamic-link-spd");
+
+	if (of_property_read_u32(np, "tp-threshold", &mc->tp_threshold))
+		mc->tp_threshold = DEFAULT_TP_THRESHOLD;
+
+	if (of_property_read_u32(np, "tp-hysteresis", &mc->tp_hysteresis))
+		mc->tp_hysteresis = DEFAULT_TP_HYSTERESIS;
+
+	mif_info("PCIe dynamic link speed: enable=%d, threshold=%d, hysteresis=%d\n",
+			 mc->pcie_dynamic_spd_enabled,
+			 mc->tp_threshold,
+			 mc->tp_hysteresis);
 
 	return 0;
 }
