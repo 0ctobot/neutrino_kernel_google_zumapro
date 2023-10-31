@@ -1207,10 +1207,10 @@ static int syna_dev_parse_custom_gesture_cb(const unsigned char code,
 		case GESTURE_NONE:
 			break;
 		case GESTURE_SINGLE_TAP:
-			LOGI("Gesture single tap detected\n");
+			LOGD("Gesture single tap detected\n");
 			break;
 		case GESTURE_LONG_PRESS:
-			LOGI("Gesture long press detected\n");
+			LOGD("Gesture long press detected\n");
 			break;
 		default:
 			LOGW("Unknown gesture id %d\n", data);
@@ -1253,7 +1253,23 @@ static int syna_dev_parse_custom_gesture_cb(const unsigned char code,
 		*report_offset += bits;
 
 		if (tcm->tp_data.gesture_id != GESTURE_NONE) {
-			LOGI("Gesture data x:%u y:%u major:%d minor:%d  angle:%d\n",
+#if IS_ENABLED(CONFIG_GOOG_TOUCH_INTERFACE)
+			struct gti_fw_status_data data;
+			if (tcm->tp_data.gesture_id == GESTURE_SINGLE_TAP)
+				data.gesture_event.type = GTI_GESTURE_STTW;
+			else if (tcm->tp_data.gesture_id == GESTURE_LONG_PRESS)
+				data.gesture_event.type = GTI_GESTURE_LPTW;
+			else
+				return bits;
+
+			data.gesture_event.x = g_pos.x;
+			data.gesture_event.y = g_pos.y;
+			data.gesture_event.major = major;
+			data.gesture_event.minor = minor;
+			data.gesture_event.angle = angle;
+			goog_notify_fw_status_changed(tcm->gti, GTI_FW_STATUS_GESTURE_EVENT, &data);
+#endif
+			LOGD("Gesture data x:%u y:%u major:%d minor:%d  angle:%d\n",
 				g_pos.x, g_pos.y, major, minor, angle);
 		}
 	} else {
