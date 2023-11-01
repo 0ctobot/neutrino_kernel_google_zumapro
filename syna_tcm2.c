@@ -541,6 +541,75 @@ static int syna_get_scan_mode(void *private_data, struct gti_scan_cmd *cmd)
 	return retval;
 }
 
+static int syna_set_sensing_mode(void *private_data, struct gti_sensing_cmd *cmd)
+{
+	struct syna_tcm *tcm = private_data;
+	int retval = 0;
+
+	retval = goog_pm_wake_lock(tcm->gti, GTI_PM_WAKELOCK_TYPE_VENDOR_REQUEST, true);
+	if (retval < 0) {
+		LOGE("Failed to obtain wake lock, ret = %d", retval);
+		return retval;
+	}
+
+	if (cmd->setting == GTI_SENSING_MODE_DISABLE) {
+		retval = syna_tcm_sleep(tcm->tcm_dev, true);
+		if (retval < 0) {
+			LOGE("Failed enter deep sleep mode, ret:%d", retval);
+			retval = -EIO;
+		}
+	} else if (cmd->setting == GTI_SENSING_MODE_ENABLE) {
+		retval = syna_tcm_sleep(tcm->tcm_dev, false);
+		if (retval < 0) {
+			LOGE("Failed exit deep sleep mode, ret:%d", retval);
+			retval = -EIO;
+		}
+	} else {
+		LOGE("Invalid sensing mode %d", cmd->setting);
+		retval = -EINVAL;
+	}
+
+	goog_pm_wake_unlock_nosync(tcm->gti, GTI_PM_WAKELOCK_TYPE_VENDOR_REQUEST);
+	return retval;
+}
+
+static int syna_get_sensing_mode(void *private_data, struct gti_sensing_cmd *cmd)
+{
+	struct syna_tcm *tcm = private_data;
+	int retval = 0;
+	unsigned short scan_mode;
+
+	if (goog_pm_wake_get_locks(tcm->gti) == 0 || tcm->pwr_state != PWR_ON) {
+		LOGI("Connot get sensing mode because touch is off");
+		return -EPERM;
+	}
+
+	retval = syna_tcm_get_dynamic_config(tcm->tcm_dev, DC_TOUCH_SCAN_MODE,
+			&scan_mode, RESP_IN_POLLING);
+	if (retval < 0) {
+		LOGE("Fail to read sensing mode, retval:%d", retval);
+		return -EIO;
+	}
+
+	switch (scan_mode) {
+	case SCAN_SLEEP:
+		cmd->setting = GTI_SENSING_MODE_DISABLE;
+		break;
+	case SCAN_NORMAL_IDLE:
+	case SCAN_NORMAL_ACTIVE:
+	case SCAN_LPWG_IDLE:
+	case SCAN_LPWG_ACTIVE:
+		cmd->setting = GTI_SENSING_MODE_ENABLE;
+		break;
+	default:
+		LOGE("Invalid scan mode %d", scan_mode);
+		retval = -EINVAL;
+		break;
+	}
+
+	return retval;
+}
+
 static int syna_set_screen_protector_mode(void *private_data,
 		struct gti_screen_protector_mode_cmd *cmd)
 {
@@ -1014,6 +1083,8 @@ static void syna_gti_init(struct syna_tcm *tcm)
 	options->set_heatmap_enabled = syna_set_heatmap_enabled;
 	options->set_scan_mode = syna_set_scan_mode;
 	options->get_scan_mode = syna_get_scan_mode;
+	options->set_sensing_mode = syna_set_sensing_mode;
+	options->get_sensing_mode = syna_get_sensing_mode;
 	options->set_screen_protector_mode = syna_set_screen_protector_mode;
 	options->get_screen_protector_mode = syna_get_screen_protector_mode;
 	options->set_gesture_config = syna_set_gesture_config;
