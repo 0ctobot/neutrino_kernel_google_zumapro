@@ -427,6 +427,120 @@ static void syna_set_heatmap_enabled_work(struct work_struct *work)
 	goog_pm_wake_unlock_nosync(tcm->gti, GTI_PM_WAKELOCK_TYPE_VENDOR_REQUEST);
 }
 
+static int syna_set_scan_mode(void *private_data, struct gti_scan_cmd *cmd)
+{
+	struct syna_tcm *tcm = private_data;
+	int retval = 0;
+	unsigned short gesture_mode;
+	bool doze_enable;
+
+	retval = goog_pm_wake_lock(tcm->gti, GTI_PM_WAKELOCK_TYPE_VENDOR_REQUEST, true);
+	if (retval < 0) {
+		LOGE("Failed to obtain wake lock, ret = %d", retval);
+		return retval;
+	}
+
+	switch (cmd->setting) {
+	case GTI_SCAN_MODE_NORMAL_ACTIVE:
+		gesture_mode = 0;
+		doze_enable = false;
+		break;
+	case GTI_SCAN_MODE_NORMAL_IDLE:
+		gesture_mode = 0;
+		doze_enable = true;
+		break;
+	case GTI_SCAN_MODE_LP_ACTIVE:
+		gesture_mode = 1;
+		doze_enable = false;
+		break;
+	case GTI_SCAN_MODE_LP_IDLE:
+		gesture_mode = 1;
+		doze_enable = true;
+		break;
+	default:
+		LOGE("Invalid scan mode %d.", cmd->setting);
+		retval = -EINVAL;
+		goto exit;
+	}
+
+	retval = syna_tcm_set_dynamic_config(tcm->tcm_dev,
+			DC_ENABLE_WAKEUP_GESTURE_MODE,
+			gesture_mode,
+			RESP_IN_ATTN);
+	if (retval < 0) {
+		LOGE("Fail to set wakeup gesture mode via DC command, retval:%d\n", retval);
+		retval = -EIO;
+		goto exit;
+	}
+
+	retval = syna_tcm_set_dynamic_config(tcm->tcm_dev,
+			DC_DISABLE_DOZE,
+			doze_enable ? 0 : 1,
+			RESP_IN_ATTN);
+	if (retval < 0) {
+		LOGE("Fail to set DC_DISABLE_DOZE, retval:%d\n", retval);
+		retval = -EIO;
+		goto exit;
+	}
+
+	retval = syna_tcm_set_dynamic_config(tcm->tcm_dev,
+			DC_FORCE_DOZE_MODE,
+			doze_enable ? 1 : 0,
+			RESP_IN_ATTN);
+	if (retval < 0) {
+		LOGE("Fail to set DC_FORCE_DOZE_MODE, retval:%d\n", retval);
+		retval = -EIO;
+	}
+
+exit:
+	goog_pm_wake_unlock_nosync(tcm->gti, GTI_PM_WAKELOCK_TYPE_VENDOR_REQUEST);
+	return retval;
+}
+
+static int syna_get_scan_mode(void *private_data, struct gti_scan_cmd *cmd)
+{
+	struct syna_tcm *tcm = private_data;
+	unsigned short scan_mode;
+	int retval;
+
+	if (goog_pm_wake_get_locks(tcm->gti) == 0 || tcm->pwr_state != PWR_ON) {
+		LOGI("Connot get scan mode because touch is off");
+		return -EPERM;
+	}
+
+	retval = syna_tcm_get_dynamic_config(tcm->tcm_dev, DC_TOUCH_SCAN_MODE,
+			&scan_mode, RESP_IN_POLLING);
+	if (retval < 0) {
+		LOGE("Fail to read scan mode, retval:%d", retval);
+		return -EIO;
+	}
+
+	switch (scan_mode) {
+	case SCAN_NORMAL_IDLE:
+		cmd->setting = GTI_SCAN_MODE_NORMAL_IDLE;
+		break;
+	case SCAN_NORMAL_ACTIVE:
+		cmd->setting = GTI_SCAN_MODE_NORMAL_ACTIVE;
+		break;
+	case SCAN_LPWG_IDLE:
+		cmd->setting = GTI_SCAN_MODE_LP_IDLE;
+		break;
+	case SCAN_LPWG_ACTIVE:
+		cmd->setting = GTI_SCAN_MODE_LP_ACTIVE;
+		break;
+	case SCAN_SLEEP:
+		LOGI("Touch is in sleep mode.");
+		retval = -EINVAL;
+		break;
+	default:
+		LOGE("Invalid scan mode %u", scan_mode);
+		retval = -EINVAL;
+		break;
+	}
+
+	return retval;
+}
+
 static int syna_set_screen_protector_mode(void *private_data,
 		struct gti_screen_protector_mode_cmd *cmd)
 {
@@ -898,6 +1012,8 @@ static void syna_gti_init(struct syna_tcm *tcm)
 	options->set_palm_mode = syna_set_palm_mode;
 	options->get_palm_mode = syna_get_palm_mode;
 	options->set_heatmap_enabled = syna_set_heatmap_enabled;
+	options->set_scan_mode = syna_set_scan_mode;
+	options->get_scan_mode = syna_get_scan_mode;
 	options->set_screen_protector_mode = syna_set_screen_protector_mode;
 	options->get_screen_protector_mode = syna_get_screen_protector_mode;
 	options->set_gesture_config = syna_set_gesture_config;
