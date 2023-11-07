@@ -445,6 +445,8 @@ struct syna_tcm {
 	uint16_t *mutual_data_manual;
 	uint16_t *self_data_manual;
 	struct goog_touch_interface *gti;
+	/* Work for setting coordinate filter. */
+	struct work_struct set_coord_filter_work;
 	/* Work for setting firmware grip mode. */
 	struct work_struct set_grip_mode_work;
 	/* Work for setting firmware palm mode. */
@@ -489,6 +491,7 @@ struct syna_tcm {
 	u8 raw_data_report_code;
 	s16 *raw_data_buffer;
 	struct completion raw_data_completion;
+	bool coord_filter_enable;
 	bool high_sensitivity_mode;
 	u8 enable_fw_grip;
 	u8 enable_fw_palm;

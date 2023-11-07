@@ -243,6 +243,75 @@ static int set_reset(void *private_data, struct gti_reset_cmd *cmd)
 	return 0;
 }
 
+static int syna_set_coord_filter_enabled(void *private_data, struct gti_coord_filter_cmd *cmd)
+{
+	struct syna_tcm *tcm = private_data;
+
+	if (goog_pm_wake_get_locks(tcm->gti) == 0 || tcm->pwr_state != PWR_ON) {
+		LOGI("Connot set coordinate filter because touch is off");
+		return -EPERM;
+	}
+
+	tcm->coord_filter_enable = cmd->setting == GTI_COORD_FILTER_ENABLE ? 1 : 0;
+
+	if (tcm->hw_if->bdata_attn.irq_enabled) {
+		queue_work(tcm->event_wq, &tcm->set_coord_filter_work);
+	} else {
+		LOGI("%s firmware coordinate filter.\n",
+			tcm->coord_filter_enable ? "Enable" : "Disable");
+		syna_tcm_set_dynamic_config(tcm->tcm_dev,
+			DC_COORD_FILTER,
+			tcm->coord_filter_enable,
+			RESP_IN_POLLING);
+	}
+
+	return 0;
+}
+
+static int syna_get_coord_filter_enabled(void *private_data, struct gti_coord_filter_cmd *cmd)
+{
+	struct syna_tcm *tcm = private_data;
+	unsigned short coord_filter_enabled;
+	int retval;
+
+	if (goog_pm_wake_get_locks(tcm->gti) == 0 || tcm->pwr_state != PWR_ON) {
+		LOGI("Connot get coordinte filter because touch is off");
+		return -EPERM;
+	}
+
+	retval = syna_tcm_get_dynamic_config(tcm->tcm_dev, DC_COORD_FILTER,
+			&coord_filter_enabled, RESP_IN_POLLING);
+	if (retval < 0) {
+		LOGE("Fail to read coordinate filter, retval:%d.", retval);
+		return -EIO;
+	}
+
+	cmd->setting = coord_filter_enabled ? GTI_COORD_FILTER_ENABLE : GTI_COORD_FILTER_DISABLE;
+
+	return retval;
+}
+
+static void syna_set_coord_filter_work(struct work_struct *work)
+{
+	struct syna_tcm *tcm = container_of(work, struct syna_tcm, set_coord_filter_work);
+	int retval = 0;
+
+	retval = goog_pm_wake_lock(tcm->gti, GTI_PM_WAKELOCK_TYPE_VENDOR_REQUEST, true);
+	if (retval) {
+		LOGE("Failed to obtain wake lock, ret = %d", retval);
+		return;
+	}
+
+	LOGI("%s firmware coordinate filter.\n",
+		tcm->coord_filter_enable ? "Enable" : "Disable");
+	syna_tcm_set_dynamic_config(tcm->tcm_dev,
+			DC_COORD_FILTER,
+			tcm->coord_filter_enable,
+			RESP_IN_ATTN);
+
+	goog_pm_wake_unlock_nosync(tcm->gti, GTI_PM_WAKELOCK_TYPE_VENDOR_REQUEST);
+}
+
 static int syna_set_palm_mode(void *private_data, struct gti_palm_cmd *cmd)
 {
 	struct syna_tcm *tcm = private_data;
@@ -1063,6 +1132,7 @@ static void syna_gti_init(struct syna_tcm *tcm)
 	/* release the interrupt and register the gti irq later. */
 	syna_dev_release_irq(tcm);
 
+	INIT_WORK(&tcm->set_coord_filter_work, syna_set_coord_filter_work);
 	INIT_WORK(&tcm->set_grip_mode_work, syna_set_grip_mode_work);
 	INIT_WORK(&tcm->set_palm_mode_work, syna_set_palm_mode_work);
 	INIT_WORK(&tcm->set_heatmap_enabled_work, syna_set_heatmap_enabled_work);
@@ -1076,6 +1146,8 @@ static void syna_gti_init(struct syna_tcm *tcm)
 	options->get_irq_mode = get_irq_mode;
 	options->set_irq_mode = set_irq_mode;
 	options->reset = set_reset;
+	options->get_coord_filter_enabled = syna_get_coord_filter_enabled;
+	options->set_coord_filter_enabled = syna_set_coord_filter_enabled;
 	options->set_grip_mode = syna_set_grip_mode;
 	options->get_grip_mode = syna_get_grip_mode;
 	options->set_palm_mode = syna_set_palm_mode;
