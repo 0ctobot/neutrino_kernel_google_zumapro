@@ -19,6 +19,9 @@
 #include <linux/reboot.h>
 #include <linux/pci.h>
 #include <linux/of_reserved_mem.h>
+#include <linux/ip.h>
+#include <linux/ipv6.h>
+#include <net/icmp.h>
 #include <net/xfrm.h>
 #if IS_ENABLED(CONFIG_ECT)
 #include <soc/google/ect_parser.h>
@@ -943,8 +946,8 @@ exit:
 		return 1;
 }
 
-static inline void start_tx_timer(struct mem_link_device *mld,
-				  struct hrtimer *timer)
+static inline void start_tx_timer_custom(struct mem_link_device *mld,
+				  struct hrtimer *timer, unsigned int interval)
 {
 	struct link_device *ld = &mld->link_dev;
 	struct modem_ctl *mc = ld->mc;
@@ -959,11 +962,17 @@ static inline void start_tx_timer(struct mem_link_device *mld,
 
 	spin_lock_irqsave(&mc->tx_timer_lock, flags);
 	if (!hrtimer_is_queued(timer)) {
-		ktime_t ktime = ktime_set(0, mld->tx_period_ns);
+		ktime_t ktime = ktime_set(0, interval);
 
 		hrtimer_start(timer, ktime, HRTIMER_MODE_REL);
 	}
 	spin_unlock_irqrestore(&mc->tx_timer_lock, flags);
+}
+
+static inline void start_tx_timer(struct mem_link_device *mld,
+				struct hrtimer *timer)
+{
+	start_tx_timer_custom(mld, timer, mld->tx_period_ns);
 }
 
 static inline void shmem_start_timers(struct mem_link_device *mld)
@@ -1229,6 +1238,35 @@ static enum hrtimer_restart pktproc_tx_timer_func(struct hrtimer *timer)
 	return HRTIMER_NORESTART;
 }
 
+static inline bool is_icmp_pkt(struct sk_buff *skb)
+{
+        bool ret = false;
+        struct iphdr *iphdr_t;
+        struct icmphdr *icmph;
+        iphdr_t = (struct iphdr *)skb->data;
+
+        switch (ip_hdr(skb)->version) {
+        case 4:
+                if(iphdr_t->protocol==IPPROTO_ICMP){
+                        icmph = (struct icmphdr *) (skb->data + 20);
+                        if (icmph->type == 8)
+                                ret = true;
+                }
+                break;
+        case 6:
+                if(ipv6_hdr(skb)->nexthdr==IPPROTO_ICMPV6){
+                        icmph = (struct icmphdr *) (skb->data + 40);
+                        if (icmph->type == 128)
+                                ret = true;
+                }
+                break;
+        default:
+                break;
+        }
+
+        return ret;
+}
+
 static int xmit_ipc_to_pktproc(struct mem_link_device *mld, struct sk_buff *skb)
 {
 	struct pktproc_adaptor_ul *ppa_ul = &mld->pktproc_ul;
@@ -1238,11 +1276,14 @@ static int xmit_ipc_to_pktproc(struct mem_link_device *mld, struct sk_buff *skb)
 	int len;
 	int ret = -EBUSY;
 	unsigned long flags;
+	bool icmp_pkt = false;
 
 	if (ppa_ul->padding_required)
 		len = skb->len + CP_PADDING;
 	else
 		len = skb->len;
+
+	icmp_pkt = is_icmp_pkt(skb);
 
 	/* Set ul queue
 	 * 1) The queue is high priority(PKTPROC_UL_HIPRIO) by default.
@@ -1296,8 +1337,11 @@ static int xmit_ipc_to_pktproc(struct mem_link_device *mld, struct sk_buff *skb)
 		dev_consume_skb_any(skb);
 
 exit:
-	/* start timer even on error */
-	if (ret)
+	/* start tx timer with 0 interval for icmp packets only to reduce the ping latency  */
+	if(ret > 0 && icmp_pkt)
+		start_tx_timer_custom(mld, &mld->pktproc_tx_timer, 0);
+	else if (ret)
+		/* start timer even on error */
 		start_tx_timer(mld, &mld->pktproc_tx_timer);
 
 	return ret;
