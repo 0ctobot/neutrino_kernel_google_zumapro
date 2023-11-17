@@ -18,4 +18,5 @@ void *cpif_pcie_iommu_map_va(struct pktproc_queue *q, unsigned long src_pa,
 void cpif_pcie_iommu_try_ummap_va(struct pktproc_queue *q, unsigned long src_pa,
 				  void *addr, u32 idx);
 
+extern bool exynos_pcie_is_sysmmu_enabled(int ch_num);
 #endif /* __LINK_DEVICE_PCIE_IOMMU_H__ */

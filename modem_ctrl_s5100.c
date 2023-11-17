@@ -908,7 +908,8 @@ static int register_pcie(struct link_device *ld)
 #endif
 
 #if IS_ENABLED(CONFIG_LINK_DEVICE_PCIE_IOMMU)
-	cpif_pcie_iommu_enable_regions(mld);
+	if (exynos_pcie_is_sysmmu_enabled(mc->pcie_ch_num))
+		cpif_pcie_iommu_enable_regions(mld);
 #endif
 
 	msleep(200);

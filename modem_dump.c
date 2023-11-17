@@ -14,6 +14,10 @@
 #include "modem_utils.h"
 #include "link_device_memory.h"
 
+#if IS_ENABLED(CONFIG_LINK_DEVICE_PCIE_IOMMU)
+#include "link_device_pcie_iommu.h"
+#endif
+
 static int save_log_dump(struct io_device *iod, struct link_device *ld, u8 __iomem *base,
 		size_t size)
 {
@@ -123,7 +127,11 @@ int cp_get_log_dump(struct io_device *iod, struct link_device *ld, unsigned long
 	case LOG_IDX_DATABUF_DL:
 		base = phys_to_virt(cp_shmem_get_base(cp_num, SHMEM_PKTPROC));
 #if IS_ENABLED(CONFIG_LINK_DEVICE_PCIE_IOMMU)
-		size = mld->pktproc.buff_rgn_offset;
+		if (exynos_pcie_is_sysmmu_enabled(iod->mc->pcie_ch_num)) {
+			size = mld->pktproc.buff_rgn_offset;
+		} else {
+			size = cp_shmem_get_size(cp_num, SHMEM_PKTPROC);
+		}
 #else
 		size = cp_shmem_get_size(cp_num, SHMEM_PKTPROC);
 #endif
