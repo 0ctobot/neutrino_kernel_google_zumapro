@@ -81,10 +81,12 @@ static void print_mc_state(struct modem_ctl *mc)
 	int dump = mif_gpio_get_value(&mc->cp_gpio[CP_GPIO_AP2CP_DUMP_NOTI], false);
 	int ap_status = mif_gpio_get_value(&mc->cp_gpio[CP_GPIO_AP2CP_AP_ACTIVE], false);
 	int phone_active = mif_gpio_get_value(&mc->cp_gpio[CP_GPIO_CP2AP_CP_ACTIVE], false);
+	int wrst = mif_gpio_get_value(&mc->cp_gpio[CP_GPIO_CP2AP_CP_WRST_N], false);
 
-	logbuffer_log(mc->log, "%s: %ps:GPIO pwr:%d rst:%d phd:%d c2aw:%d a2cw:%d dmp:%d ap_act:%d cp_act:%d",
+	logbuffer_log(mc->log,
+		"%s: %ps:GPIO pwr:%d rst:%d phd:%d c2aw:%d a2cw:%d dmp:%d ap_act:%d cp_act:%d wrst:%d",
 		mc->name, CALLER, pwr, reset, pshold, ap_wakeup, cp_wakeup, dump,
-		ap_status, phone_active);
+		ap_status, phone_active, wrst);
 }
 
 static void pcie_clean_dislink(struct modem_ctl *mc)
@@ -298,7 +300,7 @@ static irqreturn_t ap_wakeup_handler(int irq, void *data)
 
 	/* To avoid holding on to the wakesource in case of a race condition */
 	if (wrst_gpio_val) {
-		mif_info("release wrst lock in ap_wakeup\n");
+		logbuffer_log(mc->log, "release wrst lock in ap_wakeup\n");
 		cpif_wake_unlock(mc->ws_wrst);
 	}
 
@@ -414,10 +416,10 @@ static irqreturn_t cp_wrst_handler(int irq, void *data)
 	mif_disable_irq(&mc->cp_gpio_irq[CP_GPIO_IRQ_CP2AP_CP_WRST_N]);
 
 	if (gpio_val == 0) {
-		mif_info("acquire wrst lock\n");
+		logbuffer_log(mc->log, "acquire wrst lock\n");
 		cpif_wake_lock(mc->ws_wrst);
 	} else {
-		mif_info("release wrst lock\n");
+		logbuffer_log(mc->log, "release wrst lock\n");
 		cpif_wake_unlock(mc->ws_wrst);
 	}
 
@@ -2335,6 +2337,9 @@ static int s5100_call_state_notifier(struct notifier_block *nb,
 	case MODEM_VOICE_CALL_OFF:
 		mc->pcie_voice_call_on = false;
 		mif_disable_irq(&mc->cp_gpio_irq[CP_GPIO_IRQ_CP2AP_CP_WRST_N]);
+		synchronize_irq(mc->cp_gpio_irq[CP_GPIO_IRQ_CP2AP_CP_WRST_N].num);
+		cpif_wake_unlock(mc->ws_wrst);
+		logbuffer_log(mc->log, "released wrst wakelock after voice call");
 		queue_work_on(RUNTIME_PM_AFFINITY_CORE, mc->wakeup_wq,
 			&mc->call_off_work);
 		break;
