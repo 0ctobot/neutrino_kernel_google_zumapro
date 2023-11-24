@@ -385,11 +385,13 @@ int syna_tcm_parse_touch_report(struct tcm_dev *tcm_dev,
 	unsigned int data;
 	unsigned int bits;
 	unsigned int offset;
+	unsigned int objects;
 	unsigned int active_objects;
 	unsigned int config_size;
 	unsigned char *config_data;
 	struct tcm_objects_data_blob *object_data;
 	unsigned int bits_tailing;
+	unsigned int bits_heading;
 
 	if (!tcm_dev) {
 		LOGE("Invalid tcm device handle\n");
@@ -432,10 +434,12 @@ int syna_tcm_parse_touch_report(struct tcm_dev *tcm_dev,
 	num_of_active_objects = false;
 
 	bits_tailing = tcm_dev->bits_config_tailing;
+	bits_heading = tcm_dev->bits_config_heading;
 	loop_end = tcm_dev->end_config_loop;
 
 	idx = 0;
 	offset = 0;
+	objects = 0;
 	active_objects = 0;
 	active_only = false;
 	obj = 0;
@@ -447,33 +451,46 @@ int syna_tcm_parse_touch_report(struct tcm_dev *tcm_dev,
 		case TOUCH_REPORT_END:
 			goto exit;
 		case TOUCH_REPORT_FOREACH_ACTIVE_OBJECT:
+			if (bits_heading + bits_tailing >= report_size * 8) {
+				idx = loop_end;
+				break;
+			}
 			obj = 0;
 			loop_start = idx;
 			active_only = true;
 			break;
 		case TOUCH_REPORT_FOREACH_OBJECT:
+			if (bits_heading + bits_tailing >= report_size * 8) {
+				idx = loop_end;
+				break;
+			}
 			obj = 0;
 			loop_start = idx;
 			active_only = false;
 			break;
 		case TOUCH_REPORT_FOREACH_END:
-			if (offset + bits_tailing >= report_size * 8) {
+			if (offset + bits_tailing > report_size * 8) {
+				goto exit;
+			} else if (offset + bits_tailing == report_size * 8) {
 				idx = loop_end;
 				break;
 			}
+
 			if (active_only) {
 				if (num_of_active_objects) {
+					objects++;
 					obj++;
-					if (obj < active_objects)
+					if (objects < active_objects)
 						idx = loop_start;
-					break;
+				} else if (offset < report_size * 8) {
+					obj++;
+					idx = loop_start;
 				}
+			} else {
+				obj++;
+				if (obj < tcm_dev->max_objects)
+					idx = loop_start;
 			}
-
-			obj++;
-			if (obj < tcm_dev->max_objects)
-				idx = loop_start;
-
 			break;
 		case TOUCH_REPORT_PAD_TO_NEXT_BYTE:
 			offset = syna_pal_ceil_div(offset, 8) * 8;
@@ -821,7 +838,7 @@ int syna_tcm_parse_touch_report(struct tcm_dev *tcm_dev,
 					continue;
 			}
 
-			LOGW("Unknown touch config code:0x%02x (length:%d)\n",
+			LOGW("Unknown touch entity:0x%02x (size:%d), skip !\n",
 				code, config_data[idx]);
 			bits = config_data[idx++];
 			offset += bits;
@@ -946,6 +963,7 @@ int syna_tcm_preserve_touch_report_config(struct tcm_dev *tcm_dev)
 	unsigned char bits;
 	int bits_tailing;
 	int bits_in_loop;
+	int bits_heading;
 	bool count_bits_in_loop = false;
 	bool count_bits_tailing = false;
 
@@ -1004,6 +1022,7 @@ int syna_tcm_preserve_touch_report_config(struct tcm_dev *tcm_dev)
 
 	/* pre-process the touch configuration */
 	idx = 0;
+	bits_heading = 0;
 	bits_tailing = 0;
 	bits_in_loop = 0;
 	while (idx < size) {
@@ -1035,10 +1054,13 @@ int syna_tcm_preserve_touch_report_config(struct tcm_dev *tcm_dev)
 				bits_in_loop += bits;
 			if (count_bits_tailing)
 				bits_tailing += bits;
+			if (!count_bits_tailing && !count_bits_in_loop)
+				bits_heading += bits;
 			break;
 		}
 	}
 
+	tcm_dev->bits_config_heading = bits_heading;
 	tcm_dev->bits_config_loop = bits_in_loop;
 	tcm_dev->bits_config_tailing = bits_tailing;
 

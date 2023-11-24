@@ -45,6 +45,7 @@
 
 
 #define SYNA_TCM_CORE_LIB_VERSION 0x0126
+#define SYNA_TCM_CORE_LIB_CUSTOM_CODE	0x01
 
 
 /**
@@ -856,6 +857,7 @@ struct tcm_dev {
 	struct tcm_buffer touch_config;
 	unsigned int end_config_loop;
 	unsigned int bits_config_loop;
+	unsigned int bits_config_heading;
 	unsigned int bits_config_tailing;
 
 	/* TouchComm message handling wrapper */
