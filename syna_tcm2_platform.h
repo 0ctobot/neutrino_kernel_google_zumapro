@@ -50,8 +50,8 @@
  *
  * Declare read/write capability in bytes (0 = unlimited)
  */
-#define RD_CHUNK_SIZE (512)
-#define WR_CHUNK_SIZE (512)
+#define RD_CHUNK_SIZE (1024)
+#define WR_CHUNK_SIZE (2048)
 
 #define LIMIT_NAME_LEN 32
 
