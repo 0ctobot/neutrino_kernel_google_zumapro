@@ -293,16 +293,20 @@ static irqreturn_t ap_wakeup_handler(int irq, void *data)
 {
 	struct modem_ctl *mc = (struct modem_ctl *)data;
 	int gpio_val = mif_gpio_get_value(&mc->cp_gpio[CP_GPIO_CP2AP_WAKEUP], true);
+#if IS_ENABLED(CONFIG_CPIF_WAKE_IRQ_DURING_VOICE_CALL)
 	int wrst_gpio_val = mif_gpio_get_value(&mc->cp_gpio[CP_GPIO_CP2AP_CP_WRST_N], true);
+#endif
 	unsigned long flags;
 
 	mif_disable_irq(&mc->cp_gpio_irq[CP_GPIO_IRQ_CP2AP_WAKEUP]);
 
+#if IS_ENABLED(CONFIG_CPIF_WAKE_IRQ_DURING_VOICE_CALL)
 	/* To avoid holding on to the wakesource in case of a race condition */
 	if (wrst_gpio_val) {
 		logbuffer_log(mc->log, "release wrst lock in ap_wakeup\n");
 		cpif_wake_unlock(mc->ws_wrst);
 	}
+#endif
 
 	if (mc->device_reboot) {
 		mif_err("skip : device is rebooting..!!!\n");
@@ -407,7 +411,7 @@ irq_done:
 	return IRQ_HANDLED;
 }
 
-
+#if IS_ENABLED(CONFIG_CPIF_WAKE_IRQ_DURING_VOICE_CALL)
 static irqreturn_t cp_wrst_handler(int irq, void *data)
 {
 	struct modem_ctl *mc = (struct modem_ctl *)data;
@@ -455,6 +459,7 @@ static int register_cp_wrst_interrupt(struct modem_ctl *mc)
 
 	return ret;
 }
+#endif
 
 static int register_phone_active_interrupt(struct modem_ctl *mc)
 {
@@ -558,8 +563,12 @@ static ssize_t s5100_wake_lock_show(struct device *dev, struct device_attribute 
 {
 	struct modem_ctl *mc = dev_get_drvdata(dev);
 
+#if IS_ENABLED(CONFIG_CPIF_WAKE_IRQ_DURING_VOICE_CALL)
 	return scnprintf(buf, PAGE_SIZE, "%d, %d\n", cpif_wake_lock_active(mc->ws),
 			cpif_wake_lock_active(mc->ws_wrst));
+#else
+	return scnprintf(buf, PAGE_SIZE, "%d\n", cpif_wake_lock_active(mc->ws));
+#endif
 }
 
 static ssize_t s5100_wake_lock_store(struct device *dev, struct device_attribute *attr,
@@ -1427,10 +1436,12 @@ static int complete_normal_boot(struct modem_ctl *mc)
 		mif_err("Err: register_cp2ap_wakeup_interrupt:%d\n", err);
 	mif_enable_irq(&mc->cp_gpio_irq[CP_GPIO_IRQ_CP2AP_WAKEUP]);
 
+#if IS_ENABLED(CONFIG_CPIF_WAKE_IRQ_DURING_VOICE_CALL)
 	err = register_cp_wrst_interrupt(mc);
 	if (err)
 		mif_err("Err: register_cp_wrst_interrupt:%d\n", err);
 	mif_disable_irq(&mc->cp_gpio_irq[CP_GPIO_IRQ_CP2AP_CP_WRST_N]);
+#endif
 
 	print_mc_state(mc);
 
@@ -2266,7 +2277,9 @@ static int s5100_get_pdata(struct modem_ctl *mc, struct modem_data *pdata)
 	/* irq */
 	mc->cp_gpio[CP_GPIO_CP2AP_WAKEUP].irq_type = CP_GPIO_IRQ_CP2AP_WAKEUP;
 	mc->cp_gpio[CP_GPIO_CP2AP_CP_ACTIVE].irq_type = CP_GPIO_IRQ_CP2AP_CP_ACTIVE;
+#if IS_ENABLED(CONFIG_CPIF_WAKE_IRQ_DURING_VOICE_CALL)
 	mc->cp_gpio[CP_GPIO_CP2AP_CP_WRST_N].irq_type = CP_GPIO_IRQ_CP2AP_CP_WRST_N;
+#endif
 
 	/* gpio */
 	for (i = 0; i < CP_GPIO_MAX; i++) {
@@ -2336,16 +2349,20 @@ static int s5100_call_state_notifier(struct notifier_block *nb,
 	switch (action) {
 	case MODEM_VOICE_CALL_OFF:
 		mc->pcie_voice_call_on = false;
+#if IS_ENABLED(CONFIG_CPIF_WAKE_IRQ_DURING_VOICE_CALL)
 		mif_disable_irq(&mc->cp_gpio_irq[CP_GPIO_IRQ_CP2AP_CP_WRST_N]);
 		synchronize_irq(mc->cp_gpio_irq[CP_GPIO_IRQ_CP2AP_CP_WRST_N].num);
 		cpif_wake_unlock(mc->ws_wrst);
 		logbuffer_log(mc->log, "released wrst wakelock after voice call");
+#endif
 		queue_work_on(RUNTIME_PM_AFFINITY_CORE, mc->wakeup_wq,
 			&mc->call_off_work);
 		break;
 	case MODEM_VOICE_CALL_ON:
 		mc->pcie_voice_call_on = true;
+#if IS_ENABLED(CONFIG_CPIF_WAKE_IRQ_DURING_VOICE_CALL)
 		mif_enable_irq(&mc->cp_gpio_irq[CP_GPIO_IRQ_CP2AP_CP_WRST_N]);
+#endif
 		queue_work_on(RUNTIME_PM_AFFINITY_CORE, mc->wakeup_wq,
 			&mc->call_on_work);
 		break;
@@ -2404,8 +2421,12 @@ int s5100_init_modemctl_device(struct modem_ctl *mc, struct modem_data *pdata)
 	dev_set_drvdata(mc->dev, mc);
 
 	mc->ws = cpif_wake_lock_register(&pdev->dev, "s5100_wake_lock");
+#if IS_ENABLED(CONFIG_CPIF_WAKE_IRQ_DURING_VOICE_CALL)
 	mc->ws_wrst = cpif_wake_lock_register(&pdev->dev, "s5100_wrst_wake_lock");
 	if ((mc->ws == NULL) || (mc->ws_wrst == NULL)) {
+#else
+	if (mc->ws == NULL) {
+#endif
 		mif_err("s5100_wake_lock: wakeup_source_register fail\n");
 		ret = -EINVAL;
 		goto err_wake_lock_register;
@@ -2423,9 +2444,13 @@ int s5100_init_modemctl_device(struct modem_ctl *mc, struct modem_data *pdata)
 
 	mif_info("Register GPIO interrupts\n");
 	mc->apwake_irq_chip = irq_get_chip(mc->cp_gpio_irq[CP_GPIO_IRQ_CP2AP_WAKEUP].num);
+#if IS_ENABLED(CONFIG_CPIF_WAKE_IRQ_DURING_VOICE_CALL)
 	mc->cp_wrst_irq_chip = irq_get_chip(
 			mc->cp_gpio_irq[CP_GPIO_IRQ_CP2AP_CP_WRST_N].num);
 	if (mc->apwake_irq_chip == NULL || mc->cp_wrst_irq_chip == NULL) {
+#else
+	if (mc->apwake_irq_chip == NULL) {
+#endif
 		mif_err("Can't get irq_chip structure!!!!\n");
 		ret = -EINVAL;
 		goto err_irq_get_chip;
@@ -2510,7 +2535,9 @@ err_crash_wq:
 	destroy_workqueue(mc->wakeup_wq);
 err_irq_get_chip:
 	cpif_wake_lock_unregister(mc->ws);
+#if IS_ENABLED(CONFIG_CPIF_WAKE_IRQ_DURING_VOICE_CALL)
 	cpif_wake_lock_unregister(mc->ws_wrst);
+#endif
 err_wake_lock_register:
 	g_mc = NULL;
 	return ret;
@@ -2534,6 +2561,8 @@ void s5100_uninit_modemctl_device(struct modem_ctl *mc, struct modem_data *pdata
 	mutex_destroy(&mc->pcie_check_lock);
 	mutex_destroy(&mc->pcie_onoff_lock);
 	cpif_wake_lock_unregister(mc->ws);
+#if IS_ENABLED(CONFIG_CPIF_WAKE_IRQ_DURING_VOICE_CALL)
 	cpif_wake_lock_unregister(mc->ws_wrst);
+#endif
 	g_mc = NULL;
 }
