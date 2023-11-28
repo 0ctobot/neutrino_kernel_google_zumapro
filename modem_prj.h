@@ -247,6 +247,12 @@ enum link_state {
 	LINK_STATE_CP_CRASH
 };
 
+enum link_mode {
+	LINK_MODE_MIN_SPEED_BOOTING,
+	LINK_MODE_MAX_SPEED_BOOTING,
+	LINK_MODE_ADAPTIVE_SPEED_BOOTED,
+};
+
 enum modem_variant {
 	MODEM_SEC_5300,
 	MODEM_SEC_5400

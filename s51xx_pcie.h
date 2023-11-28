@@ -50,8 +50,10 @@ struct s51xx_pcie {
 extern int exynos_pcie_rc_chk_link_status(int ch_num);
 extern int exynos_pcie_rc_l1ss_ctrl(int enable, int id, int ch_num);
 
-extern int exynos_pcie_poweron(int ch_num, int spd);
+extern int exynos_pcie_poweron(int ch_num, int spd, int width);
 extern int exynos_pcie_poweroff(int ch_num);
+extern int exynos_pcie_get_max_link_speed(int ch_num);
+extern int exynos_pcie_get_max_link_width(int ch_num);
 extern void exynos_pcie_set_perst_gpio(int ch_num, bool on);
 extern void exynos_pcie_set_ready_cto_recovery(int ch_num);
 /* not used: extern int exynos_pcie_gpio_onoff(int ch_num, int val); */

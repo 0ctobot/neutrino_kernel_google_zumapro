@@ -127,7 +127,7 @@ static void cp2ap_wakeup_work(struct work_struct *work)
 	mc->cp_power_stats.suspended = false;
 	spin_unlock_irqrestore(&mc->power_stats_lock, flags);
 
-	s5100_poweron_pcie(mc, false);
+	s5100_poweron_pcie(mc, LINK_MODE_ADAPTIVE_SPEED_BOOTED);
 }
 
 static void cp2ap_suspend_work(struct work_struct *work)
@@ -822,7 +822,7 @@ static int register_pcie(struct link_device *ld)
 
 	msleep(200);
 
-	s5100_poweron_pcie(mc, !!(mld->attrs & LINK_ATTR_XMIT_BTDLR_PCIE));
+	s5100_poweron_pcie(mc, LINK_MODE_MIN_SPEED_BOOTING);
 
 	if (is_registered == 0) {
 		/* initialize the pci_dev for modem_ctl */
@@ -1376,7 +1376,7 @@ static int start_normal_boot(struct modem_ctl *mc)
 		if (ret < 0)
 			goto status_error;
 
-		s5100_poweron_pcie(mc, false);
+		s5100_poweron_pcie(mc, LINK_MODE_MAX_SPEED_BOOTING);
 	} else {
 		ret = check_cp_status(mc, 200, false);
 		if (ret < 0)
@@ -1561,7 +1561,7 @@ static int start_normal_boot_bootloader(struct modem_ctl *mc)
 		if (ret < 0)
 			goto status_error;
 
-		s5100_poweron_pcie(mc, false);
+		s5100_poweron_pcie(mc, LINK_MODE_MAX_SPEED_BOOTING);
 	}
 
 status_error:
@@ -1719,7 +1719,7 @@ static int start_dump_boot(struct modem_ctl *mc)
 		if (err < 0)
 			goto status_error;
 
-		s5100_poweron_pcie(mc, false);
+		s5100_poweron_pcie(mc, LINK_MODE_MAX_SPEED_BOOTING);
 	} else {
 		err = check_cp_status(mc, 200, false);
 		if (err < 0)
@@ -1813,7 +1813,7 @@ static int start_dump_boot_bootloader(struct modem_ctl *mc)
 		if (ret < 0)
 			goto status_error;
 
-		s5100_poweron_pcie(mc, false);
+		s5100_poweron_pcie(mc, LINK_MODE_MAX_SPEED_BOOTING);
 	}
 
 status_error:
@@ -1939,12 +1939,14 @@ exit:
 	return 0;
 }
 
-int s5100_poweron_pcie(struct modem_ctl *mc, bool boot_on)
+int s5100_poweron_pcie(struct modem_ctl *mc, enum link_mode mode)
 {
 	struct link_device *ld;
 	struct mem_link_device *mld;
 	bool force_crash = false;
 	unsigned long flags;
+	bool boot_on = (mode == LINK_MODE_MIN_SPEED_BOOTING);
+	int speed, width;
 
 	if (mc == NULL) {
 		mif_err("Skip pci power on: mc is NULL\n");
@@ -1961,7 +1963,7 @@ int s5100_poweron_pcie(struct modem_ctl *mc, bool boot_on)
 
 	mutex_lock(&mc->pcie_onoff_lock);
 	mutex_lock(&mc->pcie_check_lock);
-	mif_debug("+++\n");
+	mif_debug("+++ mode: %d\n", mode);
 	if (mc->pcie_powered_on &&
 			(s51xx_check_pcie_link_status(mc->pcie_ch_num) != 0)) {
 		mif_info("Skip pci power on: already powered on\n");
@@ -1997,8 +1999,16 @@ int s5100_poweron_pcie(struct modem_ctl *mc, bool boot_on)
 	if (exynos_pcie_rc_get_cpl_timeout_state(mc->pcie_ch_num))
 		exynos_pcie_set_ready_cto_recovery(mc->pcie_ch_num);
 
-	if (exynos_pcie_poweron(mc->pcie_ch_num,
-			(boot_on ? LINK_SPEED_GEN1 : LINK_SPEED_GEN3)) != 0) {
+	/* Set dynamic lane number & speed according the link up mode */
+	if (mode == LINK_MODE_MIN_SPEED_BOOTING) {
+		speed = LINK_SPEED_GEN1;
+		width = 1;
+	} else {
+		speed = exynos_pcie_get_max_link_speed(mc->pcie_ch_num);
+		width = exynos_pcie_get_max_link_width(mc->pcie_ch_num);
+	}
+
+	if (exynos_pcie_poweron(mc->pcie_ch_num, speed, width) != 0) {
 		if (boot_on) {
 			mif_err("PCIe gen1 linkup with CP ROM failed.\n");
 			logbuffer_log(mc->log, "PCIe gen1 linkup with CP ROM failed.");
