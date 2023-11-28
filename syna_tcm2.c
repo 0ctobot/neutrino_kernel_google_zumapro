@@ -1187,6 +1187,36 @@ static void syna_gti_init(struct syna_tcm *tcm)
 
 	syna_dev_restore_feature_setting(tcm, RESP_IN_ATTN);
 }
+
+static void syna_notify_fw_status(struct syna_tcm *tcm, struct custom_fw_status *status)
+{
+	struct gti_fw_status_data gti_status_data = { 0 };
+
+	if (!tcm->gti)
+		return;
+
+	if (status->b0_moisture != tcm->fw_status.b0_moisture) {
+		goog_notify_fw_status_changed(tcm->gti,
+			status->b0_moisture ? GTI_FW_STATUS_WATER_ENTER : GTI_FW_STATUS_WATER_EXIT,
+			&gti_status_data);
+	}
+	if (status->b1_noise_state != tcm->fw_status.b1_noise_state) {
+		gti_status_data.noise_level = status->b1_noise_state;
+		goog_notify_fw_status_changed(tcm->gti,
+			GTI_FW_STATUS_NOISE_MODE, &gti_status_data);
+	}
+	if (status->b3_grip != tcm->fw_status.b3_grip) {
+		goog_notify_fw_status_changed(tcm->gti,
+			status->b3_grip ? GTI_FW_STATUS_GRIP_ENTER : GTI_FW_STATUS_GRIP_EXIT,
+			&gti_status_data);
+	}
+	if (status->b4_palm != tcm->fw_status.b4_palm) {
+		goog_notify_fw_status_changed(tcm->gti,
+			status->b4_palm ? GTI_FW_STATUS_PALM_ENTER : GTI_FW_STATUS_PALM_EXIT,
+			&gti_status_data);
+	}
+	memcpy(&tcm->fw_status, status, sizeof(tcm->fw_status));
+}
 #endif
 
 /*
@@ -1205,10 +1235,16 @@ static void syna_gti_init(struct syna_tcm *tcm)
  */
 static void syna_dev_restore_feature_setting(struct syna_tcm *tcm, unsigned int delay_ms_resp)
 {
+#if IS_ENABLED(CONFIG_GOOG_TOUCH_INTERFACE)
+	struct gti_fw_status_data gti_status_data = { 0 };
+	struct custom_fw_status status = { 0 };
+#endif
+
 	LOGI("Restore touch feature settings.");
 
 #if IS_ENABLED(CONFIG_GOOG_TOUCH_INTERFACE)
-	goog_notify_fw_status_changed(tcm->gti, GTI_FW_STATUS_RESET, NULL);
+	syna_notify_fw_status(tcm, &status);
+	goog_notify_fw_status_changed(tcm->gti, GTI_FW_STATUS_RESET, &gti_status_data);
 #endif
 
 	syna_tcm_set_dynamic_config(tcm->tcm_dev,
@@ -2169,6 +2205,10 @@ static irqreturn_t syna_dev_interrupt_thread(int irq, void *data)
 			status->b0_moisture, status->b1_noise_state,
 			status->b2_freq_hopping, status->b3_grip, status->b4_palm,
 			status->b5_fast_relaxation);
+#if IS_ENABLED(CONFIG_GOOG_TOUCH_INTERFACE)
+		syna_notify_fw_status(tcm, status);
+#endif
+
 		break;
 	default:
 		break;

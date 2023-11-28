@@ -438,6 +438,9 @@ struct syna_tcm {
 				* CLOCK_MONOTONIC */
 
 #if IS_ENABLED(CONFIG_GOOG_TOUCH_INTERFACE)
+	/* Stored the last status data */
+	struct custom_fw_status fw_status;
+
 	unsigned short heatmap_mode;
 	bool set_continuously_report;
 	uint16_t *mutual_data;
