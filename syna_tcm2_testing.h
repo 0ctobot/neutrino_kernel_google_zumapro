@@ -34,7 +34,7 @@
 
 #include "syna_tcm2.h"
 
-/**
+/*
  * syna_testing_create_dir()
  *
  * Create a directory and register it with sysfs.
@@ -49,7 +49,7 @@
  */
 int syna_testing_create_dir(struct syna_tcm *tcm,
 		struct kobject *sysfs_dir);
-/**
+/*
  *syna_testing_remove_dir()
  *
  * Remove the allocate sysfs directory

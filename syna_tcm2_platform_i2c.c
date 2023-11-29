@@ -29,7 +29,7 @@
  * DOLLARS.
  */
 
-/**
+/*
  * @file syna_tcm2_platform_i2c.c
  *
  * This file is the reference code of I2C module used for communicating with
@@ -49,7 +49,7 @@
 static struct platform_device *syna_i2c_device;
 
 
-/**
+/*
  * syna_request_managed_device()
  *
  * Request and return the device pointer for managed
@@ -71,7 +71,7 @@ struct device *syna_request_managed_device(void)
 #endif
 
 
-/**
+/*
  * syna_i2c_request_gpio()
  *
  * Setup the given gpio
@@ -136,7 +136,7 @@ static int syna_i2c_request_gpio(int gpio, bool config, int dir,
 
 	return 0;
 }
-/**
+/*
  * syna_i2c_free_gpios()
  *
  * Release the GPIOs requested previously
@@ -163,7 +163,7 @@ static int syna_i2c_free_gpios(struct syna_hw_interface *hw_if)
 
 	return 0;
 }
-/**
+/*
  * syna_i2c_config_gpios()
  *
  * Initialize the GPIOs defined in device tree
@@ -228,7 +228,7 @@ err_set_gpio_irq:
 	return retval;
 }
 
-/**
+/*
  * syna_i2c_parse_dt()
  *
  * Parse and obtain board specific data from the device tree source file.
@@ -451,7 +451,7 @@ static int syna_i2c_parse_dt(struct syna_hw_interface *hw_if,
 }
 #endif
 
-/**
+/*
  * syna_i2c_read()
  *
  * TouchCom over I2C uses the normal I2C addressing and transaction direction
@@ -514,7 +514,7 @@ exit:
 	return retval;
 }
 
-/**
+/*
  * syna_i2c_write()
  *
  * TouchCom over I2C uses the normal I2C addressing and transaction direction
@@ -577,7 +577,7 @@ exit:
 	return retval;
 }
 
-/**
+/*
  * syna_i2c_hw_reset()
  *
  * Toggle the hardware gpio pin to perform the chip reset
@@ -605,7 +605,7 @@ static void syna_i2c_hw_reset(struct syna_hw_interface *hw_if)
 }
 
 
-/**
+/*
  * syna_i2c_enable_pwr_gpio()
  *
  * Helper to enable power supply through GPIO
@@ -651,7 +651,7 @@ static int syna_i2c_enable_pwr_gpio(struct syna_hw_interface *hw_if,
 	return 0;
 }
 
-/**
+/*
  * syna_i2c_enable_regulator()
  *
  * Enable or disable the regulator
@@ -719,7 +719,7 @@ exit:
 	return retval;
 }
 
-/**
+/*
  * syna_i2c_power_on()
  *
  * Power on touch controller through regulators or gpios for PWM
@@ -758,7 +758,7 @@ static int syna_i2c_power_on(struct syna_hw_interface *hw_if,
 	return 0;
 }
 
-/**
+/*
  * syna_i2c_get_regulator()
  *
  * Acquire or release the regulator
@@ -832,7 +832,7 @@ exit:
 	return retval;
 }
 
-/**
+/*
  * syna_i2c_config_psu()
  *
  * Initialize the power supply unit
@@ -888,7 +888,7 @@ static int syna_i2c_config_psu(struct syna_hw_interface *hw_if)
 	return 0;
 }
 
-/**
+/*
  * syna_i2c_release_psu()
  *
  * Release the power supply unit
@@ -915,7 +915,7 @@ static int syna_i2c_release_psu(struct syna_hw_interface *hw_if)
 	return 0;
 }
 
-/**
+/*
  * syna_i2c_enable_irq()
  *
  * Enable or disable the handling of interrupt
@@ -970,7 +970,7 @@ exit:
 
 	return retval;
 }
-/**
+/*
  * syna_hw_interface
  *
  * Provide the hardware specific settings in defaults.
@@ -1002,7 +1002,7 @@ static struct syna_hw_interface syna_i2c_hw_if = {
 	.ops_enable_irq = syna_i2c_enable_irq,
 };
 
-/**
+/*
  * syna_i2c_probe()
  *
  * Prepare the specific hardware interface and register the platform i2c device
@@ -1069,7 +1069,7 @@ static int syna_i2c_probe(struct i2c_client *i2c,
 	return 0;
 }
 
-/**
+/*
  * syna_i2c_remove()
  *
  * Unregister the platform i2c device
@@ -1102,7 +1102,7 @@ static int syna_i2c_remove(struct i2c_client *i2c)
 	return 0;
 }
 
-/**
+/*
  * Describe an i2c device driver and its related declarations
  */
 static const struct i2c_device_id syna_i2c_id_table[] = {
@@ -1135,7 +1135,7 @@ static struct i2c_driver syna_i2c_driver = {
 };
 
 
-/**
+/*
  * syna_hw_interface_init()
  *
  * Initialize the lower-level hardware interface module.
@@ -1152,7 +1152,7 @@ int syna_hw_interface_init(void)
 	return i2c_add_driver(&syna_i2c_driver);
 }
 
-/**
+/*
  * syna_hw_interface_exit()
  *
  * Delete the lower-level hardware interface module

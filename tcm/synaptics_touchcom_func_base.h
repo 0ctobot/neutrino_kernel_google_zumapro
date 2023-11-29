@@ -29,7 +29,7 @@
  * DOLLARS.
  */
 
-/**
+/*
  * @file synaptics_touchcom_func_base.h
  *
  * This file declares generic and foundational APIs being used to communicate
@@ -41,7 +41,7 @@
 
 #include "synaptics_touchcom_core_dev.h"
 
-/**
+/*
  * syna_tcm_allocate_device()
  *
  * Create the TouchCom core device handle.
@@ -65,7 +65,7 @@
 int syna_tcm_allocate_device(struct tcm_dev **ptcm_dev_ptr,
 		struct syna_hw_interface *hw_if, unsigned int resp_reading);
 
-/**
+/*
  * syna_tcm_remove_device()
  *
  * Remove the TouchCom core device handler.
@@ -79,7 +79,7 @@ int syna_tcm_allocate_device(struct tcm_dev **ptcm_dev_ptr,
  */
 void syna_tcm_remove_device(struct tcm_dev *tcm_dev);
 
-/**
+/*
  * syna_tcm_detect_device()
  *
  * Determine the type of device being connected, and distinguish which
@@ -106,7 +106,7 @@ void syna_tcm_remove_device(struct tcm_dev *tcm_dev);
 int syna_tcm_detect_device(struct tcm_dev *tcm_dev,
 		int protocol, bool startup);
 
-/**
+/*
  * syna_tcm_get_event_data()
  *
  * Helper to read TouchComm messages when ATTN signal is asserted.
@@ -127,7 +127,7 @@ int syna_tcm_get_event_data(struct tcm_dev *tcm_dev,
 		unsigned char *code,
 		struct tcm_buffer *report);
 
-/**
+/*
  * syna_tcm_change_resp_read()
  *
  * Helper to change the default method to read the response packet.
@@ -142,7 +142,7 @@ int syna_tcm_get_event_data(struct tcm_dev *tcm_dev,
  */
 void syna_tcm_change_resp_read(struct tcm_dev *tcm_dev, unsigned int request);
 
-/**
+/*
  * syna_tcm_identify()
  *
  * Implement the standard command code to request an IDENTIFY report.
@@ -157,7 +157,7 @@ void syna_tcm_change_resp_read(struct tcm_dev *tcm_dev, unsigned int request);
 int syna_tcm_identify(struct tcm_dev *tcm_dev,
 		struct tcm_identification_info *id_info);
 
-/**
+/*
  * syna_tcm_reset()
  *
  * Implement the standard command code, which is used to perform a sw reset
@@ -176,7 +176,7 @@ int syna_tcm_identify(struct tcm_dev *tcm_dev,
  */
 int syna_tcm_reset(struct tcm_dev *tcm_dev);
 
-/**
+/*
  * syna_tcm_enable_report()
  *
  * Implement the application fw command code to enable or disable the
@@ -193,7 +193,7 @@ int syna_tcm_reset(struct tcm_dev *tcm_dev);
 int syna_tcm_enable_report(struct tcm_dev *tcm_dev,
 		unsigned char report_code, bool en);
 
-/**
+/*
  * syna_tcm_switch_fw_mode()
  *
  * Request to switch the firmware mode running on.
@@ -210,7 +210,7 @@ int syna_tcm_enable_report(struct tcm_dev *tcm_dev,
 int syna_tcm_switch_fw_mode(struct tcm_dev *tcm_dev,
 		unsigned char mode, unsigned int fw_switch_delay);
 
-/**
+/*
  * syna_tcm_get_boot_info()
  *
  * Implement the bootloader command code to request the bootloader
@@ -226,7 +226,7 @@ int syna_tcm_switch_fw_mode(struct tcm_dev *tcm_dev,
 int syna_tcm_get_boot_info(struct tcm_dev *tcm_dev,
 		struct tcm_boot_info *boot_info);
 
-/**
+/*
  * syna_tcm_get_app_info()
  *
  * Implement the application fw command code to request an application
@@ -242,7 +242,7 @@ int syna_tcm_get_boot_info(struct tcm_dev *tcm_dev,
 int syna_tcm_get_app_info(struct tcm_dev *tcm_dev,
 		struct tcm_application_info *app_info);
 
-/**
+/*
  * syna_tcm_get_static_config()
  *
  * Implement the application fw command code to retrieve the contents of
@@ -261,7 +261,7 @@ int syna_tcm_get_app_info(struct tcm_dev *tcm_dev,
 int syna_tcm_get_static_config(struct tcm_dev *tcm_dev,
 		unsigned char *buf, unsigned int buf_size);
 
-/**
+/*
  * syna_tcm_set_static_config()
  *
  * Implement the application fw command code to set the contents of
@@ -281,7 +281,7 @@ int syna_tcm_get_static_config(struct tcm_dev *tcm_dev,
 int syna_tcm_set_static_config(struct tcm_dev *tcm_dev,
 		unsigned char *config_data, unsigned int config_data_size);
 
-/**
+/*
  * syna_tcm_get_dynamic_config()
  *
  * Implement the application fw command code to get the value from the a single
@@ -301,7 +301,7 @@ int syna_tcm_get_dynamic_config(struct tcm_dev *tcm_dev,
 		unsigned char id, unsigned short *value,
 		unsigned int delay_ms_resp);
 
-/**
+/*
  * syna_tcm_set_dynamic_config()
  *
  * Implement the application fw command code to set the specified value to
@@ -321,7 +321,7 @@ int syna_tcm_set_dynamic_config(struct tcm_dev *tcm_dev,
 		unsigned char id, unsigned short value,
 		unsigned int delay_ms_resp);
 
-/**
+/*
  * syna_tcm_rezero()
  *
  * Implement the application fw command code to force the device to rezero its
@@ -335,7 +335,7 @@ int syna_tcm_set_dynamic_config(struct tcm_dev *tcm_dev,
  */
 int syna_tcm_rezero(struct tcm_dev *tcm_dev);
 
-/**
+/*
  * syna_tcm_set_config_id()
  *
  * Implement the application fw command code to set the 16-byte config id
@@ -352,7 +352,7 @@ int syna_tcm_rezero(struct tcm_dev *tcm_dev);
 int syna_tcm_set_config_id(struct tcm_dev *tcm_dev,
 		unsigned char *config_id, unsigned int size);
 
-/**
+/*
  * syna_tcm_sleep()
  *
  * Implement the application fw command code to put the device into low power
@@ -367,7 +367,7 @@ int syna_tcm_set_config_id(struct tcm_dev *tcm_dev,
  */
 int syna_tcm_sleep(struct tcm_dev *tcm_dev, bool en);
 
-/**
+/*
  * syna_tcm_get_features()
  *
  * Implement the application fw command code to query the supported features.
@@ -382,7 +382,7 @@ int syna_tcm_sleep(struct tcm_dev *tcm_dev, bool en);
 int syna_tcm_get_features(struct tcm_dev *tcm_dev,
 		struct tcm_features_info *info);
 
-/**
+/*
  * syna_tcm_run_production_test()
  *
  * Implement the application fw command code to request the device to run
@@ -401,7 +401,7 @@ int syna_tcm_get_features(struct tcm_dev *tcm_dev,
 int syna_tcm_run_production_test(struct tcm_dev *tcm_dev,
 		unsigned char test_item, struct tcm_buffer *tdata);
 
-/**
+/*
  * syna_tcm_send_command()
  *
  * Helper to execute the custom command.
@@ -424,7 +424,7 @@ int syna_tcm_send_command(struct tcm_dev *tcm_dev, unsigned char command,
 		unsigned int total_length, unsigned char *code,
 		struct tcm_buffer *resp, unsigned int delay_ms_resp);
 
-/**
+/*
  * syna_tcm_enable_predict_reading()
  *
  * Helper to enable the feature of predict reading.
@@ -441,7 +441,7 @@ int syna_tcm_send_command(struct tcm_dev *tcm_dev, unsigned char command,
  *    on success, 0 or positive value; otherwise, negative value on error.
  */
 int syna_tcm_enable_predict_reading(struct tcm_dev *tcm_dev, bool en);
-/**
+/*
  * syna_tcm_set_reset_occurrence_callback()
  *
  * Set up callback function once an unexpected identify report is received.
@@ -458,7 +458,7 @@ int syna_tcm_enable_predict_reading(struct tcm_dev *tcm_dev, bool en);
  */
 int syna_tcm_set_reset_occurrence_callback(struct tcm_dev *tcm_dev,
 		tcm_reset_occurrence_callback_t p_cb, void *p_cbdata);
-/**
+/*
  * syna_tcm_smart_bridge_reset()
  *
  * Implement the specific command code to reset the smart bride entirely.

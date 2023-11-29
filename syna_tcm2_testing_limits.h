@@ -42,14 +42,14 @@ static const unsigned char config_id_limit[16] = {
 	0x44, 0x65, 0x66, 0x61, 0x75, 0x6c, 0x74, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00
 };
 
-/**
+/*
  * @section test limit for PT01 testing
  */
 static const unsigned char pt01_limits[16] = {
 	0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00
 };
 
-/**
+/*
  * @section test limit for the PT05 testing
  */
 static short pt05_hi_limits[LIMIT_BOUNDARY * LIMIT_BOUNDARY] = {
@@ -140,7 +140,7 @@ static short pt05_lo_limits[LIMIT_BOUNDARY * LIMIT_BOUNDARY] = {
 /* 39 */	 300,  300,  300,  300,  300,  300,  300,  300,  300,  300,  300,  300,  300,  300,  300,  300,  300,  300,  300,  300,  300,  300,  300,  300,  300,  300,  300,  300,  300,  300,  300,  300,  300,  300,  300,  300,  300,  300,  300,  300,
 };
 
-/**
+/*
  * @section test limit for the PT0A testing
  */
 static short pt0a_hi_limits[LIMIT_BOUNDARY * LIMIT_BOUNDARY] = {
@@ -231,7 +231,7 @@ static short pt0a_lo_limits[LIMIT_BOUNDARY * LIMIT_BOUNDARY] = {
 /* 39 */	 -80,  -80,  -80,  -80,  -80,  -80,  -80,  -80,  -80,  -80,  -80,  -80,  -80,  -80,  -80,  -80,  -80,  -80,  -80,  -80,  -80,  -80,  -80,  -80,  -80,  -80,  -80,  -80,  -80,  -80,  -80,  -80,  -80,  -80,  -80,  -80,  -80,  -80,  -80,  -80,
 };
 
-/**
+/*
  * @section test limit for the PT10 testing
  */
 static short pt10_hi_limits[LIMIT_BOUNDARY * LIMIT_BOUNDARY] = {
@@ -322,7 +322,7 @@ static short pt10_lo_limits[LIMIT_BOUNDARY * LIMIT_BOUNDARY] = {
 /* 39 */	 -20,  -20,  -20,  -20,  -20,  -20,  -20,  -20,  -20,  -20,  -20,  -20,  -20,  -20,  -20,  -20,  -20,  -20,  -20,  -20,  -20,  -20,  -20,  -20,  -20,  -20,  -20,  -20,  -20,  -20,  -20,  -20,  -20,  -20,  -20,  -20,  -20,  -20,  -20,  -20,
 };
 
-/**
+/*
  * @section test limit for the PT11 testing
  */
 static short pt11_hi_limits[LIMIT_BOUNDARY * LIMIT_BOUNDARY] = {
@@ -413,7 +413,7 @@ static short pt11_lo_limits[LIMIT_BOUNDARY * LIMIT_BOUNDARY] = {
 /* 39 */	  90,   90,   90,   90,   90,   90,   90,   90,   90,   90,   90,   90,   90,   90,   90,   90,   90,   90,   90,   90,   90,   90,   90,   90,   90,   90,   90,   90,   90,   90,   90,   90,   90,   90,   90,   90,   90,   90,   90,   90,
 };
 
-/**
+/*
  * @section test limit for PT12 testing
  */
 static int pt12_hi_limits[LIMIT_BOUNDARY + LIMIT_BOUNDARY] = {
@@ -422,7 +422,7 @@ static int pt12_hi_limits[LIMIT_BOUNDARY + LIMIT_BOUNDARY] = {
 /* 01 */	  50,   50,   50,   50,   50,   50,   50,   50,   50,   50,   50,   50,   50,   50,   50,   50,   50,   50,   50,   50,   50,   50,   50,   50,   50,   50,   50,   50,   50,   50,   50,   50,   50,   50,   50,   50,   50,   50,   50,   50,
 };
 
-/**
+/*
  * @section test limit for PT12 testing
  */
 static int pt12_lo_limits[LIMIT_BOUNDARY + LIMIT_BOUNDARY] = {
@@ -431,7 +431,7 @@ static int pt12_lo_limits[LIMIT_BOUNDARY + LIMIT_BOUNDARY] = {
 /* 01 */	  0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,
 };
 
-/**
+/*
  * @section test limit for PT16 testing
  */
 static short pt16_hi_limits[LIMIT_BOUNDARY * LIMIT_BOUNDARY] = {
@@ -566,7 +566,7 @@ static short pt_moisture_limits[LIMIT_BOUNDARY * LIMIT_BOUNDARY] = {
 /* 39 */	 100,  100,  100,  100,  100,  100,  100,  100,  100,  100,  100,  100,  100,  100,  100,  100,  100,  100,  100,  100,  100,  100,  100,  100,  100,  100,  100,  100,  100,  100,  100,  100,  100,  100,  100,  100,  100,  100,  100,  100,
 };
 
-/**
+/*
  * @section test limit for the PT05 GAP testing
  */
 static short pt05_gap_x_limits[LIMIT_BOUNDARY * LIMIT_BOUNDARY] = {
@@ -656,7 +656,7 @@ static short pt05_gap_y_limits[LIMIT_BOUNDARY * LIMIT_BOUNDARY] = {
 /* 39 */	  70,   70,   70,   70,   70,   70,   70,   70,   70,   70,   70,   70,   70,   70,   70,   70,   70,   70,   70,   70,   70,   70,   70,   70,   70,   70,   70,   70,   70,   70,   70,   70,   70,   70,   70,   70,   70,   70,   70,   70,
 };
 
-/**
+/*
  * @section test limit for the PT10 GAP testing
  */
 static short pt10_gap_x_limits[LIMIT_BOUNDARY * LIMIT_BOUNDARY] = {

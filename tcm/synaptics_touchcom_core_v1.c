@@ -29,7 +29,7 @@
  * DOLLARS.
  */
 
-/**
+/*
  * @file synaptics_touchcom_core_v1.c
  *
  * This file implements the TouchComm version 1 command-response protocol.
@@ -40,7 +40,7 @@
 #define TCM_V1_MESSAGE_MARKER 0xa5
 #define TCM_V1_MESSAGE_PADDING 0x5a
 
-/**
+/*
  * @section: Header of TouchComm v1 Message Packet
  *
  * The 4-byte header in the TouchComm v1 packet
@@ -56,7 +56,7 @@ struct tcm_v1_message_header {
 	};
 };
 
-/**
+/*
  * syna_tcm_v1_update_crc()
  *
  * Helper to update the CRC bytes from the internal in_buf
@@ -113,7 +113,7 @@ static void syna_tcm_v1_update_crc(struct tcm_dev *tcm_dev)
 	syna_tcm_buf_unlock(&tcm_msg->in);
 }
 
-/**
+/*
  * syna_tcm_v1_set_max_rw_size()
  *
  * Configure the max length for message reading and writing.
@@ -169,7 +169,7 @@ static int syna_tcm_v1_set_max_rw_size(struct tcm_dev *tcm_dev)
 	return 0;
 }
 
-/**
+/*
  * syna_tcm_v1_parse_idinfo()
  *
  * Copy the given data to the identification info structure
@@ -225,7 +225,7 @@ static int syna_tcm_v1_parse_idinfo(struct tcm_dev *tcm_dev,
 	return 0;
 }
 
-/**
+/*
  * syna_tcm_v1_dispatch_report()
  *
  * Handle the TouchCom report packet being received.
@@ -353,7 +353,7 @@ exit:
 	return;
 }
 
-/**
+/*
  * syna_tcm_v1_dispatch_response()
  *
  * Handle the response packet.
@@ -429,7 +429,7 @@ exit:
 }
 
 
-/**
+/*
  * syna_tcm_v1_read()
  *
  * Read in a TouchCom packet from device.
@@ -502,7 +502,7 @@ exit:
 	return retval;
 }
 
-/**
+/*
  * syna_tcm_v1_write()
  *
  * Construct the TouchCom v1 packet and send it to device.
@@ -625,7 +625,7 @@ exit:
 	return retval;
 }
 
-/**
+/*
  * syna_tcm_v1_continued_read()
  *
  * The remaining data payload is read in continuously until the end of data.
@@ -787,7 +787,7 @@ exit:
 	return retval;
 }
 
-/**
+/*
  * syna_tcm_v1_read_message()
  *
  * Read in a TouchCom packet from device.
@@ -1016,7 +1016,7 @@ exit:
 	return retval;
 }
 
-/**
+/*
  * syna_tcm_v1_write_message()
  *
  * Write message including command and its payload to TouchCom device.
@@ -1253,7 +1253,7 @@ exit:
 
 	return retval;
 }
-/**
+/*
  * syna_tcm_v1_set_ops()
  *
  * Assign read / write operations
@@ -1279,7 +1279,7 @@ void syna_tcm_v1_set_ops(struct tcm_dev *tcm_dev)
 	tcm_dev->msg_data.predict_length = 0;
 	tcm_dev->protocol = TOUCHCOMM_V1;
 }
-/**
+/*
  * syna_tcm_v1_detect()
  *
  * Function to process the startup packet of TouchComm V1 firmware

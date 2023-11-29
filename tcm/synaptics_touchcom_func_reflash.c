@@ -29,7 +29,7 @@
  * DOLLARS.
  */
 
-/**
+/*
  * @file synaptics_touchcom_func_reflash.c
  *
  * This file implements the fw reflash related functions of TouchBoot.
@@ -39,7 +39,7 @@
 #include "synaptics_touchcom_func_base.h"
 #include "synaptics_touchcom_func_reflash.h"
 
-/**
+/*
  * @section: Reflash relevant definitions
  *
  */
@@ -53,7 +53,7 @@
 #define DO_NONE (0)
 #define DO_UPDATE (1)
 
-/**
+/*
  * syna_tcm_set_up_flash_access()
  *
  * Enter the bootloader fw if not in the mode.
@@ -163,7 +163,7 @@ static int syna_tcm_set_up_flash_access(struct tcm_dev *tcm_dev,
 	return 0;
 }
 
-/**
+/*
  * syna_tcm_compare_image_id_info()
  *
  * Compare the ID information between device and the image file,
@@ -254,7 +254,7 @@ exit:
 	return (int)result;
 }
 
-/**
+/*
  * syna_tcm_check_flash_boot_config()
  *
  * Check whether the same flash address of boot config in between the device
@@ -305,7 +305,7 @@ static int syna_tcm_check_flash_boot_config(struct block_data *boot_config,
 	return DO_NONE;
 }
 
-/**
+/*
  * syna_tcm_check_flash_app_config()
  *
  * Check whether the same flash address of app config in between the
@@ -372,7 +372,7 @@ static int syna_tcm_check_flash_app_config(struct block_data *app_config,
 	return DO_UPDATE;
 }
 
-/**
+/*
  * syna_tcm_check_flash_disp_config()
  *
  * Check whether the same flash address of display config in between the
@@ -439,7 +439,7 @@ static int syna_tcm_check_flash_disp_config(struct block_data *disp_config,
 	return DO_UPDATE;
 }
 
-/**
+/*
  * syna_tcm_check_flash_app_code()
  *
  * Check whether the valid size of app firmware in the image file
@@ -467,7 +467,7 @@ static int syna_tcm_check_flash_app_code(struct block_data *app_code)
 	return DO_UPDATE;
 }
 
-/**
+/*
  * syna_tcm_check_flash_openshort()
  *
  * Check whether the valid size of openshort area in the image file
@@ -496,7 +496,7 @@ static int syna_tcm_check_flash_openshort(struct block_data *open_short)
 	return DO_UPDATE;
 }
 
-/**
+/*
  * syna_tcm_check_flash_app_prod_test()
  *
  * Check whether the valid size of app prod_test area in the image file
@@ -525,7 +525,7 @@ static int syna_tcm_check_flash_app_prod_test(struct block_data *prod_test)
 	return DO_UPDATE;
 }
 
-/**
+/*
  * syna_tcm_check_flash_ppdt()
  *
  * Check whether the valid size of ppdt area in the image file
@@ -554,7 +554,7 @@ static int syna_tcm_check_flash_ppdt(struct block_data *ppdt)
 	return DO_UPDATE;
 }
 
-/**
+/*
  * syna_tcm_check_flash_block()
  *
  * Dispatch to the proper helper to ensure the data of associated block area
@@ -629,7 +629,7 @@ static int syna_tcm_check_flash_block(struct tcm_dev *tcm_dev,
 	return retval;
 }
 
-/**
+/*
  * syna_tcm_get_flash_data_location()
  *
  * Return the address and length of the specified data area
@@ -706,7 +706,7 @@ exit:
 	return retval;
 }
 
-/**
+/*
  * syna_tcm_reflash_send_command()
  *
  * Helper to wrap up the write_message() function.
@@ -754,7 +754,7 @@ exit:
 	return retval;
 }
 
-/**
+/*
  * syna_tcm_read_flash()
  *
  * Implement the bootloader command to read specified data from flash memory.
@@ -858,7 +858,7 @@ exit:
 	return retval;
 }
 
-/**
+/*
  * syna_tcm_read_flash_boot_config()
  *
  * Read the data of boot config area in the flash memory.
@@ -937,7 +937,7 @@ exit:
 	return retval;
 }
 
-/**
+/*
  * syna_tcm_read_flash_app_config()
  *
  * Read the data of app config area in the flash memory.
@@ -1016,7 +1016,7 @@ exit:
 	return retval;
 }
 
-/**
+/*
  * syna_tcm_read_flash_disp_config()
  *
  * Read the data of display config area in the flash memory.
@@ -1096,7 +1096,7 @@ exit:
 	return retval;
 }
 
-/**
+/*
  * syna_tcm_read_flash_custom_otp()
  *
  * Read the data of custom OTP area in the flash memory.
@@ -1176,7 +1176,7 @@ exit:
 	return retval;
 }
 
-/**
+/*
  * syna_tcm_read_flash_custom_data()
  *
  * Read the data of custom data in the flash memory.
@@ -1252,7 +1252,7 @@ static int syna_tcm_read_flash_custom_data(struct tcm_dev *tcm_dev,
 exit:
 	return retval;
 }
-/**
+/*
  * syna_tcm_read_flash_area()
  *
  * Entry function to read in the data of specific area in the flash memory.
@@ -1377,7 +1377,7 @@ exit:
 	return retval;
 }
 
-/**
+/*
  * syna_tcm_write_flash()
  *
  * Implement the bootloader command to write specified data to flash memory.
@@ -1495,7 +1495,7 @@ static int syna_tcm_write_flash(struct tcm_dev *tcm_dev,
 	return 0;
 }
 
-/**
+/*
  * syna_tcm_write_flash_block()
  *
  * Write data to the target block data area in the flash memory.
@@ -1562,7 +1562,7 @@ exit:
 	return 0;
 }
 
-/**
+/*
  * syna_tcm_erase_flash()
  *
  * Implement the bootloader command, which is used to erase the specified
@@ -1628,7 +1628,7 @@ static int syna_tcm_erase_flash(struct tcm_dev *tcm_dev,
 	return 0;
 }
 
-/**
+/*
  * syna_tcm_erase_flash_block()
  *
  * Mass erase the target block data area in the flash memory.
@@ -1696,7 +1696,7 @@ exit:
 	return 0;
 }
 
-/**
+/*
  * syna_tcm_update_flash_block()
  *
  * Perform the reflash sequence to the target area
@@ -1773,7 +1773,7 @@ static int syna_tcm_update_flash_block(struct tcm_dev *tcm_dev,
 	return 0;
 }
 
-/**
+/*
  * syna_tcm_do_reflash_tddi()
  *
  * Implement the sequence specific for MODE_TDDI_BOOTLOADER.
@@ -1879,7 +1879,7 @@ exit:
 	return retval;
 }
 
-/**
+/*
  * syna_tcm_do_reflash_generic()
  *
  * Implement the generic sequence of fw update in MODE_BOOTLOADER.
@@ -1955,7 +1955,7 @@ exit:
 	return retval;
 }
 
-/**
+/*
  * syna_tcm_do_fw_update()
  *
  * The entry function to perform fw update upon TouchBoot.

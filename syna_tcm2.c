@@ -29,7 +29,7 @@
  * DOLLARS.
  */
 
-/**
+/*
  * @file syna_tcm2.c
  *
  * This file implements the Synaptics device driver running under Linux kernel
@@ -56,7 +56,7 @@ static irqreturn_t syna_dev_isr(int irq, void *handle);
 static void syna_dev_release_irq(struct syna_tcm *tcm);
 static void syna_dev_restore_feature_setting(struct syna_tcm *tcm, unsigned int delay_ms_resp);
 
-/**
+/*
  * @section: USE_CUSTOM_TOUCH_REPORT_CONFIG
  *           Open if willing to set up the format of touch report.
  *           The custom_touch_format[] array can be used to describe the
@@ -79,7 +79,7 @@ static unsigned char custom_touch_format[] = {
 };
 #endif
 
-/**
+/*
  * @section: RESET_ON_RESUME_DELAY_MS
  *           The delayed time to issue a reset on resume state.
  *           This configuration depends on RESET_ON_RESUME.
@@ -89,7 +89,7 @@ static unsigned char custom_touch_format[] = {
 #endif
 
 
-/**
+/*
  * @section: POWER_ALIVE_AT_SUSPEND
  *           indicate that the power is still alive even at
  *           system suspend.
@@ -98,7 +98,7 @@ static unsigned char custom_touch_format[] = {
  */
 #define POWER_ALIVE_AT_SUSPEND
 
-/**
+/*
  * @section: global variables for an active drm panel
  *           in order to register display notifier
  */
@@ -110,7 +110,7 @@ static unsigned char custom_touch_format[] = {
 static const struct dev_pm_ops syna_dev_pm_ops;
 #endif
 
-/**
+/*
  * syna_dev_enable_lowpwr_gesture()
  *
  * Enable or disable the low power gesture mode.
@@ -1189,7 +1189,7 @@ static void syna_gti_init(struct syna_tcm *tcm)
 }
 #endif
 
-/**
+/*
  * syna_dev_restore_feature_setting()
  *
  * Restore the feature settings after the device resume.
@@ -1262,7 +1262,7 @@ static void syna_set_report_rate_work(struct work_struct *work)
 }
 
 #if defined(ENABLE_HELPER)
-/**
+/*
  * syna_dev_reset_detected_cb()
  *
  * Callback to assign a task to event workqueue.
@@ -1291,7 +1291,7 @@ static void syna_dev_reset_detected_cb(void *callback_data)
 		queue_work(tcm->event_wq, &tcm->helper.work);
 	}
 }
-/**
+/*
  * syna_dev_helper_work()
  *
  * According to the given task, perform the delayed work
@@ -1336,7 +1336,7 @@ exit:
 #endif
 
 #ifdef ENABLE_CUSTOM_TOUCH_ENTITY
-/**
+/*
  * syna_dev_parse_custom_touch_data_cb()
  *
  * Callback to parse the custom or non-standard touch entity from the
@@ -1412,7 +1412,7 @@ static int syna_dev_parse_custom_touch_data_cb(const unsigned char code,
 #endif
 
 #if defined(ENABLE_WAKEUP_GESTURE)
-/**
+/*
  * syna_dev_parse_custom_gesture_cb()
  *
  * Callback to parse the custom or non-standard gesture data from the
@@ -1539,7 +1539,7 @@ static int syna_dev_parse_custom_gesture_cb(const unsigned char code,
 }
 #endif
 
-/**
+/*
  * syna_tcm_free_input_events()
  *
  * Clear all relevant touched events.
@@ -1581,7 +1581,7 @@ static void syna_dev_free_input_events(struct syna_tcm *tcm)
 }
 #endif
 
-/**
+/*
  * syna_dev_report_input_events()
  *
  * Report touched events to the input subsystem.
@@ -1810,7 +1810,7 @@ exit:
 #endif
 }
 
-/**
+/*
  * syna_dev_create_input_device()
  *
  * Allocate an input device and set up relevant parameters to the
@@ -1905,7 +1905,7 @@ static int syna_dev_create_input_device(struct syna_tcm *tcm)
 	return 0;
 }
 
-/**
+/*
  * syna_dev_release_input_device()
  *
  * Release an input device allocated previously.
@@ -1926,7 +1926,7 @@ static void syna_dev_release_input_device(struct syna_tcm *tcm)
 	tcm->input_dev = NULL;
 }
 
-/**
+/*
  * syna_dev_check_input_params()
  *
  * Check if any of the input parameters registered to the input subsystem
@@ -1965,7 +1965,7 @@ static int syna_dev_check_input_params(struct syna_tcm *tcm)
 	return 0;
 }
 
-/**
+/*
  * syna_dev_set_up_input_device()
  *
  * Set up input device to the input subsystem by confirming the supported
@@ -2029,7 +2029,7 @@ static irqreturn_t syna_dev_isr(int irq, void *handle)
 	return IRQ_WAKE_THREAD;
 }
 
-/**
+/*
  * syna_dev_interrupt_thread()
  *
  * This is the function to be called when the interrupt is asserted.
@@ -2178,7 +2178,7 @@ exit:
 	return IRQ_HANDLED;
 }
 
-/**
+/*
  * syna_dev_request_irq()
  *
  * Allocate an interrupt line and register the ISR handler
@@ -2240,7 +2240,7 @@ exit:
 	return retval;
 }
 
-/**
+/*
  * syna_dev_release_irq()
  *
  * Release an interrupt line allocated previously
@@ -2294,7 +2294,7 @@ static void syna_dev_release_irq(struct syna_tcm *tcm)
 	LOGI("Interrupt handler released\n");
 }
 
-/**
+/*
  * syna_dev_set_up_app_fw()
  *
  * Implement the essential steps for the initialization including the
@@ -2368,7 +2368,7 @@ static int syna_dev_set_up_app_fw(struct syna_tcm *tcm)
 }
 
 #ifdef STARTUP_REFLASH
-/**
+/*
  * syna_dev_reflash_startup_work()
  *
  * Perform firmware update during system startup.
@@ -2486,7 +2486,7 @@ exit:
 }
 #endif
 #if defined(POWER_ALIVE_AT_SUSPEND) && !defined(RESET_ON_RESUME)
-/**
+/*
  * syna_dev_enter_normal_sensing()
  *
  * Helper to enter normal sensing mode
@@ -2550,7 +2550,7 @@ static int syna_dev_enter_normal_sensing(struct syna_tcm *tcm)
 }
 #endif
 #ifdef POWER_ALIVE_AT_SUSPEND
-/**
+/*
  * syna_dev_enter_lowpwr_sensing()
  *
  * Helper to enter power-saved sensing mode, that
@@ -2619,7 +2619,7 @@ static int syna_pinctrl_configure(struct syna_tcm *tcm, bool enable)
 }
 
 #if IS_ENABLED(CONFIG_GOOG_TOUCH_INTERFACE)
-/**
+/*
  * Report a finger down event on the long press gesture area then immediately
  * report a cancel event(MT_TOOL_PALM).
  */
@@ -2711,7 +2711,7 @@ static void syna_check_finger_status(struct syna_tcm *tcm)
 }
 #endif
 
-/**
+/*
  * syna_dev_resume()
  *
  * Resume from the suspend state.
@@ -2824,7 +2824,7 @@ exit:
 	return retval;
 }
 
-/**
+/*
  * syna_dev_suspend()
  *
  * Put device into suspend state.
@@ -2924,7 +2924,7 @@ static int syna_dev_suspend(struct device *dev)
 }
 
 #if defined(ENABLE_DISP_NOTIFIER)
-/**
+/*
  * syna_dev_early_suspend()
  *
  * If having early suspend support, enter the sleep mode for
@@ -2957,7 +2957,7 @@ static int syna_dev_early_suspend(struct device *dev)
 
 	return 0;
 }
-/**
+/*
  * syna_dev_fb_notifier_cb()
  *
  * Listen the display screen on/off event and perform the corresponding
@@ -3046,7 +3046,7 @@ static int syna_dev_fb_notifier_cb(struct notifier_block *nb,
 }
 #endif
 
-/**
+/*
  * syna_dev_disconnect()
  *
  * This function will power off the connected device.
@@ -3103,7 +3103,7 @@ exit:
 	return 0;
 }
 
-/**
+/*
  * syna_dev_connect()
  *
  * This function will power on and identify the connected device.
@@ -3252,7 +3252,7 @@ static struct drm_panel *syna_dev_get_panel(struct device_node *np)
 }
 #endif
 
-/**
+/*
  * syna_dev_probe()
  *
  * Install the TouchComm device driver
@@ -3488,7 +3488,7 @@ err_allocate_cdev:
 	return retval;
 }
 
-/**
+/*
  * syna_dev_remove()
  *
  * Release all allocated resources and remove the TouchCom device handle
@@ -3562,7 +3562,7 @@ static int syna_dev_remove(struct platform_device *pdev)
 	return 0;
 }
 
-/**
+/*
  * syna_dev_shutdown()
  *
  * Call syna_dev_remove() to release all resources
@@ -3578,7 +3578,7 @@ static void syna_dev_shutdown(struct platform_device *pdev)
 	syna_dev_remove(pdev);
 }
 
-/**
+/*
  * Declare a TouchComm platform device
  */
 #if IS_ENABLED(CONFIG_PM) || IS_ENABLED(CONFIG_GOOG_TOUCH_INTERFACE)
@@ -3604,7 +3604,7 @@ static struct platform_driver syna_dev_driver = {
 };
 
 
-/**
+/*
  * syna_dev_module_init()
  *
  * The entry function of the reference driver, which initialize the
@@ -3628,7 +3628,7 @@ static int __init syna_dev_module_init(void)
 	return platform_driver_register(&syna_dev_driver);
 }
 
-/**
+/*
  * syna_dev_module_exit()
  *
  * Function is called when un-installing the driver.

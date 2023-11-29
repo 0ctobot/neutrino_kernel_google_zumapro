@@ -29,7 +29,7 @@
  * DOLLARS.
  */
 
-/**
+/*
  * @file syna_tcm2_cdev.h
  *
  * The header file defines the structure being used in the.ioctl interface
@@ -239,7 +239,7 @@ struct drv_param {
 
 
 
-/**
+/*
  * syna_cdev_ioctl_get_name()
  *
  * Return the string of IOCTL

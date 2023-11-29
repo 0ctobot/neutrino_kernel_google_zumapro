@@ -29,7 +29,7 @@
  * DOLLARS.
  */
 
-/**
+/*
  * @file synaptics_touchcom_func_romboot.h
  *
  * This file declares relevant functions and structures for ROM boot-loader.
@@ -44,7 +44,7 @@
 
 #define ROMBOOT_DELAY_MS (20)
 
-/**
+/*
  * @section: Structure to assemble flash command
  */
 struct flash_param {
@@ -64,7 +64,7 @@ struct flash_param {
 	unsigned char command;
 };
 
-/**
+/*
  * @section: Specific data blob for romboot
  *
  * The structure contains various parameters being used in
@@ -86,7 +86,7 @@ struct tcm_romboot_data_blob {
 };
 
 
-/**
+/*
  * syna_tcm_romboot_do_ihex_update()
  *
  * The entry function to perform ihex update upon ROM Boot.
@@ -111,7 +111,7 @@ int syna_tcm_romboot_do_ihex_update(struct tcm_dev *tcm_dev,
 	unsigned int flash_size, unsigned int len_per_line,
 	unsigned int delay_ms, bool is_multichip);
 
-/**
+/*
  * syna_tcm_romboot_do_multichip_reflash()
  *
  * The entry function to perform fw update with multi-chip product.
@@ -135,7 +135,7 @@ int syna_tcm_romboot_do_multichip_reflash(struct tcm_dev *tcm_dev,
 	const unsigned char *image, unsigned int image_size,
 	unsigned int wait_delay_ms, bool force_reflash);
 
-/**
+/*
  * syna_tcm_get_romboot_info()
  *
  * Implement the bootloader command code, which is used to request a

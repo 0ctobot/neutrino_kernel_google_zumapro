@@ -29,7 +29,7 @@
  * DOLLARS.
  */
 
-/**
+/*
  * @file syna_tcm2.h
  *
  * The header file is used for the Synaptics TouchComm reference driver.
@@ -60,14 +60,14 @@
 #define SYNAPTICS_TCM_DRIVER_VERSION 1
 #define SYNAPTICS_TCM_DRIVER_SUBVER "5.6"
 
-/**
+/*
  * @section: Driver Configurations
  *
  * The macros in the driver files below are used for doing compile time
  * configuration of the driver.
  */
 
-/**
+/*
  * @brief: HAS_SYSFS_INTERFACE
  *         Open to enable the sysfs interface
  *
@@ -93,13 +93,13 @@
 #define HAS_TESTING_FEATURE
 #endif
 
-/**
+/*
  * @brief: TYPE_B_PROTOCOL
  *         Open to enable the multi-touch (MT) protocol
  */
 #define TYPE_B_PROTOCOL
 
-/**
+/*
  * @brief: POWER_SEQUENCE_ON_CONNECT
  *         Open if willing to issue the power sequence when connecting to the
  *         touch controller.
@@ -107,7 +107,7 @@
  */
 #define POWER_SEQUENCE_ON_CONNECT
 
-/**
+/*
  * @brief: RESET_ON_CONNECT
  *         Open if willing to issue a reset when connecting to the
  *         touch controller.
@@ -115,7 +115,7 @@
  */
 #define RESET_ON_CONNECT
 
-/**
+/*
  * @brief: RESET_ON_RESUME
  *         Open if willing to issue a reset to the touch controller
  *         from suspend.
@@ -123,7 +123,7 @@
  */
 /* #define RESET_ON_RESUME */
 
-/**
+/*
  * @brief: GOOG_INT2_FEATURE
  *         Open if willing to issue a reset to the touch controller
  *         from suspend.
@@ -131,13 +131,13 @@
  */
 #define GOOG_INT2_FEATURE
 
-/**
+/*
  * @brief ENABLE_WAKEUP_GESTURE
  *        Open if having wake-up gesture support.
  */
 #define ENABLE_WAKEUP_GESTURE
 
-/**
+/*
  * @brief REPORT_SWAP_XY
  *        Open if trying to swap x and y position coordinate reported.
  * @brief REPORT_FLIP_X
@@ -149,13 +149,13 @@
 /* #define REPORT_FLIP_X */
 /* #define REPORT_FLIP_Y */
 
-/**
+/*
  * @brief REPORT_TOUCH_WIDTH
  *        Open if willing to add the width data to the input event.
  */
 #define REPORT_TOUCH_WIDTH
 
-/**
+/*
  * @brief USE_CUSTOM_TOUCH_REPORT_CONFIG
  *        Open if willing to set up the format of touch report.
  *        The custom_touch_format[] array in syna_tcm2.c can be used
@@ -163,7 +163,7 @@
  */
 /* #define USE_CUSTOM_TOUCH_REPORT_CONFIG */
 
-/**
+/*
  * @brief STARTUP_REFLASH
  *        Open if willing to do fw checking and update at startup.
  *        The firmware image will be obtained by request_firmware() API,
@@ -175,7 +175,7 @@
 #if defined(HAS_REFLASH_FEATURE) || defined(HAS_ROMBOOT_REFLASH_FEATURE)
 #define STARTUP_REFLASH
 #endif
-/**
+/*
  * @brief  MULTICHIP_DUT_REFLASH
  *         Open if willing to do fw update and the DUT belongs to multi-chip
  *         product. This property dependent on STARTUP_REFLASH property.
@@ -186,7 +186,7 @@
 /* #define MULTICHIP_DUT_REFLASH */
 #endif
 
-/**
+/*
  * @section: STARTUP_REFLASH_DELAY_TIME_MS
  *           The delayed time to start fw update during the startup time.
  *           This configuration depends on STARTUP_REFLASH.
@@ -197,7 +197,7 @@
 #define FW_IMAGE_NAME "synaptics.img"
 #endif
 
-/**
+/*
  * @brief  ENABLE_DISP_NOTIFIER
  *         Open if having display notification event and willing to listen
  *         the event from display driver.
@@ -207,7 +207,7 @@
 #if defined(CONFIG_FB) || defined(CONFIG_DRM_PANEL)
 /* #define ENABLE_DISP_NOTIFIER */
 #endif
-/**
+/*
  * @brief RESUME_EARLY_UNBLANK
  *        Open if willing to resume in early un-blanking state.
  *
@@ -217,7 +217,7 @@
 #ifdef ENABLE_DISP_NOTIFIER
 /* #define RESUME_EARLY_UNBLANK */
 #endif
-/**
+/*
  * @brief  USE_DRM_PANEL_NOTIFIER
  *         Open if willing to listen the notification event from
  *         DRM_PANEL. Please be noted that 'struct drm_panel_notifier'
@@ -232,7 +232,7 @@
 #define USE_DRM_PANEL_NOTIFIER
 #endif
 
-/**
+/*
  * @brief ENABLE_EXTERNAL_FRAME_PROCESS
  *        Open if having external frame process to the userspace application.
  *
@@ -257,7 +257,7 @@
 #define EFP_DISABLE (0)
 /* #define REPORT_CONCURRENTLY */
 
-/**
+/*
  * @brief TCM_CONNECT_IN_PROBE
  *        Open if willing to detect and connect to TouchComm device at
  *        probe function; otherwise, please invoke connect() manually.
@@ -266,7 +266,7 @@
  */
 #define TCM_CONNECT_IN_PROBE
 
-/**
+/*
  * @brief FORCE_CONNECTION
  *        Open if still connect to TouchComm device even error occurs.
  *
@@ -274,7 +274,7 @@
  */
 /* #define FORCE_CONNECTION */
 
-/**
+/*
  * @brief ENABLE_CUSTOM_TOUCH_ENTITY
  *        Open if having custom requirements to parse the custom code
  *        entity in the touch report.
@@ -283,7 +283,7 @@
  */
 #define ENABLE_CUSTOM_TOUCH_ENTITY
 
-/**
+/*
  * @brief ENABLE_HELPER
  *        Open if willing to do additional handling upon helper workqueue
  *
@@ -291,7 +291,7 @@
  */
 #define ENABLE_HELPER
 
-/**
+/*
  * @brief: Power States
  *
  * Enumerate the power states of device
@@ -304,7 +304,7 @@ enum power_state {
 };
 
 #if defined(ENABLE_HELPER)
-/**
+/*
  * @brief: Tasks for helper
  *
  * Tasks being supported in the helper thread and the structure
@@ -320,7 +320,7 @@ struct syna_tcm_helper {
 };
 #endif
 
-/**
+/*
  * @brief: Structure for $C2 report
  *
  * Enumerate the power states of device
@@ -341,7 +341,7 @@ struct custom_fw_status {
 	};
 };
 
-/**
+/*
  * @brief: Custom Commands, Reports, or Events
  */
 enum custom_report_type {
@@ -351,7 +351,7 @@ enum custom_report_type {
 };
 
 #if defined(ENABLE_WAKEUP_GESTURE)
-/**
+/*
  * @brief: Custom gesture type
  */
 enum custom_gesture_type {
@@ -362,7 +362,7 @@ enum custom_gesture_type {
 #endif
 
 #if defined(ENABLE_CUSTOM_TOUCH_ENTITY)
-/**
+/*
  * @brief: Custom touch entity code
  */
 enum custom_shape_data {
@@ -378,7 +378,7 @@ enum custom_data {
 };
 #endif
 
-/**
+/*
  * @brief: context of the synaptics linux-based driver
  *
  * The structure defines the kernel specific data in linux-based driver
@@ -570,7 +570,7 @@ struct syna_tcm {
 	int (*dev_suspend)(struct device *dev);
 };
 
-/**
+/*
  * @brief: Helpers for chardev nodes and sysfs nodes creation
   *
   * These functions are implemented in syna_touchcom_sysfs.c

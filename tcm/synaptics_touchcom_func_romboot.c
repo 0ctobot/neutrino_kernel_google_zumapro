@@ -29,7 +29,7 @@
  * DOLLARS.
  */
 
-/**
+/*
  * @file synaptics_touchcom_func_romboot.c
  *
  * This file implements the ROM boot-loader related functions.
@@ -46,7 +46,7 @@
 
 #define ROMBOOT_FLASH_PAGE_SIZE 256
 
-/**
+/*
  * @section: JEDEC flash command set
  */
 enum flash_command {
@@ -57,7 +57,7 @@ enum flash_command {
 };
 
 
-/**
+/*
  * syna_tcm_romboot_send_command()
  *
  * Helper to send a packet to ROM bootloader.
@@ -129,7 +129,7 @@ exit:
 }
 
 
-/**
+/*
  * syna_tcm_romboot_multichip_send_command()
  *
  * Send a command code to the ROM bootloader inside the multi-chip device
@@ -228,7 +228,7 @@ exit:
 
 	return retval;
 }
-/**
+/*
  * syna_tcm_romboot_multichip_get_resp()
  *
  * To get the response data from ROM bootloader inside the multi-chip device
@@ -292,7 +292,7 @@ exit:
 
 	return retval;
 }
-/**
+/*
  * syna_tcm_romboot_multichip_get_status()
  *
  * To poll the status until the completion
@@ -357,7 +357,7 @@ static int syna_tcm_romboot_multichip_get_status(struct tcm_dev *tcm_dev,
 exit:
 	return retval;
 }
-/**
+/*
  * syna_tcm_romboot_multichip_write_flash()
  *
  * Write the given binary data to the flash through the ROM bootloader
@@ -493,7 +493,7 @@ exit:
 
 	return retval;
 }
-/**
+/*
  * syna_tcm_romboot_multichip_erase_flash()
  *
  * Ask the ROM bootloader to erase the flash inside the multi-chip device
@@ -574,7 +574,7 @@ static int syna_tcm_romboot_multichip_erase_flash(struct tcm_dev *tcm_dev,
 	return retval;
 }
 
-/**
+/*
  * syna_tcm_romboot_multichip_get_boot_info()
  *
  * To request a boot information packet from ROM bootloader inside
@@ -639,7 +639,7 @@ static int syna_tcm_romboot_multichip_get_boot_info(struct tcm_dev *tcm_dev,
 exit:
 	return retval;
 }
-/**
+/*
  * syna_tcm_romboot_preparation()
  *
  * Perform the preparation before doing firmware update of multi-chip device
@@ -767,7 +767,7 @@ static int syna_tcm_romboot_preparation(struct tcm_dev *tcm_dev,
 	return 0;
 }
 
-/**
+/*
  * syna_tcm_romboot_jedec_send_command()
  *
  * Send a jedec flash commend to the ROM bootloader
@@ -858,7 +858,7 @@ exit:
 	return retval;
 }
 
-/**
+/*
  * syna_tcm_romboot_jedec_get_status()
  *
  * Use jedec command to poll the flash status until the completion
@@ -911,7 +911,7 @@ static int syna_tcm_romboot_jedec_get_status(struct tcm_dev *tcm_dev,
 	return retval;
 }
 
-/**
+/*
  * syna_tcm_romboot_jedec_erase_flash()
  *
  * Ask the ROM bootloader to erase the flash by using the jedec command
@@ -964,7 +964,7 @@ static int syna_tcm_romboot_jedec_erase_flash(struct tcm_dev *tcm_dev,
 	return retval;
 }
 
- /**
+ /*
   * syna_tcm_romboot_jedec_write_flash()
   *
   * Write the given binary data to the flash through the ROM bootloader
@@ -1070,7 +1070,7 @@ exit:
 }
 
 
-/**
+/*
  * syna_tcm_romboot_erase_flash()
  *
  * The entry function to perform mass erase
@@ -1107,7 +1107,7 @@ static int syna_tcm_romboot_erase_flash(struct tcm_dev *tcm_dev,
 	return retval;
 }
 
-/**
+/*
  * syna_tcm_romboot_write_flash()
  *
  * The entry function to write hex data to flash
@@ -1146,7 +1146,7 @@ static int syna_tcm_romboot_write_flash(struct tcm_dev *tcm_dev,
 }
 
 
-/**
+/*
  * syna_tcm_romboot_do_ihex_update()
  *
  * The entry function to perform ihex update upon ROM Boot.
@@ -1338,7 +1338,7 @@ exit:
 	return retval;
 }
 
-/**
+/*
  * syna_tcm_romboot_do_multichip_reflash()
  *
  * The entry function to perform fw update in multi-chip product.
@@ -1575,7 +1575,7 @@ exit:
 }
 
 
-/**
+/*
  * syna_tcm_get_romboot_info()
  *
  * Implement the bootloader command code, which is used to request a

@@ -29,7 +29,7 @@
  * DOLLARS.
  */
 
-/**
+/*
  * @file syna_tcm2_platform_spi.c
  *
  * This file is the reference code of I2C module used for communicating with
@@ -59,7 +59,7 @@ static struct spi_transfer *xfer;
 static struct platform_device *syna_spi_device;
 
 
-/**
+/*
  * syna_request_managed_device()
  *
  * Request and return the device pointer for managed
@@ -80,7 +80,7 @@ struct device *syna_request_managed_device(void)
 }
 #endif
 
-/**
+/*
  * syna_spi_request_gpio()
  *
  * Setup the given gpio
@@ -145,7 +145,7 @@ static int syna_spi_request_gpio(int gpio, bool config, int dir,
 
 	return 0;
 }
-/**
+/*
  * syna_spi_free_gpios()
  *
  * Release the GPIOs requested previously
@@ -172,7 +172,7 @@ static int syna_spi_free_gpios(struct syna_hw_interface *hw_if)
 
 	return 0;
 }
-/**
+/*
  * syna_spi_config_gpios()
  *
  * Initialize the GPIOs defined in device tree
@@ -237,7 +237,7 @@ err_set_gpio_irq:
 	return retval;
 }
 
-/**
+/*
  * syna_parse_test_limit()
  *
  * Parse the touch test limit property name and limit array from the
@@ -400,7 +400,7 @@ static void syna_parse_test_limit_name(struct syna_hw_interface *hw_if,
 	}
 }
 
-/**
+/*
  * syna_spi_parse_dt()
  *
  * Parse and obtain board specific data from the device tree source file.
@@ -789,7 +789,7 @@ static int syna_spi_parse_dt(struct syna_hw_interface *hw_if,
 }
 #endif
 
-/**
+/*
  * syna_tcm_spi_alloc_mem()
  *
  * Manage and allocate the memory to buf being as a temporary buffer for IO
@@ -847,7 +847,7 @@ static int syna_spi_alloc_mem(unsigned int count, unsigned int size)
 	return 0;
 }
 
-/**
+/*
  * syna_spi_read()
  *
  * TouchCom over SPI requires the host to assert the SSB signal to address
@@ -952,7 +952,7 @@ exit:
 	return retval;
 }
 
-/**
+/*
  * syna_spi_write()
  *
  * TouchCom over SPI requires the host to assert the SSB signal to address
@@ -1055,7 +1055,7 @@ exit:
 	return retval;
 }
 
-/**
+/*
  * syna_spi_hw_reset()
  *
  * Toggle the hardware gpio pin to perform the chip reset
@@ -1083,7 +1083,7 @@ static void syna_spi_hw_reset(struct syna_hw_interface *hw_if)
 }
 
 
-/**
+/*
  * syna_spi_enable_pwr_gpio()
  *
  * Helper to enable power supply through GPIO
@@ -1129,7 +1129,7 @@ static int syna_spi_enable_pwr_gpio(struct syna_hw_interface *hw_if,
 	return 0;
 }
 
-/**
+/*
  * syna_spi_enable_regulator()
  *
  * Enable or disable the regulator
@@ -1197,7 +1197,7 @@ exit:
 	return retval;
 }
 
-/**
+/*
  * syna_spi_power_on()
  *
  * Power on touch controller through regulators or gpios for PWM
@@ -1236,7 +1236,7 @@ static int syna_spi_power_on(struct syna_hw_interface *hw_if,
 	return 0;
 }
 
-/**
+/*
  * syna_spi_get_regulator()
  *
  * Acquire or release the regulator
@@ -1310,7 +1310,7 @@ exit:
 	return retval;
 }
 
-/**
+/*
  * syna_i2c_config_psu()
  *
  * Initialize the power supply unit
@@ -1366,7 +1366,7 @@ static int syna_spi_config_psu(struct syna_hw_interface *hw_if)
 	return 0;
 }
 
-/**
+/*
  * syna_spi_release_psu()
  *
  * Release the power supply unit
@@ -1393,7 +1393,7 @@ static int syna_spi_release_psu(struct syna_hw_interface *hw_if)
 	return 0;
 }
 
-/**
+/*
  * syna_spi_enable_irq()
  *
  * Enable or disable the handling of interrupt
@@ -1448,7 +1448,7 @@ exit:
 
 	return retval;
 }
-/**
+/*
  * syna_hw_interface
  *
  * Provide the hardware specific settings in defaults.
@@ -1480,7 +1480,7 @@ static struct syna_hw_interface syna_spi_hw_if = {
 	.ops_enable_irq = syna_spi_enable_irq,
 };
 
-/**
+/*
  * syna_spi_probe()
  *
  * Prepare the specific hardware interface and register the platform spi device
@@ -1587,7 +1587,7 @@ static int syna_spi_probe(struct spi_device *spi)
 	return 0;
 }
 
-/**
+/*
  * syna_spi_remove()
  *
  * Unregister the platform spi device
@@ -1615,7 +1615,7 @@ static void syna_spi_remove(struct spi_device *spi)
 	platform_device_unregister(syna_spi_device);
 }
 
-/**
+/*
  * Describe an spi device driver and its related declarations
  */
 static const struct spi_device_id syna_spi_id_table[] = {
@@ -1648,7 +1648,7 @@ static struct spi_driver syna_spi_driver = {
 };
 
 
-/**
+/*
  * syna_hw_interface_init()
  *
  * Initialize the lower-level hardware interface module.
@@ -1665,7 +1665,7 @@ int syna_hw_interface_init(void)
 	return spi_register_driver(&syna_spi_driver);
 }
 
-/**
+/*
  * syna_hw_interface_exit()
  *
  * Delete the lower-level hardware interface module

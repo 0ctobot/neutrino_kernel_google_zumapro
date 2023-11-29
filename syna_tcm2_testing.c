@@ -29,7 +29,7 @@
  * DOLLARS.
  */
 
-/**
+/*
  * @file syna_tcm2_testing.c
  *
  * This file implements the sample code to perform chip testing.
@@ -49,7 +49,7 @@ typedef enum{
 	SENSOR_SPEED_TEST
 }gaptesttype_t;
 
-/**
+/*
  * syna_parse_test_limit16()
  *
  * Parse the test limit from the device tree.
@@ -89,7 +89,7 @@ static int syna_parse_test_limit_16(struct syna_tcm *tcm, const char *name, u16 
 	return 0;
 }
 
-/**
+/*
  * syna_parse_test_limit32()
  *
  * Parse the test limit from the device tree.
@@ -130,7 +130,7 @@ static int syna_parse_test_limit_32(struct syna_tcm *tcm, const char *name, u32 
 	return 0;
 }
 
-/**
+/*
  * syna_testing_compare_byte_vector()
  *
  * Sample code to compare the test result with limits
@@ -187,7 +187,7 @@ static bool syna_testing_compare_byte_vector(unsigned char *data,
 	return result;
 }
 
-/**
+/*
  * syna_testing_compare_frame()
  *
  * Sample code to compare the test result with limits
@@ -279,7 +279,7 @@ end_of_lower_bound_limit:
 	return result;
 }
 
-/**
+/*
  * syna_testing_compare_list()
  *
  * Sample code to compare the test result with limits
@@ -385,7 +385,7 @@ end_of_lower_bound_limit:
 	return result;
 }
 
-/**
+/*
  * syna_testing_calculate_gap_frame()
  *
  * Sample code to calculate the GAP frame for the test
@@ -462,7 +462,7 @@ static int syna_testing_calculate_gap_frame(short *in, short *out,
 	return 0;
 }
 
-/**
+/*
  * syna_testing_calculate_gap_frame_b()
  *
  * Sample code to calculate the GAP frame for the test
@@ -529,7 +529,7 @@ static int syna_testing_calculate_gap_frame_b(short *in, short *out,
 	return 0;
 }
 
-/**
+/*
  * syna_testing_device_id()
  *
  * Sample code to ensure the device id is expected
@@ -573,7 +573,7 @@ exit:
 	return ((result) ? 0 : -1);
 }
 
-/**
+/*
  * syna_testing_config_id()
  *
  * Sample code to ensure the config id is expected
@@ -616,7 +616,7 @@ exit:
 	return ((result) ? 0 : -1);
 }
 
-/**
+/*
  * syna_testing_check_id_show()
  *
  * Attribute to show the result of ID comparsion to the console.
@@ -671,7 +671,7 @@ exit:
 static struct kobj_attribute kobj_attr_check_id =
 	__ATTR(check_id, 0444, syna_testing_check_id_show, NULL);
 
-/**
+/*
  * syna_testing_pt01()
  *
  * Sample code to perform PT01 testing
@@ -709,7 +709,7 @@ exit:
 	return ((result) ? 0 : -1);
 }
 
-/**
+/*
  * syna_testing_pt01_show()
  *
  * Attribute to show the result of PT01 test to the console.
@@ -758,7 +758,7 @@ exit:
 static struct kobj_attribute kobj_attr_pt01 =
 	__ATTR(pt01, 0444, syna_testing_pt01_show, NULL);
 
-/**
+/*
  * syna_testing_pt05()
  *
  * Sample code to perform PT05 testing
@@ -803,7 +803,7 @@ exit:
 	return ((result) ? 0 : -1);
 }
 
-/**
+/*
  * syna_testing_pt05_gap()
  *
  * Sample code to implement GAP test based on PT05
@@ -945,7 +945,7 @@ exit:
 	return ((result) ? 0 : -1);
 }
 
-/**
+/*
  * syna_testing_pt05_show()
  *
  * Attribute to show the result of PT05 test to the console.
@@ -1004,7 +1004,7 @@ exit:
 static struct kobj_attribute kobj_attr_pt05 =
 	__ATTR(pt05, 0444, syna_testing_pt05_show, NULL);
 
-/**
+/*
  * syna_testing_pt0a()
  *
  * Sample code to perform PT0A testing
@@ -1049,7 +1049,7 @@ exit:
 	return ((result) ? 0 : -1);
 }
 
-/**
+/*
  * syna_testing_pt0a_show()
  *
  * Attribute to show the result of PT0A test to the console.
@@ -1105,7 +1105,7 @@ exit:
 static struct kobj_attribute kobj_attr_pt0a =
 	__ATTR(pt0a, 0444, syna_testing_pt0a_show, NULL);
 
-/**
+/*
  * syna_testing_pt10()
  *
  * Sample code to perform PT10 testing
@@ -1150,7 +1150,7 @@ exit:
 	return ((result) ? 0 : -1);
 }
 
-/**
+/*
  * syna_testing_pt10_gap()
  *
  * Sample code to implement GAP test based on PT10
@@ -1291,7 +1291,7 @@ exit:
 	return ((result) ? 0 : -1);
 }
 
-/**
+/*
  * syna_testing_pt10_show()
  *
  * Attribute to show the result of PT10 test to the console.
@@ -1350,7 +1350,7 @@ exit:
 static struct kobj_attribute kobj_attr_pt10 =
 	__ATTR(pt10, 0444, syna_testing_pt10_show, NULL);
 
-/**
+/*
  * syna_testing_pt11()
  *
  * Sample code to perform PT11 testing
@@ -1395,7 +1395,7 @@ exit:
 	return ((result) ? 0 : -1);
 }
 
-/**
+/*
  * syna_testing_pt11_show()
  *
  * Attribute to show the result of PT11 test to the console.
@@ -1451,7 +1451,7 @@ exit:
 static struct kobj_attribute kobj_attr_pt11 =
 	__ATTR(pt11, 0444, syna_testing_pt11_show, NULL);
 
-/**
+/*
  * syna_testing_pt12()
  *
  * Sample code to perform PT12 testing
@@ -1496,7 +1496,7 @@ exit:
 	return ((result) ? 0 : -1);
 }
 
-/**
+/*
  * syna_testing_pt12_show()
  *
  * Attribute to show the result of PT12 test to the console.
@@ -1555,7 +1555,7 @@ exit:
 static struct kobj_attribute kobj_attr_pt12 =
 	__ATTR(pt12, 0444, syna_testing_pt12_show, NULL);
 
-/**
+/*
  * syna_testing_pt16()
  *
  * Sample code to perform PT16 testing
@@ -1600,7 +1600,7 @@ exit:
 	return ((result) ? 0 : -1);
 }
 
-/**
+/*
  * syna_testing_pt16_show()
  *
  * Attribute to show the result of PT11 test to the console.
@@ -1657,7 +1657,7 @@ static struct kobj_attribute kobj_attr_pt16 =
 	__ATTR(pt16, 0444, syna_testing_pt16_show, NULL);
 
 
-/**
+/*
  * syna_testing_pt_tag_moisture()
  *
  * Sample code to perform Tags Moisture (RID30) testing
@@ -1755,7 +1755,7 @@ exit:
 	return ((result) ? 0 : -1);
 }
 
-/**
+/*
  * syna_testing_pt_moisture_show()
  *
  * Attribute to show the result of Tags Moisture (RID30) to the console.
@@ -1834,7 +1834,7 @@ static struct attribute_group attr_testing_group = {
 	.attrs = attrs,
 };
 
-/**
+/*
  * syna_testing_create_dir()
  *
  * Create a directory and register it with sysfs.
@@ -1871,7 +1871,7 @@ int syna_testing_create_dir(struct syna_tcm *tcm,
 
 	return 0;
 }
-/**
+/*
  *syna_testing_remove_dir()
  *
  * Remove the allocate sysfs directory

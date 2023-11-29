@@ -29,7 +29,7 @@
  * DOLLARS.
  */
 
-/**
+/*
  * @file: syna_tcm2_platform.h
  *
  * This file declares the platform-specific or hardware relevant data.
@@ -45,7 +45,7 @@
 #if IS_ENABLED(CONFIG_SPI_S3C64XX_GS)
 #include <linux/platform_data/spi-s3c64xx-gs.h>
 #endif
-/**
+/*
  * @section: The capability of bus transferred
  *
  * Declare read/write capability in bytes (0 = unlimited)
@@ -55,7 +55,7 @@
 
 #define LIMIT_NAME_LEN 32
 
-/**
+/*
  * @section: Type of power supply
  *
  * The below enumerates the type of power supply
@@ -66,7 +66,7 @@ enum power_supply {
 	PSU_PWR_MODULES,
 };
 
-/**
+/*
  * @section: Defined Hardware-Specific Data
  *
  * @brief: syna_hw_bus_data
@@ -154,7 +154,7 @@ struct syna_hw_pwr_data {
 	void *avdd_reg_dev;
 };
 
-/**
+/*
  * @section: Hardware Interface Abstraction Layer
  *
  * The structure contains the hardware-specific implementations
@@ -310,7 +310,7 @@ struct syna_hw_interface {
 /* end of structure syna_hw_interface */
 
 
-/**
+/*
  * syna_hw_interface_init()
  *
  * Initialize the lower-level hardware interface module.
@@ -324,7 +324,7 @@ struct syna_hw_interface {
  */
 int syna_hw_interface_init(void);
 
-/**
+/*
  * syna_hw_interface_exit()
  *
  * Delete the lower-level hardware interface module.

@@ -29,7 +29,7 @@
  * DOLLARS.
  */
 
-/**
+/*
  * @file synaptics_touchcom_core_v2.c
  *
  * This file implements the TouchComm version 2 command-response protocol
@@ -45,7 +45,7 @@
 
 #define CHECK_PACKET_CRC
 
-/**
+/*
  * @section: Header of TouchComm v2 Message Packet
  *
  * The 4-byte header in the TouchComm v2 packet
@@ -67,7 +67,7 @@ static int syna_tcm_v2_execute_cmd_request(struct tcm_dev *tcm_dev,
 	unsigned char command, unsigned char *payload,
 	unsigned int total_length, unsigned int length);
 
-/**
+/*
  * syna_tcm_v2_set_max_rw_size()
  *
  * Configure the max length for message reading and writing.
@@ -157,7 +157,7 @@ exit:
 	return retval;
 }
 
-/**
+/*
  * syna_tcm_v2_parse_idinfo()
  *
  * Copy the given data to the identification info structure
@@ -213,7 +213,7 @@ static int syna_tcm_v2_parse_idinfo(struct tcm_dev *tcm_dev,
 	return 0;
 }
 
-/**
+/*
  * syna_tcm_v2_dispatch_report()
  *
  * Handle the TouchCom report packet being received.
@@ -357,7 +357,7 @@ exit:
 	return;
 }
 
-/**
+/*
  * syna_tcm_v2_dispatch_response()
  *
  * Handle the response packet.
@@ -440,7 +440,7 @@ exit:
 	syna_pal_completion_complete(cmd_completion);
 }
 
-/**
+/*
  * syna_tcm_v2_read()
  *
  * Read in a TouchCom packet from device.
@@ -566,7 +566,7 @@ exit:
 	return retval;
 }
 
-/**
+/*
  * syna_tcm_v2_write()
  *
  * Construct the TouchCom v2 packet and send it to device.
@@ -685,7 +685,7 @@ exit:
 	return retval;
 }
 
-/**
+/*
  * syna_tcm_v2_continued_read()
  *
  * Write a CMD_ACK to read in the remaining data payload continuously
@@ -849,7 +849,7 @@ exit:
 	return retval;
 }
 
-/**
+/*
  * syna_tcm_v2_get_response()
  *
  * Read in the response packet from device.
@@ -946,7 +946,7 @@ static int syna_tcm_v2_get_response(struct tcm_dev *tcm_dev)
 	return retval;
 }
 
-/**
+/*
  * syna_tcm_v2_send_cmd()
  *
  * Forward the given command and payload to syna_tcm_v2_write().
@@ -974,7 +974,7 @@ static inline int syna_tcm_v2_send_cmd(struct tcm_dev *tcm_dev,
 			resend);
 }
 
-/**
+/*
  * syna_tcm_v2_execute_cmd_request()
  *
  * Process the command message.
@@ -1123,7 +1123,7 @@ exit:
 	return retval;
 }
 
-/**
+/*
  * syna_tcm_v2_read_message()
  *
  * Send a CMD_GET_REPORT to acquire a TouchCom v2 report packet from device.
@@ -1220,7 +1220,7 @@ exit:
 	return retval;
 }
 
-/**
+/*
  * syna_tcm_v2_write_message()
  *
  * Write message including command and its payload to TouchCom device.
@@ -1407,7 +1407,7 @@ exit:
 
 	return retval;
 }
-/**
+/*
  * syna_tcm_v2_set_ops()
  *
  * Assign read / write operations
@@ -1436,7 +1436,7 @@ void syna_tcm_v2_set_ops(struct tcm_dev *tcm_dev)
 	if (tcm_dev->msg_data.legacy)
 		LOGI("Apply legacy TouchComm V2 firmware\n");
 }
- /**
+ /*
   * syna_tcm_v2_detect()
   *
   * Function to process the startup packet of TouchComm V2 firmware

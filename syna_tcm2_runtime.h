@@ -29,7 +29,7 @@
  * DOLLARS.
  */
 
-/**
+/*
  * @file syna_tcm2_runtime.h
  *
  * This file abstracts platform-specific headers and C runtime APIs being used
@@ -68,7 +68,7 @@
 #include <linux/fs.h>
 #include <linux/moduleparam.h>
 
-/**
+/*
  * @brief: DEV_MANAGED_API
  *
  * For linux kernel, managed interface was created for resources commonly
@@ -82,7 +82,7 @@
 extern struct device *syna_request_managed_device(void);
 #endif
 
-/**
+/*
  * @section: Log helpers
  *
  * @brief: LOGD
@@ -108,7 +108,7 @@ extern struct device *syna_request_managed_device(void);
 #define LOGW(log, ...) pr_warn(log, ##__VA_ARGS__)
 #define LOGE(log, ...) pr_err(log, ##__VA_ARGS__)
 
-/**
+/*
  * @section: Data Comparison helpers
  *
  * @brief: MAX
@@ -134,7 +134,7 @@ extern struct device *syna_request_managed_device(void);
 	(((var) & (1 << (pos))) >> (pos))
 
 
-/**
+/*
  * @section: C Atomic operations
  *
  * @brief: ATOMIC_SET
@@ -152,7 +152,7 @@ typedef atomic_t syna_pal_atomic_t;
 	atomic_read(&atomic)
 
 
-/**
+/*
  * @section: C Integer Calculation helpers
  *
  * @brief: syna_pal_le2_to_uint
@@ -165,7 +165,7 @@ typedef atomic_t syna_pal_atomic_t;
  *         Calculate the ceiling of the integer division
  */
 
-/**
+/*
  * syna_pal_le2_to_uint()
  *
  * Convert 2-byte data in little-endianness to an unsigned integer
@@ -181,7 +181,7 @@ static inline unsigned int syna_pal_le2_to_uint(const unsigned char *src)
 	return (unsigned int)src[0] +
 		(unsigned int)src[1] * 0x100;
 }
-/**
+/*
  * syna_pal_le4_to_uint()
  *
  * Convert 4-byte data in little-endianness to an unsigned integer
@@ -199,7 +199,7 @@ static inline unsigned int syna_pal_le4_to_uint(const unsigned char *src)
 		(unsigned int)src[2] * 0x10000 +
 		(unsigned int)src[3] * 0x1000000;
 }
-/**
+/*
  * syna_pal_ceil_div()
  *
  * Calculate the ceiling of the integer division
@@ -218,7 +218,7 @@ static inline unsigned int syna_pal_ceil_div(unsigned int dividend,
 }
 
 
-/**
+/*
  * @section: C Runtime for Memory Management helpers
  *
  * @brief: syna_pal_mem_calloc
@@ -234,7 +234,7 @@ static inline unsigned int syna_pal_ceil_div(unsigned int dividend,
  *         Ensure the safe size before doing memory copy
  */
 
-/**
+/*
  * syna_pal_mem_calloc()
  *
  * Allocates a block of memory for an array of 'num' elements,
@@ -269,7 +269,7 @@ static inline void *syna_pal_mem_alloc(unsigned int num, unsigned int size)
 	return kcalloc(num, size, GFP_KERNEL);
 #endif
 }
-/**
+/*
  * syna_pal_mem_free()
  *
  * Deallocate a block of memory previously allocated.
@@ -296,7 +296,7 @@ static inline void syna_pal_mem_free(void *ptr)
 	kfree(ptr);
 #endif
 }
-/**
+/*
  * syna_pal_mem_set()
  *
  * Fill memory with a constant byte
@@ -313,7 +313,7 @@ static inline void syna_pal_mem_set(void *ptr, int c, unsigned int n)
 {
 	memset(ptr, c, n);
 }
-/**
+/*
  * syna_pal_mem_cpy()
  *
  * Ensure the safe size before copying the values of num bytes from the
@@ -347,7 +347,7 @@ static inline int syna_pal_mem_cpy(void *dest, unsigned int dest_size,
 }
 
 
-/**
+/*
  * @section: C Runtime for Mutex Control helpers
  *
  * @brief: syna_pal_mutex_alloc
@@ -365,7 +365,7 @@ static inline int syna_pal_mem_cpy(void *dest, unsigned int dest_size,
 
 typedef struct mutex syna_pal_mutex_t;
 
-/**
+/*
  * syna_pal_mutex_alloc()
  *
  * Create a mutex object.
@@ -381,7 +381,7 @@ static inline int syna_pal_mutex_alloc(syna_pal_mutex_t *ptr)
 	mutex_init((struct mutex *)ptr);
 	return 0;
 }
-/**
+/*
  * syna_pal_mutex_free()
  *
  * Release the mutex object previously allocated.
@@ -396,7 +396,7 @@ static inline void syna_pal_mutex_free(syna_pal_mutex_t *ptr)
 {
 	/* do nothing */
 }
-/**
+/*
  * syna_pal_mutex_lock()
  *
  * Acquire/lock the mutex.
@@ -411,7 +411,7 @@ static inline void syna_pal_mutex_lock(syna_pal_mutex_t *ptr)
 {
 	mutex_lock((struct mutex *)ptr);
 }
-/**
+/*
  * syna_pal_mutex_unlock()
  *
  * Unlock the locked mutex.
@@ -428,7 +428,7 @@ static inline void syna_pal_mutex_unlock(syna_pal_mutex_t *ptr)
 }
 
 
-/**
+/*
  * @section: C Runtime for Completion Event
  *
  * @brief: syna_pal_completion_alloc
@@ -449,7 +449,7 @@ static inline void syna_pal_mutex_unlock(syna_pal_mutex_t *ptr)
 
 typedef struct completion syna_pal_completion_t;
 
-/**
+/*
  * syna_pal_completion_alloc()
  *
  * Allocate a completion event, and the default state is not set.
@@ -466,7 +466,7 @@ static inline int syna_pal_completion_alloc(syna_pal_completion_t *ptr)
 	init_completion((struct completion *)ptr);
 	return 0;
 }
-/**
+/*
  * syna_pal_completion_free()
  *
  * Release the completion event previously allocated
@@ -481,7 +481,7 @@ static inline void syna_pal_completion_free(syna_pal_completion_t *ptr)
 {
 	/* do nothing */
 }
-/**
+/*
  * syna_pal_completion_complete()
  *
  * Complete the completion event being waiting for
@@ -496,7 +496,7 @@ static inline void syna_pal_completion_complete(syna_pal_completion_t *ptr)
 {
 	complete((struct completion *)ptr);
 }
-/**
+/*
  * syna_pal_completion_reset()
  *
  * Reset or reinitialize the completion event
@@ -515,7 +515,7 @@ static inline void syna_pal_completion_reset(syna_pal_completion_t *ptr)
 		reinit_completion((struct completion *)ptr);
 #endif
 }
-/**
+/*
  * syna_pal_completion_wait_for()
  *
  * Wait for the completion event during the given time slot
@@ -541,7 +541,7 @@ static inline int syna_pal_completion_wait_for(syna_pal_completion_t *ptr,
 }
 
 
-/**
+/*
  * @section: C Runtime to Pause the Execution
  *
  * @brief: syna_pal_sleep_ms
@@ -554,7 +554,7 @@ static inline int syna_pal_completion_wait_for(syna_pal_completion_t *ptr,
  *         Busy wait for a fixed amount of time in milliseconds
  */
 
-/**
+/*
  * syna_pal_sleep_ms()
  *
  * Sleep for a fixed amount of time in milliseconds
@@ -569,7 +569,7 @@ static inline void syna_pal_sleep_ms(int time_ms)
 {
 	msleep(time_ms);
 }
-/**
+/*
  * syna_pal_sleep_us()
  *
  * Sleep for a range of time in microseconds
@@ -585,7 +585,7 @@ static inline void syna_pal_sleep_us(int time_us_min, int time_us_max)
 {
 	usleep_range(time_us_min, time_us_max);
 }
-/**
+/*
  * syna_pal_busy_delay_ms()
  *
  * Busy wait for a fixed amount of time in milliseconds
@@ -602,7 +602,7 @@ static inline void syna_pal_busy_delay_ms(int time_ms)
 }
 
 
-/**
+/*
  * @section: C Runtime for String operations
  *
  * @brief: syna_pal_str_len
@@ -615,7 +615,7 @@ static inline void syna_pal_busy_delay_ms(int time_ms)
  *         Compare whether the given C strings are equal or not
  */
 
-/**
+/*
  * syna_pal_str_len()
  *
  * Return the length of C string
@@ -630,7 +630,7 @@ static inline unsigned int syna_pal_str_len(const char *str)
 {
 	return (unsigned int)strlen(str);
 }
-/**
+/*
  * syna_pal_str_cpy()
  *
  * Copy the C string pointed by source into the array pointed by destination.
@@ -661,7 +661,7 @@ static inline int syna_pal_str_cpy(char *dest, unsigned int dest_size,
 
 	return 0;
 }
-/**
+/*
  * syna_pal_str_cmp()
  *
  * Compares up to num characters of the C string str1 to those of the
@@ -680,7 +680,7 @@ static inline int syna_pal_str_cmp(const char *str1, const char *str2,
 {
 	return strncmp(str1, str2, num);
 }
-/**
+/*
  * syna_pal_hex_to_uint()
  *
  * Convert the given string in hex to an integer returned
@@ -708,14 +708,14 @@ static inline unsigned int syna_pal_hex_to_uint(char *str, int length)
 	return result;
 }
 
-/**
+/*
  * @section: C Runtime for Checksum Calculation
  *
  * @brief: syna_pal_crc32
  *         Calculates the CRC32 value
  */
 
-/**
+/*
  * syna_pal_crc32()
  *
  * Calculates the CRC32 value of the data
