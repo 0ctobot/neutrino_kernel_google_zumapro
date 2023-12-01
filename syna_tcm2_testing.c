@@ -131,63 +131,6 @@ static int syna_parse_test_limit_32(struct syna_tcm *tcm, const char *name, u32 
 }
 
 /*
- * syna_testing_compare_byte_vector()
- *
- * Sample code to compare the test result with limits
- * by byte vector
- *
- * @param
- *    [ in] data: target test data
- *    [ in] data_size: size of test data
- *    [ in] limit: test limit value to be compared with
- *    [ in] limit_size: size of test limit
- *
- * @return
- *    on success, true; otherwise, return false
- */
-static bool syna_testing_compare_byte_vector(unsigned char *data,
-		unsigned int data_size, const unsigned char *limit,
-		unsigned int limit_size)
-{
-	bool result = false;
-	unsigned char tmp;
-	unsigned char p, l;
-	int i, j;
-
-	if (!data || (data_size == 0)) {
-		LOGE("Invalid test data\n");
-		return false;
-	}
-	if (!limit || (limit_size == 0)) {
-		LOGE("Invalid limits\n");
-		return false;
-	}
-
-	if (limit_size < data_size) {
-		LOGE("Limit size mismatched, data size: %d, limits: %d\n",
-			data_size, limit_size);
-		return false;
-	}
-
-	result = true;
-	for (i = 0; i < data_size; i++) {
-		tmp = data[i];
-
-		for (j = 0; j < 8; j++) {
-			p = GET_BIT(tmp, j);
-			l = GET_BIT(limit[i], j);
-			if (p != l) {
-				LOGE("Fail on TRX-%03d (data:%X, limit:%X)\n",
-					(i*8 + j), p, l);
-				result = false;
-			}
-		}
-	}
-
-	return result;
-}
-
-/*
  * syna_testing_compare_frame()
  *
  * Sample code to compare the test result with limits
