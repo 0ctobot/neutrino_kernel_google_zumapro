@@ -283,6 +283,7 @@ struct syna_hw_interface {
 	 *    0 on success; otherwise, on error.
 	 */
 	int (*ops_enable_irq)(struct syna_hw_interface *hw_if, bool en);
+	int (*ops_disable_irq_sync)(struct syna_hw_interface *hw_if);
 
 	/* Operation to wait for the signal of interrupt, if supported
 	 *

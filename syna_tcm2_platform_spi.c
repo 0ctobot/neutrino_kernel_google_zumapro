@@ -1440,7 +1440,7 @@ static int syna_spi_enable_irq(struct syna_hw_interface *hw_if,
 		disable_irq_nosync(attn->irq_id);
 		attn->irq_enabled = false;
 
-		LOGD("Interrupt disabled\n");
+		LOGD("Interrupt disabled nosync\n");
 	}
 
 exit:
@@ -1448,6 +1448,33 @@ exit:
 
 	return retval;
 }
+
+static int syna_spi_disable_irq_sync(struct syna_hw_interface *hw_if)
+{
+	int retval = 0;
+	struct syna_hw_attn_data *attn = &hw_if->bdata_attn;
+
+	if (attn->irq_id == 0)
+		return 0;
+
+	syna_pal_mutex_lock(&attn->irq_en_mutex);
+
+	if (!attn->irq_enabled) {
+		LOGD("Interrupt already disabled\n");
+		retval = 0;
+		goto exit;
+	}
+
+	disable_irq(attn->irq_id);
+	attn->irq_enabled = false;
+
+	LOGD("Interrupt disabled sync\n");
+exit:
+	syna_pal_mutex_unlock(&attn->irq_en_mutex);
+
+	return retval;
+}
+
 /*
  * syna_hw_interface
  *
@@ -1478,6 +1505,7 @@ static struct syna_hw_interface syna_spi_hw_if = {
 	.ops_read_data = syna_spi_read,
 	.ops_write_data = syna_spi_write,
 	.ops_enable_irq = syna_spi_enable_irq,
+	.ops_disable_irq_sync = syna_spi_disable_irq_sync,
 };
 
 /*

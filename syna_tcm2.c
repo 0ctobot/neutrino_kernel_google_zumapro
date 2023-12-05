@@ -2401,8 +2401,10 @@ static void syna_dev_reflash_startup_work(struct work_struct *work)
 	/* Use CPU mode for the firmware update because it cannot fit the 4 bytes alignment.*/
 #if IS_ENABLED(CONFIG_GOOG_TOUCH_INTERFACE) && IS_ENABLED(CONFIG_SPI_S3C64XX_GS)
 	if (goog_check_spi_dma_enabled(tcm->hw_if->pdev) && tcm->hw_if->s3c64xx_sci) {
+		tcm->hw_if->ops_disable_irq_sync(tcm->hw_if);
 		tcm->hw_if->dma_mode = 0;
 		tcm->hw_if->s3c64xx_sci->dma_mode = CPU_MODE;
+		tcm->hw_if->ops_enable_irq(tcm->hw_if, true);
 	}
 #endif
 
@@ -2439,6 +2441,20 @@ static void syna_dev_reflash_startup_work(struct work_struct *work)
 			RESP_IN_ATTN,
 			tcm->force_reflash);
 #endif
+	/* Restore DMA mode */
+#if IS_ENABLED(CONFIG_GOOG_TOUCH_INTERFACE) && IS_ENABLED(CONFIG_SPI_S3C64XX_GS)
+	tcm->hw_if->ops_disable_irq_sync(tcm->hw_if);
+	if (goog_check_spi_dma_enabled(tcm->hw_if->pdev) && tcm->hw_if->s3c64xx_sci) {
+		tcm->hw_if->dma_mode = 1;
+		tcm->hw_if->s3c64xx_sci->dma_mode = DMA_MODE;
+	}
+	/* Wait 300ms to make sure the SPI driver suspends so that it will
+	 * acquire the DMA channel when it resumes next time because DMA_MODE
+	 * was enabled.
+	 */
+	msleep(300);
+	tcm->hw_if->ops_enable_irq(tcm->hw_if, true);
+#endif
 	if (retval < 0) {
 		LOGE("Fail to do reflash, reflash_count = %d\n", tcm->reflash_count);
 		tcm->force_reflash = true;
@@ -2468,13 +2484,6 @@ static void syna_dev_reflash_startup_work(struct work_struct *work)
 skip_fw_update:
 	syna_gti_init(tcm);
 exit:
-	/* Restore DMA mode */
-#if IS_ENABLED(CONFIG_GOOG_TOUCH_INTERFACE) && IS_ENABLED(CONFIG_SPI_S3C64XX_GS)
-	if (goog_check_spi_dma_enabled(tcm->hw_if->pdev) && tcm->hw_if->s3c64xx_sci) {
-		tcm->hw_if->dma_mode = 1;
-		tcm->hw_if->s3c64xx_sci->dma_mode = DMA_MODE;
-	}
-#endif
 	fw_image = NULL;
 
 	if (fw_entry) {
