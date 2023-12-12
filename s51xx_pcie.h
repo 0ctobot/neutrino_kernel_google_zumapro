@@ -8,23 +8,12 @@
 #define __S51xx_PCIE_H__
 
 #include <linux/exynos-pci-noti.h>
+#include "cpif_pcie_shim.h"
 
 #define MAX_MSI_NUM	(16)
 
 extern void first_save_s51xx_status(struct pci_dev *pdev);
 extern int s51xx_pcie_init(struct modem_ctl *mc);
-extern int exynos_pcie_register_event(struct exynos_pcie_register_event *reg);
-extern int exynos_pcie_deregister_event(struct exynos_pcie_register_event *reg);
-
-extern void exynos_pcie_rc_register_dump(int ch_num);
-extern void exynos_pcie_rc_dump_all_status(int ch_num);
-extern void exynos_pcie_rc_print_msi_register(int ch_num);
-extern int exynos_pcie_rc_set_outbound_atu(int ch_num, u32 target_addr, u32 offset, u32 size);
-extern bool exynos_pcie_rc_get_cpl_timeout_state(int ch_num);
-extern void exynos_pcie_rc_set_cpl_timeout_state(int ch_num, bool recovery);
-extern bool exynos_pcie_rc_get_sudden_linkdown_state(int ch_num);
-extern void exynos_pcie_rc_set_sudden_linkdown_state(int ch_num, bool recovery);
-extern void exynos_pcie_rc_force_linkdown_work(int ch_num);
 
 struct s51xx_pcie {
 	unsigned int busdev_num;
@@ -40,25 +29,11 @@ struct s51xx_pcie {
 	u32 link_status;
 	bool suspend_try;
 
-	struct exynos_pcie_register_event pcie_event;
-	struct exynos_pcie_register_event pcie_cpl_timeout_event;
+	pcie_register_event_t pcie_event;
+	pcie_register_event_t pcie_cpl_timeout_event;
 	struct pci_saved_state *pci_saved_configs;
 };
 
-//extern struct s51xx_pcie s5100pcie;
-
-extern int exynos_pcie_rc_chk_link_status(int ch_num);
-extern int exynos_pcie_rc_l1ss_ctrl(int enable, int id, int ch_num);
-
-extern int exynos_pcie_poweron(int ch_num, int spd, int width);
-extern int exynos_pcie_poweroff(int ch_num);
-extern int exynos_pcie_get_max_link_speed(int ch_num);
-extern int exynos_pcie_get_max_link_width(int ch_num);
-extern int exynos_pcie_rc_change_link_speed(int ch_num, int target_speed);
-extern void exynos_pcie_set_perst_gpio(int ch_num, bool on);
-extern void exynos_pcie_set_ready_cto_recovery(int ch_num);
-/* not used: extern int exynos_pcie_gpio_onoff(int ch_num, int val); */
-/* not used(comment out): extern void exynos_pcie_msi_init_ext(int ch_num); */
 extern int register_separated_msi_vector(int ch_num,
 					 irq_handler_t handler, void *context,
 					 int *irq_num);

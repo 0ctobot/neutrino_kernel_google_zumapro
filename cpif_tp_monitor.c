@@ -12,7 +12,6 @@
 #include "link_device_memory.h"
 #include "cpif_tp_monitor.h"
 #if IS_ENABLED(CONFIG_LINK_DEVICE_PCIE)
-#include <linux/exynos-pci-ctrl.h>
 #include "s51xx_pcie.h"
 #include <dt-bindings/pci/pci.h>
 #endif
@@ -130,11 +129,11 @@ static void tpmon_calc_rx_speed(struct cpif_tpmon *tpmon)
 		return;
 
 	if (tpmon->rx_total.rx_mbps > hysteresis)
-		spd = exynos_pcie_get_max_link_speed(mc->pcie_ch_num);
+		spd = pcie_get_max_link_speed(mc->pcie_ch_num);
 	else
 		spd = LINK_SPEED_GEN1;
 
-	exynos_pcie_rc_change_link_speed(mc->pcie_ch_num, spd);
+	pcie_change_link_speed(mc->pcie_ch_num, spd);
 }
 
 /* Queue status */

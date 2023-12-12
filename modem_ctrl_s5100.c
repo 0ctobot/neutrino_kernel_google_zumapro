@@ -1129,7 +1129,7 @@ static int power_shutdown_cp(struct modem_ctl *mc)
 	}
 
 	if (mc->variant == MODEM_SEC_5400)
-		exynos_pcie_poweroff(mc->pcie_ch_num);
+		pcie_poweroff(mc->pcie_ch_num);
 
 	gpio_power_off_cp(mc);
 	print_mc_state(mc);
@@ -1694,7 +1694,7 @@ static int trigger_cp_crash_internal(struct modem_ctl *mc)
 	}
 
 	print_mc_state(mc);
-	exynos_pcie_rc_print_msi_register(mc->pcie_ch_num);
+	pcie_print_rc_msi_register(mc->pcie_ch_num);
 
 	if (mif_gpio_get_value(&mc->cp_gpio[CP_GPIO_CP2AP_CP_ACTIVE], true) == 1) {
 #if IS_ENABLED(CONFIG_LINK_DEVICE_PCIE_GPIO_WA)
@@ -1975,13 +1975,13 @@ static int s5100_poweroff_pcie(struct modem_ctl *mc, bool force_off)
 		mc->pcie_cto_retry_cnt = 0;
 	}
 
-	if (exynos_pcie_rc_get_sudden_linkdown_state(mc->pcie_ch_num)) {
-		exynos_pcie_rc_set_sudden_linkdown_state(mc->pcie_ch_num, false);
+	if (pcie_get_sudden_linkdown_state(mc->pcie_ch_num)) {
+		pcie_set_sudden_linkdown_state(mc->pcie_ch_num, false);
 		in_pcie_recovery = true;
 	}
 
-	if (exynos_pcie_rc_get_cpl_timeout_state(mc->pcie_ch_num)) {
-		exynos_pcie_rc_set_cpl_timeout_state(mc->pcie_ch_num, false);
+	if (pcie_get_cpl_timeout_state(mc->pcie_ch_num)) {
+		pcie_set_cpl_timeout_state(mc->pcie_ch_num, false);
 		in_pcie_recovery = true;
 	}
 
@@ -1999,7 +1999,7 @@ static int s5100_poweroff_pcie(struct modem_ctl *mc, bool force_off)
 	mif_gpio_set_value(&mc->cp_gpio[CP_GPIO_AP2CP_WAKEUP], 0, 5);
 	print_mc_state(mc);
 
-	exynos_pcie_poweroff(mc->pcie_ch_num);
+	pcie_poweroff(mc->pcie_ch_num);
 
 	if (cpif_wake_lock_active(mc->ws))
 		cpif_wake_unlock(mc->ws);
@@ -2085,11 +2085,11 @@ int s5100_poweron_pcie(struct modem_ctl *mc, enum link_mode mode)
 	/* wait Tx done if it is running */
 	spin_unlock_irqrestore(&mc->pcie_tx_lock, flags);
 
-	if (exynos_pcie_rc_get_sudden_linkdown_state(mc->pcie_ch_num))
-		exynos_pcie_set_ready_cto_recovery(mc->pcie_ch_num);
+	if (pcie_get_sudden_linkdown_state(mc->pcie_ch_num))
+		pcie_set_ready_cto_recovery(mc->pcie_ch_num);
 
-	if (exynos_pcie_rc_get_cpl_timeout_state(mc->pcie_ch_num))
-		exynos_pcie_set_ready_cto_recovery(mc->pcie_ch_num);
+	if (pcie_get_cpl_timeout_state(mc->pcie_ch_num))
+		pcie_set_ready_cto_recovery(mc->pcie_ch_num);
 
 	/* Set dynamic lane number & speed according the link up mode */
 	if (mode == LINK_MODE_MIN_SPEED_BOOTING) {
@@ -2101,11 +2101,11 @@ int s5100_poweron_pcie(struct modem_ctl *mc, enum link_mode mode)
 			&& mc->pcie_dynamic_spd_enabled)
 			speed = LINK_SPEED_GEN1;
 		else
-			speed = exynos_pcie_get_max_link_speed(mc->pcie_ch_num);
-		width = exynos_pcie_get_max_link_width(mc->pcie_ch_num);
+			speed = pcie_get_max_link_speed(mc->pcie_ch_num);
+		width = pcie_get_max_link_width(mc->pcie_ch_num);
 	}
 
-	if (exynos_pcie_poweron(mc->pcie_ch_num, speed, width) != 0) {
+	if (pcie_poweron(mc->pcie_ch_num, speed, width) != 0) {
 		if (boot_on) {
 			mif_err("PCIe gen1 linkup with CP ROM failed.\n");
 			logbuffer_log(mc->log, "PCIe gen1 linkup with CP ROM failed.");
@@ -2199,7 +2199,7 @@ int s5100_set_outbound_atu(struct modem_ctl *mc, struct cp_btl *btl, loff_t *pos
 	u32 atu_grp = (*pos) / map_size;
 
 	if (atu_grp != btl->last_pcie_atu_grp) {
-		ret = exynos_pcie_rc_set_outbound_atu(
+		ret = pcie_set_outbound_atu(
 			mc->pcie_ch_num, btl->mem.cp_p_base, (atu_grp * map_size), map_size);
 		btl->last_pcie_atu_grp = atu_grp;
 	}

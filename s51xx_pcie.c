@@ -31,9 +31,6 @@
 #include <linux/pm_runtime.h>
 //#include <sound/samsung/abox.h>
 
-#include <linux/exynos-pci-ctrl.h>
-#include <linux/exynos-pci-noti.h>
-
 #include "modem_prj.h"
 #include "modem_utils.h"
 #include "modem_ctrl.h"
@@ -88,7 +85,7 @@ inline int s51xx_pcie_send_doorbell_int(struct pci_dev *pdev, int int_num)
 		return -EAGAIN;
 	}
 
-	if (exynos_pcie_rc_get_cpl_timeout_state(s51xx_pcie->pcie_channel_num)) {
+	if (pcie_get_cpl_timeout_state(s51xx_pcie->pcie_channel_num)) {
 		mif_err_limited("Can't send Interrupt(cto_retry_cnt: %d)!!!\n",
 				mc->pcie_cto_retry_cnt);
 		return 0;
@@ -127,8 +124,7 @@ inline int s51xx_pcie_send_doorbell_int(struct pci_dev *pdev, int int_num)
 
 		if (cnt >= 10) {
 			mif_err_limited("BME is not set(cnt=%d)\n", cnt);
-			exynos_pcie_rc_register_dump(
-					s51xx_pcie->pcie_channel_num);
+			pcie_register_dump(s51xx_pcie->pcie_channel_num);
 			goto check_cpl_timeout;
 		}
 	}
@@ -160,7 +156,7 @@ send_doorbell_again:
 		mif_err("[Need to CHECK] Can't send doorbell int (0x%x)\n", reg);
 		pci_read_config_dword(pdev, PCI_BASE_ADDRESS_0, &reg);
 		mif_err("Check BAR0 register : %#x\n", reg);
-		exynos_pcie_rc_register_dump(s51xx_pcie->pcie_channel_num);
+		pcie_register_dump(s51xx_pcie->pcie_channel_num);
 
 		goto check_cpl_timeout;
 	}
@@ -168,12 +164,12 @@ send_doorbell_again:
 	return 0;
 
 check_cpl_timeout:
-	if (exynos_pcie_rc_get_cpl_timeout_state(s51xx_pcie->pcie_channel_num) ||
-			exynos_pcie_rc_get_sudden_linkdown_state(s51xx_pcie->pcie_channel_num))
+	if (pcie_get_cpl_timeout_state(s51xx_pcie->pcie_channel_num) ||
+			pcie_get_sudden_linkdown_state(s51xx_pcie->pcie_channel_num))
 		mif_err_limited("Can't send Interrupt(link_down_retry_cnt: %d, cto_retry_cnt: %d)!!!\n",
 				mc->pcie_linkdown_retry_cnt, mc->pcie_cto_retry_cnt);
 	else
-		exynos_pcie_rc_force_linkdown_work(s51xx_pcie->pcie_channel_num);
+		pcie_force_linkdown_work(s51xx_pcie->pcie_channel_num);
 
 	return 0;
 }
@@ -300,12 +296,12 @@ void s51xx_pcie_restore_state(struct pci_dev *pdev, bool boot_on,
 
 int s51xx_check_pcie_link_status(int ch_num)
 {
-	return exynos_pcie_rc_chk_link_status(ch_num);
+	return pcie_check_link_status(ch_num);
 }
 
 void s51xx_pcie_l1ss_ctrl(int enable, int ch_num)
 {
-	exynos_pcie_rc_l1ss_ctrl(enable, PCIE_L1SS_CTRL_MODEM_IF, ch_num);
+	pcie_l1ss_ctrl(enable, ch_num);
 }
 
 void disable_msi_int(struct pci_dev *pdev)
@@ -339,7 +335,7 @@ int s51xx_pcie_request_msi_int(struct pci_dev *pdev, int int_num)
 	return pdev->irq;
 }
 
-static void s51xx_pcie_event_cb(struct exynos_pcie_notify *noti)
+static void s51xx_pcie_event_cb(pcie_notify_t *noti)
 {
 	struct pci_dev *pdev = (struct pci_dev *)noti->user;
 	struct pci_driver *driver = pdev->driver;
@@ -351,7 +347,7 @@ static void s51xx_pcie_event_cb(struct exynos_pcie_notify *noti)
 	if (event & EXYNOS_PCIE_EVENT_LINKDOWN) {
 		if (mc->pcie_powered_on == false) {
 			mif_info("skip cp crash during dislink sequence\n");
-			exynos_pcie_set_perst_gpio(mc->pcie_ch_num, 0);
+			pcie_set_perst_gpio(mc->pcie_ch_num, 0);
 			return;
 		}
 
@@ -364,7 +360,7 @@ static void s51xx_pcie_event_cb(struct exynos_pcie_notify *noti)
 			queue_work_on(2, mc->wakeup_wq, &mc->wakeup_work);
 		} else {
 			mif_err("[%d] force crash !!!\n", mc->pcie_linkdown_retry_cnt);
-			exynos_pcie_rc_dump_all_status(mc->pcie_ch_num);
+			pcie_dump_all_status(mc->pcie_ch_num);
 			s5100_force_crash_exit_ext(CRASH_REASON_PCIE_LINKDOWN_ERROR);
 		}
 	} else if (event & EXYNOS_PCIE_EVENT_CPL_TIMEOUT) {
@@ -376,7 +372,7 @@ static void s51xx_pcie_event_cb(struct exynos_pcie_notify *noti)
 			queue_work_on(2, mc->wakeup_wq, &mc->wakeup_work);
 		} else {
 			mif_err("[%d] force crash !!!\n", mc->pcie_cto_retry_cnt);
-			exynos_pcie_rc_dump_all_status(mc->pcie_ch_num);
+			pcie_dump_all_status(mc->pcie_ch_num);
 			s5100_force_crash_exit_ext(CRASH_REASON_PCIE_CPL_TIMEOUT_ERROR);
 		}
 	}
@@ -484,7 +480,7 @@ static int s51xx_pcie_probe(struct pci_dev *pdev, const struct pci_device_id *en
 	s51xx_pcie->pcie_event.user = pdev;
 	s51xx_pcie->pcie_event.mode = EXYNOS_PCIE_TRIGGER_CALLBACK;
 	s51xx_pcie->pcie_event.callback = s51xx_pcie_event_cb;
-	exynos_pcie_register_event(&s51xx_pcie->pcie_event);
+	pcie_register_event(&s51xx_pcie->pcie_event);
 
 	mif_info("Enable PCI device...\n");
 	ret = pci_enable_device(pdev);

@@ -120,6 +120,13 @@ config CPIF_TP_MONITOR
 	help
 	  This enables CP network throughput monitor
 
+config LINK_DEVICE_PCIE_SOC_EXYNOS
+	bool "Support for Exynos SOC PCIE"
+	depends on LINK_DEVICE_PCIE
+	default n
+	help
+	  PCIE support on Exynos SOC
+
 config LINK_DEVICE_PCIE_IOCC
 	bool "Use PCIE IOCC"
 	depends on LINK_DEVICE_PCIE
