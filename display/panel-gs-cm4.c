@@ -318,7 +318,7 @@ static void cm4_update_te2_internal(struct gs_panel *ctx, bool lock)
 	rising = timing.rising_edge;
 	falling = timing.falling_edge;
 
-	ctx->te2.option = (option == CM4_TE2_FIXED) ? GTE2_OPT_FIXED : GTE2_OPT_CHANGEABLE;
+	ctx->te2.option = (option == CM4_TE2_FIXED) ? TEX_OPT_FIXED : TEX_OPT_CHANGEABLE;
 
 	dev_dbg(dev, "TE2 updated: %s mode, option %s, idle %s, rising=0x%X falling=0x%X\n",
 		test_bit(FEAT_OP_NS, ctx->sw_status.feat) ? "NS" : "HS",
@@ -519,7 +519,7 @@ static void cm4_set_panel_feat(struct gs_panel *ctx, const struct gs_panel_mode 
 				GS_DCS_BUF_ADD_CMD(dev, 0xB9, val);
 #endif
 			}
-
+			ctx->te_opt = TEX_OPT_FIXED;
 		} else {
 			/* Changeable TE */
 			GS_DCS_BUF_ADD_CMD(dev, 0xB9, 0x04);
@@ -529,6 +529,7 @@ static void cm4_set_panel_feat(struct gs_panel *ctx, const struct gs_panel_mode 
 				GS_DCS_BUF_ADD_CMD(dev, 0xB9, 0x0B, 0x1E, 0x00, 0x1F);
 			else
 				GS_DCS_BUF_ADD_CMD(dev, 0xB9, 0x0B, 0x0E, 0x00, 0x1F);
+			ctx->te_opt = TEX_OPT_CHANGEABLE;
 		}
 	}
 
@@ -771,6 +772,7 @@ static void cm4_set_panel_feat(struct gs_panel *ctx, const struct gs_panel_mode 
 	ctx->hw_status.vrefresh = vrefresh;
 	ctx->hw_status.idle_vrefresh = idle_vrefresh;
 	ctx->hw_status.te_freq = te_freq;
+	ctx->te_freq = te_freq;
 	bitmap_copy(ctx->hw_status.feat, feat, FEAT_MAX);
 }
 
@@ -1250,6 +1252,8 @@ static void cm4_set_lp_mode(struct gs_panel *ctx, const struct gs_panel_mode *pm
 
 	ctx->hw_status.vrefresh = 30;
 	ctx->hw_status.te_freq = 30;
+	ctx->te_freq = 30;
+	ctx->te_opt = TEX_OPT_FIXED;
 
 	DPU_ATRACE_END(__func__);
 
