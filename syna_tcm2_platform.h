@@ -171,7 +171,7 @@ struct syna_hw_interface {
 	struct syna_hw_attn_data bdata_attn;
 	struct syna_hw_rst_data bdata_rst;
 	struct syna_hw_pwr_data bdata_pwr;
-	const char *fw_name;
+	char fw_name[LIMIT_NAME_LEN];
 	char pt05_high_limit_name[LIMIT_NAME_LEN];
 	char pt05_low_limit_name[LIMIT_NAME_LEN];
 	char pt05_gap_x_limit_name[LIMIT_NAME_LEN];

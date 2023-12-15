@@ -668,9 +668,6 @@ static int syna_tcm_v1_continued_read(struct tcm_dev *tcm_dev,
 		return -ERR_INVAL;
 	}
 
-	/* delay for the bus turnaround time */
-	syna_pal_sleep_us(TAT_DELAY_US_MIN, TAT_DELAY_US_MAX);
-
 	/* continued read packet contains the header, payload, and a padding */
 	total_length = MESSAGE_HEADER_SIZE + tcm_msg->payload_length + 1;
 	/* length to read, remember a padding at the end */
@@ -731,6 +728,9 @@ static int syna_tcm_v1_continued_read(struct tcm_dev *tcm_dev,
 			remaining_length -= xfer_length;
 			continue;
 		}
+
+		/* delay for the bus turnaround time */
+		syna_pal_sleep_us(TAT_DELAY_US_MIN, TAT_DELAY_US_MAX);
 
 		/* allocate the internal temp buffer */
 		retval = syna_tcm_buf_alloc(&tcm_msg->temp,

@@ -2485,18 +2485,23 @@ static int syna_dev_set_up_app_fw(struct syna_tcm *tcm)
  */
 static void syna_dev_reflash_startup_work(struct work_struct *work)
 {
-	int retval;
+	int retval, i;
+	int suffix_fw_name_count = 0;
 	struct delayed_work *delayed_work;
 	struct syna_tcm *tcm;
 	struct tcm_dev *tcm_dev;
+	struct device_node *np;
+	struct property *prop;
 	const struct firmware *fw_entry = NULL;
 	const unsigned char *fw_image = NULL;
+	const char *suffix_fw_name = NULL;
 	unsigned int fw_image_size;
 
 	delayed_work = container_of(work, struct delayed_work, work);
 	tcm = container_of(delayed_work, struct syna_tcm, reflash_work);
 
 	tcm_dev = tcm->tcm_dev;
+	np = tcm->pdev->dev.parent->of_node;
 
 	pm_stay_awake(&tcm->pdev->dev);
 
@@ -2509,6 +2514,22 @@ static void syna_dev_reflash_startup_work(struct work_struct *work)
 		tcm->hw_if->ops_enable_irq(tcm->hw_if, true);
 	}
 #endif
+
+	prop = of_find_property(np, "synaptics,suffix-fw-name", NULL);
+	if (prop && prop->length) {
+		suffix_fw_name_count = of_property_count_strings(np, "synaptics,suffix-fw-name");
+		for (i = 0; i < suffix_fw_name_count; i++) {
+			of_property_read_string_index(np, "synaptics,suffix-fw-name", i,
+					&suffix_fw_name);
+			if (strncmp(tcm_dev->id_info.part_number, suffix_fw_name,
+					strlen(suffix_fw_name)) == 0) {
+				strcat(tcm->hw_if->fw_name, "_");
+				strcat(tcm->hw_if->fw_name, suffix_fw_name);
+				break;
+			}
+		}
+	}
+	LOGI("Firmware name %s for %s", tcm->hw_if->fw_name, tcm_dev->id_info.part_number);
 
 	/* get firmware image */
 	retval = request_firmware(&fw_entry,

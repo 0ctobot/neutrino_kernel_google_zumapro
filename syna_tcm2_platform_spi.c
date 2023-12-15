@@ -446,11 +446,13 @@ static int syna_spi_parse_dt(struct syna_hw_interface *hw_if,
 				retval = of_property_read_string_index(np,
 								       "synaptics,firmware_names",
 								       index, &name);
-				if (retval < 0)
-					hw_if->fw_name = FW_IMAGE_NAME;
-				else
-					hw_if->fw_name = name;
-				LOGI("Firmware name %s", hw_if->fw_name);
+				if (retval < 0) {
+					strncpy(hw_if->fw_name, FW_IMAGE_NAME,
+							sizeof(hw_if->fw_name));
+				} else {
+					strncpy(hw_if->fw_name, name, sizeof(hw_if->fw_name));
+				}
+				LOGD("Firmware name %s from device tree", hw_if->fw_name);
 
 				retval = of_property_read_u32_index(np, "synaptics,test_algo",
 						index, &value);
@@ -462,7 +464,7 @@ static int syna_spi_parse_dt(struct syna_hw_interface *hw_if,
 			}
 		}
 	} else {
-		hw_if->fw_name = FW_IMAGE_NAME;
+		strncpy(hw_if->fw_name, FW_IMAGE_NAME, sizeof(hw_if->fw_name));
 	}
 
 	syna_parse_test_limit_name(hw_if, np, index);
