@@ -33,6 +33,8 @@ extern int exynos_pcie_get_max_link_width(int ch_num);
 extern int exynos_pcie_rc_change_link_speed(int ch_num, int target_speed);
 extern void exynos_pcie_set_perst_gpio(int ch_num, bool on);
 extern void exynos_pcie_set_ready_cto_recovery(int ch_num);
+extern int register_separated_msi_vector(int ch_num, irq_handler_t handler,
+					 void *context, int *irq_num);
 
 #define pcie_register_event(event) exynos_pcie_register_event(event)
 #define pcie_deregister_event(event) exynos_pcie_deregister_event(event)
@@ -57,4 +59,7 @@ extern void exynos_pcie_set_ready_cto_recovery(int ch_num);
 #define pcie_change_link_speed(ch, spd) exynos_pcie_rc_change_link_speed(ch, spd)
 #define pcie_set_perst_gpio(ch, on) exynos_pcie_set_perst_gpio(ch, on)
 #define pcie_set_ready_cto_recovery(ch) exynos_pcie_set_ready_cto_recovery(ch)
+#define pcie_register_separated_msi_vector(ch, handler, context, irq) \
+	register_separated_msi_vector(ch, handler, context, irq)
+
 #endif

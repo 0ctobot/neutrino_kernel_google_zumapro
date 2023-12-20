@@ -828,8 +828,8 @@ static int request_pcie_int(struct link_device *ld, struct platform_device *pdev
 		for (i = 0; i < ppa->num_queue; i++) {
 			struct pktproc_queue *q = ppa->q[i];
 
-			ret = register_separated_msi_vector(mc->pcie_ch_num, q->irq_handler, q,
-							    &q->irq);
+			ret = pcie_register_separated_msi_vector(mc->pcie_ch_num, q->irq_handler,
+								 q, &q->irq);
 			if (ret < 0) {
 				mif_err("register_separated_msi_vector for pktproc q[%u] err:%d\n",
 					i, ret);

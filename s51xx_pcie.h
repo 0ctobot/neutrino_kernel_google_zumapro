@@ -34,10 +34,6 @@ struct s51xx_pcie {
 	struct pci_saved_state *pci_saved_configs;
 };
 
-extern int register_separated_msi_vector(int ch_num,
-					 irq_handler_t handler, void *context,
-					 int *irq_num);
-
 #define AUTOSUSPEND_TIMEOUT	200
 
 /* AoC PCIe window used for voice calls, to be provided to S2MPU
