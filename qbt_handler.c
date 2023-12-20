@@ -676,6 +676,19 @@ static long qbt_ioctl(
 			pr_debug("INTR2 GPIO is not available\n");
 		break;
 	}
+	case QBT_LPTW_TOUCH:
+	{
+		struct qbt_test_touch touch;
+		pr_debug("QBT LPTW Touch ioctl\n");
+		if (copy_from_user(&touch, priv_arg, sizeof(touch)) != 0) {
+			rc = -EFAULT;
+			pr_err("failed copy from user space %d\n", rc);
+			goto end;
+		}
+		pr_debug("x=%d y=%d state=%d", touch.x, touch.y, touch.state);
+		qbt_lptw_report_event(touch.x, touch.y, touch.state);
+		break;
+	}
 	default:
 		pr_err("invalid cmd %d\n", cmd);
 		rc = -ENOIOCTLCMD;

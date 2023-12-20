@@ -27,6 +27,8 @@
 #define QBT_INTR2_TEST            111
 #define QBT_CONFIGURE_TOUCH_FD_V3 112
 
+#define QBT_LPTW_TOUCH            1000
+
 /*
  * enum qbt_finger_events -
  *      enumeration of qbt finger events
@@ -154,6 +156,19 @@ struct qbt_touch_config_v3 {
  */
 struct qbt_intr2_test {
 	__s32 state;
+};
+
+/*
+ * struct qbt_test_touch -
+ *		used to receive injected touches from HLOS
+ *	@x - x coordinate of lptw gesture centroid
+ *	@y - y coordinate of lptw getsure centroid
+ *	@state - 0 = up, 1 = down, 2 = move
+ */
+struct qbt_test_touch {
+	int x;
+	int y;
+	int state;
 };
 
 /**
