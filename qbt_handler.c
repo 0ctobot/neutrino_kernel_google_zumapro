@@ -118,6 +118,10 @@ struct qbt_drvdata {
 static void qbt_fd_report_event(struct qbt_drvdata *drvdata,
 		struct fd_event *event)
 {
+	if (!drvdata || !event) {
+		pr_err("NULL ptr passed\n");
+		return;
+	}
 	mutex_lock(&drvdata->fd_events_mutex);
 	if (!kfifo_put(&drvdata->fd_events, *event)) {
 		pr_err("FD events fifo: error adding item\n");
@@ -964,6 +968,21 @@ static void qbt_gpio_report_event(struct qbt_drvdata *drvdata, int state)
 	event.timestamp = ktime_to_timespec64(ktime_get());
 	qbt_fd_report_event(drvdata, &event);
 }
+void qbt_lptw_report_event(int x, int y, int state) {
+	struct fd_event event;
+	memset(&event, 0, sizeof(event));
+	pr_debug("lptw touch: x=%d y=%d state=%d", x, y, state);
+	event.X = x;
+	event.Y = y;
+	// LPTW finger will always be first finger down.
+	event.id = 0;
+	event.state = state;
+	event.touch_valid = true;
+	event.timestamp = ktime_to_timespec64(ktime_get());
+
+	qbt_fd_report_event(qbt_touch_handler.private, &event);
+}
+EXPORT_SYMBOL_GPL(qbt_lptw_report_event);
 static void qbt_gpio_work_func(struct work_struct *work)
 {
 	int state;

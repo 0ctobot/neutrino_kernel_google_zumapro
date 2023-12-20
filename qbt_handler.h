@@ -155,4 +155,13 @@ struct qbt_touch_config_v3 {
 struct qbt_intr2_test {
 	__s32 state;
 };
+
+/**
+ * @brief Called to report a lptw gesture as a touch.
+ *
+ * @param x x coordinate of the lptw gesture centroid.
+ * @param y y coordinate of the lptw gesture centroid.
+ * @param state 0 = up, 1 = down, 2 = move
+ */
+void qbt_lptw_report_event(int x, int y, int state);
 #endif /* _UAPI_QBT_HANDLER_H_ */
