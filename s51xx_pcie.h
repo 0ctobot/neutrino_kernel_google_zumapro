@@ -8,7 +8,10 @@
 #define __S51xx_PCIE_H__
 
 #include <linux/exynos-pci-noti.h>
-#include "cpif_pcie_shim.h"
+
+#if IS_ENABLED(CONFIG_LINK_DEVICE_PCIE_SOC_EXYNOS)
+#include "cpif_pcie_shim_exynos.h"
+#endif
 
 #define MAX_MSI_NUM	(16)
 

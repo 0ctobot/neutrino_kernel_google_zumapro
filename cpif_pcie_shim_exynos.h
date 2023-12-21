@@ -1,12 +1,11 @@
 /* SPDX-License-Identifier: GPL-2.0-only */
 /*
- * cpif shim layer for PCIE
+ * cpif shim layer for exynos SOC PCIE
  *
  * Copyright 2023, Google LLC
  *
  */
 
-#if IS_ENABLED(CONFIG_LINK_DEVICE_PCIE_SOC_EXYNOS)
 #include <linux/exynos-pci-ctrl.h>
 #include <linux/exynos-pci-noti.h>
 
@@ -61,5 +60,3 @@ extern int register_separated_msi_vector(int ch_num, irq_handler_t handler,
 #define pcie_set_ready_cto_recovery(ch) exynos_pcie_set_ready_cto_recovery(ch)
 #define pcie_register_separated_msi_vector(ch, handler, context, irq) \
 	register_separated_msi_vector(ch, handler, context, irq)
-
-#endif
