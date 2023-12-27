@@ -790,7 +790,7 @@ static int syna_set_screen_protector_mode(void *private_data,
 		queue_work(tcm->event_wq, &tcm->set_screen_protector_mode_work);
 	} else {
 		LOGI("%s screen protector mode.\n",
-				(tcm->enable_fw_grip & 0x01) ? "Enable" : "Disable");
+				tcm->high_sensitivity_mode ? "Enable" : "Disable");
 		syna_tcm_set_dynamic_config(tcm->tcm_dev,
 				DC_HIGH_SENSITIVIRY_MODE,
 				tcm->high_sensitivity_mode,
