@@ -773,8 +773,6 @@ static int syna_spi_parse_dt(struct syna_hw_interface *hw_if,
 		hw_if->grip_border_threshold = 50;
 	}
 
-	hw_if->dynamic_report_rate = of_property_read_bool(np,"synaptics,dynamic-report-rate");
-
 #if IS_ENABLED(CONFIG_GOOG_TOUCH_INTERFACE)
 	if (of_property_read_u32_array(np, "synaptics,udfps-coords", coords, 2)) {
 		dev_err(dev, "synaptics,udfps-coords not found\n");

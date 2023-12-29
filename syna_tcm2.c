@@ -1357,40 +1357,6 @@ static void syna_dev_restore_feature_setting(struct syna_tcm *tcm, unsigned int 
 			DC_GRIP_BORDER_THRESHOLD,
 			tcm->hw_if->grip_border_threshold,
 			delay_ms_resp);
-
-	if (tcm->hw_if->dynamic_report_rate) {
-		syna_tcm_set_dynamic_config(tcm->tcm_dev,
-				DC_REPORT_RATE_SWITCH,
-				tcm->touch_report_rate_config,
-				delay_ms_resp);
-	}
-}
-
-static void syna_set_report_rate_work(struct work_struct *work)
-{
-	struct syna_tcm *tcm;
-	struct delayed_work *delayed_work;
-	delayed_work = container_of(work, struct delayed_work, work);
-	tcm = container_of(delayed_work, struct syna_tcm, set_report_rate_work);
-
-	if (tcm->pwr_state != PWR_ON) {
-		LOGI("Touch is already off.");
-		return;
-	}
-
-	if (tcm->touch_count != 0) {
-		queue_delayed_work(tcm->event_wq, &tcm->set_report_rate_work,
-				msecs_to_jiffies(10));
-		return;
-	}
-
-	tcm->touch_report_rate_config = tcm->next_report_rate_config;
-	syna_tcm_set_dynamic_config(tcm->tcm_dev,
-			DC_REPORT_RATE_SWITCH,
-			tcm->touch_report_rate_config,
-			RESP_IN_ATTN);
-	LOGI("Set touch report rate as %dHz",
-		(tcm->touch_report_rate_config == CONFIG_HIGH_REPORT_RATE) ? 240 : 120);
 }
 
 #if defined(ENABLE_HELPER)
@@ -2997,9 +2963,6 @@ static int syna_dev_suspend(struct device *dev)
 
 	LOGI("Prepare to suspend device\n");
 
-	if (tcm->hw_if->dynamic_report_rate)
-		cancel_delayed_work_sync(&tcm->set_report_rate_work);
-
 #if !IS_ENABLED(CONFIG_GOOG_TOUCH_INTERFACE)
 	/* clear all input events  */
 	syna_dev_free_input_events(tcm);
@@ -3530,9 +3493,6 @@ static int syna_dev_probe(struct platform_device *pdev)
 	init_completion(&tcm->raw_data_completion);
 	complete_all(&tcm->raw_data_completion);
 
-	tcm->touch_report_rate_config = CONFIG_HIGH_REPORT_RATE;
-	INIT_DELAYED_WORK(&tcm->set_report_rate_work, syna_set_report_rate_work);
-
 	tcm->enable_fw_grip = 0x02;
 	tcm->enable_fw_palm = 0x02;
 
@@ -3663,7 +3623,6 @@ static int syna_dev_remove(struct platform_device *pdev)
 	cancel_work_sync(&tcm->set_screen_protector_mode_work);
 	cancel_work_sync(&tcm->set_continuous_report_work);
 #endif
-	cancel_delayed_work_sync(&tcm->set_report_rate_work);
 
 #if defined(ENABLE_DISP_NOTIFIER)
 #if defined(USE_DRM_PANEL_NOTIFIER)

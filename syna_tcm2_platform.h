@@ -199,7 +199,6 @@ struct syna_hw_interface {
 	int udfps_y;
 #endif
 	bool dma_mode;
-	bool dynamic_report_rate;
 
 	/* Operation to read data from bus
 	 *
