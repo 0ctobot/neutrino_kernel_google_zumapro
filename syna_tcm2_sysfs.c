@@ -1004,7 +1004,7 @@ static ssize_t syna_sysfs_high_sensitivity_store(struct kobject *kobj,
 #endif
 
 	retval = syna_tcm_set_dynamic_config(tcm->tcm_dev,
-				DC_HIGH_SENSITIVIRY_MODE,
+				DC_HIGH_SENSITIVITY_MODE,
 				input,
 				RESP_IN_ATTN);
 

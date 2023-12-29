@@ -782,7 +782,7 @@ static int syna_set_screen_protector_mode(void *private_data,
 		LOGI("%s screen protector mode.\n",
 				tcm->high_sensitivity_mode ? "Enable" : "Disable");
 		syna_tcm_set_dynamic_config(tcm->tcm_dev,
-				DC_HIGH_SENSITIVIRY_MODE,
+				DC_HIGH_SENSITIVITY_MODE,
 				tcm->high_sensitivity_mode,
 				RESP_IN_POLLING);
 	}
@@ -802,7 +802,7 @@ static int syna_get_screen_protector_mode(void *private_data,
 		return -EPERM;
 	}
 
-	retval = syna_tcm_get_dynamic_config(tcm->tcm_dev, DC_HIGH_SENSITIVIRY_MODE,
+	retval = syna_tcm_get_dynamic_config(tcm->tcm_dev, DC_HIGH_SENSITIVITY_MODE,
 			&screen_protector_mode, RESP_IN_POLLING);
 	if (retval < 0) {
 		LOGE("Fail to read screen protector mode.");
@@ -829,7 +829,7 @@ static void syna_set_screen_protector_mode_work(struct work_struct *work)
 	LOGI("%s screen protector mode.\n",
 		tcm->high_sensitivity_mode ? "Enable" : "Disable");
 	syna_tcm_set_dynamic_config(tcm->tcm_dev,
-			DC_HIGH_SENSITIVIRY_MODE,
+			DC_HIGH_SENSITIVITY_MODE,
 			tcm->high_sensitivity_mode,
 			RESP_IN_ATTN);
 
@@ -2740,99 +2740,6 @@ static int syna_pinctrl_configure(struct syna_tcm *tcm, bool enable)
 	return 0;
 }
 
-#if IS_ENABLED(CONFIG_GOOG_TOUCH_INTERFACE)
-/*
- * Report a finger down event on the long press gesture area then immediately
- * report a cancel event(MT_TOOL_PALM).
- */
-static void syna_report_cancel_event(struct syna_tcm *tcm)
-{
-	LOGI("Report cancel event for UDFPS");
-
-	goog_input_lock(tcm->gti);
-
-	/* Finger down on UDFPS area. */
-	input_mt_slot(tcm->input_dev, 0);
-	input_report_key(tcm->input_dev, BTN_TOUCH, 1);
-	input_mt_report_slot_state(tcm->input_dev, MT_TOOL_FINGER, 1);
-	input_report_abs(tcm->input_dev, ABS_MT_POSITION_X, tcm->hw_if->udfps_x);
-	input_report_abs(tcm->input_dev, ABS_MT_POSITION_Y, tcm->hw_if->udfps_y);
-	input_report_abs(tcm->input_dev, ABS_MT_TOUCH_MAJOR, 200);
-	input_report_abs(tcm->input_dev, ABS_MT_TOUCH_MINOR, 200);
-#ifndef SKIP_PRESSURE
-	input_report_abs(tcm->input_dev, ABS_MT_PRESSURE, 1);
-#endif
-	input_report_abs(tcm->input_dev, ABS_MT_ORIENTATION, 0);
-	input_sync(tcm->input_dev);
-
-	/* Report MT_TOOL_PALM for canceling the touch event. */
-	input_mt_slot(tcm->input_dev, 0);
-	input_report_key(tcm->input_dev, BTN_TOUCH, 1);
-	input_mt_report_slot_state(tcm->input_dev, MT_TOOL_PALM, 1);
-	input_sync(tcm->input_dev);
-
-	/* Release touches. */
-	input_mt_slot(tcm->input_dev, 0);
-	input_report_abs(tcm->input_dev, ABS_MT_PRESSURE, 0);
-	input_mt_report_slot_state(tcm->input_dev, MT_TOOL_FINGER, 0);
-	input_report_abs(tcm->input_dev, ABS_MT_TRACKING_ID, -1);
-	input_report_key(tcm->input_dev, BTN_TOUCH, 0);
-	input_sync(tcm->input_dev);
-
-	goog_input_unlock(tcm->gti);
-}
-
-static void syna_check_finger_status(struct syna_tcm *tcm)
-{
-	int retval = 0;
-	unsigned char code = 0;
-	u16 touch_mode, x, y, major, minor;
-	struct syna_hw_attn_data *attn = &tcm->hw_if->bdata_attn;
-	ktime_t timeout = ktime_add_ms(ktime_get(), 500);
-	LOGI("Check finger status");
-
-	while (ktime_get() < timeout) {
-		/* Clear the FIFO if there is pending data. */
-		if (gpio_get_value(attn->irq_gpio) == attn->irq_on_state) {
-			retval = tcm->tcm_dev->read_message(tcm->tcm_dev, &code);
-			continue;
-		}
-
-		retval = syna_tcm_get_dynamic_config(tcm->tcm_dev, DC_TOUCH_SCAN_MODE,
-				&touch_mode, RESP_IN_POLLING);
-		if (retval < 0)
-			continue;
-
-		if (touch_mode != SCAN_LPWG_IDLE && touch_mode != SCAN_LPWG_ACTIVE)
-			return;
-
-		LOGI("Poll finger events.");
-		while (ktime_get() < timeout) {
-			msleep(30);
-			syna_tcm_get_event_data(tcm->tcm_dev,
-				&code,
-				&tcm->event_data);
-			if (code == REPORT_TOUCH) {
-				x = syna_pal_le2_to_uint(&tcm->event_data.buf[1]);
-				y = syna_pal_le2_to_uint(&tcm->event_data.buf[3]);
-				major = tcm->event_data.buf[4];
-				minor = tcm->event_data.buf[5];
-				/* Touch reports coordinates and major/minor 0
-				 * when the finger leaves.
-				 */
-				if (x==0 && y==0 && major==0 && minor==0) {
-					syna_report_cancel_event(tcm);
-					return;
-				}
-			} else if (code == STATUS_INVALID) {
-				syna_report_cancel_event(tcm);
-				return;
-			}
-		}
-	}
-}
-#endif
-
 /*
  * syna_dev_resume()
  *
@@ -2863,11 +2770,6 @@ static int syna_dev_resume(struct device *dev)
 	LOGI("Prepare to resume device\n");
 
 	syna_pinctrl_configure(tcm, true);
-
-#if IS_ENABLED(CONFIG_GOOG_TOUCH_INTERFACE)
-	if (hw_if->udfps_x != 0 && hw_if->udfps_y != 0)
-		syna_check_finger_status(tcm);
-#endif
 
 #if !IS_ENABLED(CONFIG_GOOG_TOUCH_INTERFACE)
 	/* clear all input events  */
