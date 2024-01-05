@@ -2,6 +2,27 @@
 
 load("//build/kernel/kleaf:kernel.bzl", "kernel_module")
 
+filegroup(
+    name = "headers",
+    srcs = glob([
+        "**/*.h",
+    ]),
+    visibility = [
+        "//private/google-modules/touch:__subpackages__",
+    ],
+)
+
+filegroup(
+    name = "qbt_handler.kconfig",
+    srcs = [
+        "Kconfig",
+    ],
+    visibility = [
+        "//private/devices/google:__subpackages__",
+        "//private/google-modules/soc/gs:__pkg__",
+    ],
+)
+
 kernel_module(
     name = "qbt_handler",
     srcs = glob([
