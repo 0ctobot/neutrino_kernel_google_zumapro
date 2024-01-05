@@ -5,6 +5,10 @@ SUBLEVEL = 113
 EXTRAVERSION =
 NAME = Curry Ramen
 
+export KCONFIG_EXT_PREFIX := google-devices/caimito/
+export KCONFIG_EXT_MODULES_PREFIX := ./
+export KCONFIG_SOC_GS_PREFIX := google-modules/soc/gs/
+
 ifeq ($(MAKECMDGOALS),)
 MAKECMDGOALS := Image.lz4 dtbs
 endif
