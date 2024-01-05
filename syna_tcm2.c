@@ -3195,9 +3195,12 @@ static int syna_dev_disconnect(struct syna_tcm *tcm)
 	}
 
 #ifdef STARTUP_REFLASH
-	cancel_delayed_work_sync(&tcm->reflash_work);
-	flush_workqueue(tcm->reflash_workqueue);
-	destroy_workqueue(tcm->reflash_workqueue);
+	if (tcm->reflash_workqueue) {
+		cancel_delayed_work_sync(&tcm->reflash_work);
+		flush_workqueue(tcm->reflash_workqueue);
+		destroy_workqueue(tcm->reflash_workqueue);
+		tcm->reflash_workqueue = NULL;
+	}
 #endif
 
 	/* free interrupt line */
@@ -3510,25 +3513,6 @@ static int syna_dev_probe(struct platform_device *pdev)
 	tcm->enable_fw_grip = 0x02;
 	tcm->enable_fw_palm = 0x02;
 
-	retval = syna_dev_request_irq(tcm);
-	if (retval < 0) {
-		LOGE("Fail to request the interrupt line\n");
-		goto err_request_irq;
-	}
-
-	/* for the reference,
-	 * create a delayed work to perform fw update during the startup time
-	 */
-#ifdef STARTUP_REFLASH
-	tcm->force_reflash = false;
-	tcm->reflash_count = 0;
-	tcm->reflash_workqueue =
-			create_singlethread_workqueue("syna_reflash");
-	INIT_DELAYED_WORK(&tcm->reflash_work, syna_dev_reflash_startup_work);
-	queue_delayed_work(tcm->reflash_workqueue, &tcm->reflash_work,
-			msecs_to_jiffies(STARTUP_REFLASH_DELAY_TIME_MS));
-#endif
-
 #ifdef HAS_SYSFS_INTERFACE
 	/* create the device file and register to char device classes */
 	retval = syna_cdev_create(tcm, pdev);
@@ -3575,6 +3559,25 @@ static int syna_dev_probe(struct platform_device *pdev)
 			(void *)tcm);
 #endif
 
+	retval = syna_dev_request_irq(tcm);
+	if (retval < 0) {
+		LOGE("Fail to request the interrupt line\n");
+		goto err_request_irq;
+	}
+
+	/* for the reference,
+	 * create a delayed work to perform fw update during the startup time
+	 */
+#ifdef STARTUP_REFLASH
+	tcm->force_reflash = false;
+	tcm->reflash_count = 0;
+	tcm->reflash_workqueue =
+			create_singlethread_workqueue("syna_reflash");
+	INIT_DELAYED_WORK(&tcm->reflash_work, syna_dev_reflash_startup_work);
+	queue_delayed_work(tcm->reflash_workqueue, &tcm->reflash_work,
+			msecs_to_jiffies(STARTUP_REFLASH_DELAY_TIME_MS));
+#endif
+
 	LOGI("%s: TouchComm driver, %s ver.: %d.%s, installed\n",
 		__func__,
 		PLATFORM_DRIVER_NAME,
@@ -3583,14 +3586,14 @@ static int syna_dev_probe(struct platform_device *pdev)
 
 	return 0;
 
+err_request_irq:
 #ifdef HAS_SYSFS_INTERFACE
 err_create_cdev:
 	syna_tcm_remove_device(tcm->tcm_dev);
 #endif
-err_request_irq:
+
 #if defined(TCM_CONNECT_IN_PROBE)
 	tcm->dev_disconnect(tcm);
-
 err_connect:
 #endif
 
