@@ -157,6 +157,9 @@ struct modem_data {
 	/* check if cp2ap_active is in alive */
 	u32 cp2ap_active_not_alive;
 
+	/* MIF will be off during VoLTE call and we need to register wrstbi interrupt */
+	u32 mif_off_during_volte;
+
 	/* legacy buffer setting */
 	u32 legacy_fmt_head_tail_offset;
 	u32 legacy_fmt_buffer_offset;
@@ -283,9 +286,7 @@ enum cp_gpio_irq_type {
 	CP_GPIO_IRQ_NONE,
 	CP_GPIO_IRQ_CP2AP_WAKEUP,
 	CP_GPIO_IRQ_CP2AP_CP_ACTIVE,
-#if IS_ENABLED(CONFIG_CPIF_WAKE_IRQ_DURING_VOICE_CALL)
 	CP_GPIO_IRQ_CP2AP_CP_WRST_N,
-#endif
 	CP_GPIO_IRQ_MAX
 };
 

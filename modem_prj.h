@@ -699,9 +699,7 @@ struct modem_ctl {
 
 #if IS_ENABLED(CONFIG_LINK_DEVICE_PCIE)
 	struct irq_chip *apwake_irq_chip;
-#if IS_ENABLED(CONFIG_CPIF_WAKE_IRQ_DURING_VOICE_CALL)
 	struct irq_chip *cp_wrst_irq_chip;
-#endif
 	struct pci_dev *s51xx_pdev;
 	struct workqueue_struct *wakeup_wq;
 	struct work_struct wakeup_work;
@@ -710,9 +708,7 @@ struct modem_ctl {
 	struct work_struct crash_work;
 
 	struct wakeup_source *ws;
-#if IS_ENABLED(CONFIG_CPIF_WAKE_IRQ_DURING_VOICE_CALL)
 	struct wakeup_source *ws_wrst;
-#endif
 	struct mutex pcie_onoff_lock;
 	struct mutex pcie_check_lock;
 	spinlock_t pcie_tx_lock;

@@ -318,6 +318,9 @@ static int parse_dt_common_pdata(struct device_node *np,
 	mif_dt_read_u32_noerr(np, "mif,cp2ap_active_not_alive", pdata->cp2ap_active_not_alive);
 	mif_info("cp2ap_active_not_alive:%d\n", pdata->cp2ap_active_not_alive);
 
+	mif_dt_read_u32_noerr(np, "mif_off_during_volte", pdata->mif_off_during_volte);
+	mif_info("mif_off_during_volte:%d\n", pdata->mif_off_during_volte);
+
 	return 0;
 }
 
