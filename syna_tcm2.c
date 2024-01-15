@@ -2982,6 +2982,10 @@ static int syna_dev_suspend(struct device *dev)
 	if (tcm->pwr_state != PWR_ON)
 		return 0;
 
+#ifdef POWER_ALIVE_AT_SUSPEND
+	tcm->pwr_state = LOW_PWR;
+#endif
+
 	LOGI("Prepare to suspend device\n");
 
 #if !IS_ENABLED(CONFIG_GOOG_TOUCH_INTERFACE)
@@ -3040,7 +3044,6 @@ static int syna_dev_suspend(struct device *dev)
 		if (retval < 0)
 			LOGE("Fail to enter suspended power mode after reset.\n");
 	}
-	tcm->pwr_state = LOW_PWR;
 #else
 	tcm->pwr_state = PWR_OFF;
 #endif
