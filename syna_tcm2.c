@@ -182,19 +182,9 @@ static int syna_dev_enable_lowpwr_gesture(struct syna_tcm *tcm, bool en)
 static int gti_default_handler(void *private_data, enum gti_cmd_type cmd_type,
 	struct gti_union_cmd_data *cmd)
 {
-	int ret = 0;
+	LOGD("Not supported cmd_type %#x!", cmd_type);
 
-	switch (cmd_type) {
-	case GTI_CMD_NOTIFY_DISPLAY_STATE:
-	case GTI_CMD_NOTIFY_DISPLAY_VREFRESH:
-		ret = -EOPNOTSUPP;
-		break;
-	default:
-		ret = -ESRCH;
-		break;
-	}
-
-	return ret;
+	return -EOPNOTSUPP;
 }
 
 static int get_fw_version(void *private_data, struct gti_fw_version_cmd *cmd)
