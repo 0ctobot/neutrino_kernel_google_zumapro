@@ -212,6 +212,14 @@ static long bootdump_ioctl(struct file *filp, unsigned int cmd, unsigned long ar
 			ret = mc->ops.power_reset_partial(mc);
 			break;
 
+		case CP_BOOT_MODE_DUMP_WARM:
+			mif_info("%s: dump warm boot mode\n", iod->name);
+			if (!mc->ops.power_reset_warm) {
+				mif_err("%s: power_reset_warm is null\n", iod->name);
+				return -EINVAL;
+			}
+			ret = mc->ops.power_reset_warm(mc);
+			break;
 		default:
 			mif_err("boot_mode is invalid:%d\n", mode.idx);
 			return -EINVAL;

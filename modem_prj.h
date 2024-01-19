@@ -71,6 +71,8 @@ enum cp_boot_mode {
 	CP_BOOT_MODE_DUMP_BL1,
 	CP_BOOT_MODE_DUMP_BOOTLOADER,
 	CP_BOOT_MODE_DUMP_PARTIAL,
+	CP_BOOT_MODE_DUMP_WARM,
+
 	MAX_CP_BOOT_MODE
 };
 struct boot_mode {
@@ -564,6 +566,7 @@ struct modemctl_ops {
 	int (*power_reset_dump)(struct modem_ctl *mc, bool silent);
 	int (*silent_reset)(struct modem_ctl *mc);
 	int (*power_reset_partial)(struct modem_ctl *mc);
+	int (*power_reset_warm)(struct modem_ctl *mc);
 
 	int (*start_normal_boot)(struct modem_ctl *mc);
 	int (*complete_normal_boot)(struct modem_ctl *mc);
