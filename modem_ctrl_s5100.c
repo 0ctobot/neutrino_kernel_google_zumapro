@@ -1295,6 +1295,59 @@ static int power_reset_dump_cp(struct modem_ctl *mc, bool silent)
 	return 0;
 }
 
+static int power_reset_warm_cp(struct modem_ctl *mc)
+{
+	struct s51xx_pcie *s51xx_pcie = NULL;
+#if IS_ENABLED(CONFIG_LINK_DEVICE_WITH_SBD_ARCH)
+	struct link_device *ld = get_current_link(mc->iod);
+	struct mem_link_device *mld = to_mem_link_device(ld);
+
+	if (ld->sbd_ipc && hrtimer_active(&mld->sbd_print_timer))
+		hrtimer_cancel(&mld->sbd_print_timer);
+#endif
+	mif_info("%s: +++\n", mc->name);
+
+	mc->phone_state = STATE_CRASH_EXIT;
+	mif_disable_irq(&mc->cp_gpio_irq[CP_GPIO_IRQ_CP2AP_CP_ACTIVE]);
+	mif_disable_irq(&mc->cp_gpio_irq[CP_GPIO_IRQ_CP2AP_WAKEUP]);
+
+	/* Prevent AP from suspending during crashdump */
+	if (!cpif_wake_lock_active(mc->ws)) {
+		mif_info("Acquiring wakelock during modem power reset, timeout: %dms!\n",
+			CRASH_WAKELOCK_TIMEOUT_MS);
+		cpif_wake_lock_timeout(mc->ws, msecs_to_jiffies(CRASH_WAKELOCK_TIMEOUT_MS));
+	}
+
+	drain_workqueue(mc->wakeup_wq);
+	pcie_clean_dislink(mc);
+
+	if (mc->s51xx_pdev != NULL)
+		s51xx_pcie = pci_get_drvdata(mc->s51xx_pdev);
+
+	if (s51xx_pcie && s51xx_pcie->link_status == 1) {
+		mif_info("link_satus:%d\n", s51xx_pcie->link_status);
+		s51xx_pcie_save_state(mc->s51xx_pdev);
+		pcie_clean_dislink(mc);
+	}
+
+	mif_info("s5100_cp_reset_required:%d\n", mc->s5100_cp_reset_required);
+	if (mc->s5100_cp_reset_required)
+		gpio_power_offon_cp(mc);
+	else
+		gpio_power_wreset_cp(mc);
+
+	mif_gpio_set_value(&mc->cp_gpio[CP_GPIO_AP2CP_AP_ACTIVE], 1, 0);
+	print_mc_state(mc);
+
+	if (cpif_wake_lock_active(mc->ws)) {
+		mif_info("Release wakelock after modem power reset!\n");
+		cpif_wake_unlock(mc->ws);
+	}
+
+	mif_info("---\n");
+	return 0;
+}
+
 static int power_reset_cp(struct modem_ctl *mc)
 {
 	struct s51xx_pcie *s51xx_pcie = NULL;
@@ -2530,6 +2583,7 @@ static void s5100_get_ops(struct modem_ctl *mc)
 	mc->ops.power_reset_dump = power_reset_dump_cp;
 	mc->ops.silent_reset = silent_reset_cp;
 	mc->ops.power_reset_partial = power_reset_partial_cp;
+	mc->ops.power_reset_warm = power_reset_warm_cp;
 
 	mc->ops.start_normal_boot = start_normal_boot;
 	mc->ops.complete_normal_boot = complete_normal_boot;
