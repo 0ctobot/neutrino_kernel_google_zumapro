@@ -87,11 +87,13 @@ static void print_mc_state(struct modem_ctl *mc)
 	int ap_status = mif_gpio_get_value(&mc->cp_gpio[CP_GPIO_AP2CP_AP_ACTIVE], false);
 	int phone_active = mif_gpio_get_value(&mc->cp_gpio[CP_GPIO_CP2AP_CP_ACTIVE], false);
 	int wrst = mif_gpio_get_value(&mc->cp_gpio[CP_GPIO_CP2AP_CP_WRST_N], false);
+	int partial_reset = mif_gpio_get_value(
+		&mc->cp_gpio[CP_GPIO_AP2CP_PARTIAL_RST_N],false);
 
 	logbuffer_log(mc->log,
-		"%s: %ps:GPIO pwr:%d rst:%d phd:%d c2aw:%d a2cw:%d dmp:%d ap_act:%d cp_act:%d wrst:%d",
+		"%s: %ps:GPIO pwr:%d rst:%d phd:%d c2aw:%d a2cw:%d dmp:%d ap_act:%d cp_act:%d wrst:%d prst:%d",
 		mc->name, CALLER, pwr, reset, pshold, ap_wakeup, cp_wakeup, dump,
-		ap_status, phone_active, wrst);
+		ap_status, phone_active, wrst, partial_reset);
 }
 
 static void pcie_clean_dislink(struct modem_ctl *mc)
@@ -2445,6 +2447,7 @@ static int s5100_get_pdata(struct modem_ctl *mc, struct modem_data *pdata)
 	mc->cp_gpio[CP_GPIO_CP2AP_PS_HOLD].label = "CP2AP_PS_HOLD";
 	mc->cp_gpio[CP_GPIO_CP2AP_WAKEUP].label = "CP2AP_WAKEUP";
 	mc->cp_gpio[CP_GPIO_CP2AP_CP_ACTIVE].label = "CP2AP_CP_ACTIVE";
+	mc->cp_gpio[CP_GPIO_AP2CP_PARTIAL_RST_N].label = "AP2CP_PARTIAL_RST_N";
 
 	/* node name */
 	mc->cp_gpio[CP_GPIO_AP2CP_CP_PWR].node_name = "gpio_ap2cp_cp_pwr_on";
@@ -2460,6 +2463,7 @@ static int s5100_get_pdata(struct modem_ctl *mc, struct modem_data *pdata)
 	mc->cp_gpio[CP_GPIO_CP2AP_PS_HOLD].node_name = "gpio_cp2ap_cp_ps_hold";
 	mc->cp_gpio[CP_GPIO_CP2AP_WAKEUP].node_name = "gpio_cp2ap_wake_up";
 	mc->cp_gpio[CP_GPIO_CP2AP_CP_ACTIVE].node_name = "gpio_cp2ap_phone_active";
+	mc->cp_gpio[CP_GPIO_AP2CP_PARTIAL_RST_N].node_name = "gpio_ap2cp_partial_rst_n";
 
 	/* irq */
 	mc->cp_gpio[CP_GPIO_CP2AP_WAKEUP].irq_type = CP_GPIO_IRQ_CP2AP_WAKEUP;
@@ -2497,7 +2501,7 @@ static int s5100_get_pdata(struct modem_ctl *mc, struct modem_data *pdata)
 	/* validate */
 	for (i = 0; i < CP_GPIO_MAX; i++) {
 		if (!mc->cp_gpio[i].valid) {
-			mif_err("Missing some of GPIOs\n");
+			mif_err("Missing some of GPIOs %s\n", mc->cp_gpio[i].node_name);
 			return -EINVAL;
 		}
 	}
