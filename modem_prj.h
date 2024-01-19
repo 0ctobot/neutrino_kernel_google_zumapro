@@ -512,6 +512,7 @@ struct link_device {
 	int (*read_gnss_image)(struct link_device *ld, struct io_device *iod, unsigned long arg);
 	void (*link_prepare_normal_boot)(struct link_device *ld, struct io_device *iod);
 	int (*link_start_normal_boot)(struct link_device *ld, struct io_device *iod);
+	int (*link_start_partial_boot)(struct link_device *ld, struct io_device *iod);
 
 	void (*link_trigger_cp_crash)(struct mem_link_device *mld, u32 crash_reason_owner,
 			char *crash_reason_string);
@@ -562,6 +563,7 @@ struct modemctl_ops {
 	int (*power_reset)(struct modem_ctl *mc);
 	int (*power_reset_dump)(struct modem_ctl *mc, bool silent);
 	int (*silent_reset)(struct modem_ctl *mc);
+	int (*power_reset_partial)(struct modem_ctl *mc);
 
 	int (*start_normal_boot)(struct modem_ctl *mc);
 	int (*complete_normal_boot)(struct modem_ctl *mc);
