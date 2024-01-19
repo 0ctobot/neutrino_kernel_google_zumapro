@@ -303,6 +303,14 @@ static long bootdump_ioctl(struct file *filp, unsigned int cmd, unsigned long ar
 			}
 			return mc->ops.start_dump_boot_bootloader(mc);
 
+		case CP_BOOT_MODE_DUMP_PARTIAL:
+			mif_info("%s: partial dump boot mode\n", iod->name);
+			if (!mc->ops.start_dump_boot_partial) {
+				mif_err("%s: start_dump_boot_partial is null\n", iod->name);
+				return -EINVAL;
+			}
+			return mc->ops.start_dump_boot_partial(mc);
+
 		default:
 			mif_err("boot_mode is invalid:%d\n", mode.idx);
 			return -EINVAL;
