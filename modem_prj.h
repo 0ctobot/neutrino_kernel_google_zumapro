@@ -70,6 +70,7 @@ enum cp_boot_mode {
 	CP_BOOT_MODE_NORMAL_BOOTLOADER,
 	CP_BOOT_MODE_DUMP_BL1,
 	CP_BOOT_MODE_DUMP_BOOTLOADER,
+	CP_BOOT_MODE_DUMP_PARTIAL,
 	MAX_CP_BOOT_MODE
 };
 struct boot_mode {
@@ -568,6 +569,7 @@ struct modemctl_ops {
 	int (*start_normal_boot_bootloader)(struct modem_ctl *mc);
 	int (*start_dump_boot_bl1)(struct modem_ctl *mc);
 	int (*start_dump_boot_bootloader)(struct modem_ctl *mc);
+	int (*start_dump_boot_partial)(struct modem_ctl *mc);
 
 	int (*trigger_cp_crash)(struct modem_ctl *mc);
 	int (*start_dump_boot)(struct modem_ctl *mc);
