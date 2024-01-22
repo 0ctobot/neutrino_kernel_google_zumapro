@@ -400,6 +400,68 @@ static void syna_parse_test_limit_name(struct syna_hw_interface *hw_if,
 	}
 }
 
+static inline void google_parse_panel_setting(struct syna_hw_interface *hw_if,
+		struct device_node *np, int setting_id)
+{
+	const char *name;
+	u32 value;
+	int retval = 0;
+
+	if (hw_if == NULL || np == NULL)
+		return;
+
+	retval = of_property_read_string_index(np,
+			"synaptics,firmware_names",
+			setting_id, &name);
+	if (retval < 0) {
+		strncpy(hw_if->fw_name, FW_IMAGE_NAME,
+				sizeof(hw_if->fw_name));
+	} else {
+		strncpy(hw_if->fw_name, name, sizeof(hw_if->fw_name));
+	}
+	LOGD("Firmware name %s from device tree", hw_if->fw_name);
+
+	retval = of_property_read_u32_index(np, "synaptics,test_algo",
+			setting_id, &value);
+	if (retval < 0)
+		hw_if->test_algo = 0;
+	else
+		hw_if->test_algo = value;
+}
+
+static inline int google_parse_panel_setting_id(struct syna_hw_interface *hw_if, struct device_node *np)
+{
+	int index = 0;
+	int retval = 0;
+	struct of_phandle_args panelmap;
+	struct drm_panel *panel = NULL;
+
+	if (hw_if == NULL || np == NULL)
+		return -EINVAL;
+
+	if (!of_property_read_bool(np, "synaptics,panel_map")) {
+		strncpy(hw_if->fw_name, FW_IMAGE_NAME, sizeof(hw_if->fw_name));
+		return 0;
+	};
+
+	for (index = 0 ;; index++) {
+		retval = of_parse_phandle_with_fixed_args(np,
+				"synaptics,panel_map",
+				1,
+				index,
+				&panelmap);
+		if (retval)
+			return retval;
+
+		panel = of_drm_find_panel(panelmap.np);
+		of_node_put(panelmap.np);
+		if (IS_ERR_OR_NULL(panel)) {
+			continue;
+		}
+		return panelmap.args[0];
+	}
+}
+
 /*
  * syna_spi_parse_dt()
  *
@@ -418,7 +480,7 @@ static int syna_spi_parse_dt(struct syna_hw_interface *hw_if,
 		struct device *dev)
 {
 	int retval;
-	int index = 0;
+	int setting_id = 0;
 	u32 value;
 	struct property *prop;
 	struct device_node *np = dev->of_node;
@@ -427,46 +489,13 @@ static int syna_spi_parse_dt(struct syna_hw_interface *hw_if,
 	struct syna_hw_pwr_data *pwr = &hw_if->bdata_pwr;
 	struct syna_hw_rst_data *rst = &hw_if->bdata_rst;
 	struct syna_hw_bus_data *bus = &hw_if->bdata_io;
-	struct of_phandle_args panelmap;
-	struct drm_panel *panel = NULL;
 
-	if (of_property_read_bool(np, "synaptics,panel_map")) {
-		for (index = 0 ;; index++) {
-			retval = of_parse_phandle_with_fixed_args(np,
-								  "synaptics,panel_map",
-								  0,
-								  index,
-								  &panelmap);
-			if (retval)
-				return -EPROBE_DEFER;
-			panel = of_drm_find_panel(panelmap.np);
-			of_node_put(panelmap.np);
-			if (!IS_ERR_OR_NULL(panel)) {
-				retval = of_property_read_string_index(np,
-								       "synaptics,firmware_names",
-								       index, &name);
-				if (retval < 0) {
-					strncpy(hw_if->fw_name, FW_IMAGE_NAME,
-							sizeof(hw_if->fw_name));
-				} else {
-					strncpy(hw_if->fw_name, name, sizeof(hw_if->fw_name));
-				}
-				LOGD("Firmware name %s from device tree", hw_if->fw_name);
+	setting_id = google_parse_panel_setting_id(hw_if, np);
+	if (setting_id < 0)
+		return -EPROBE_DEFER;
 
-				retval = of_property_read_u32_index(np, "synaptics,test_algo",
-						index, &value);
-				if (retval < 0)
-					hw_if->test_algo = 0;
-				else
-					hw_if->test_algo = value;
-				break;
-			}
-		}
-	} else {
-		strncpy(hw_if->fw_name, FW_IMAGE_NAME, sizeof(hw_if->fw_name));
-	}
-
-	syna_parse_test_limit_name(hw_if, np, index);
+	google_parse_panel_setting(hw_if, np, setting_id);
+	syna_parse_test_limit_name(hw_if, np, setting_id);
 
 	prop = of_find_property(np, "synaptics,irq-gpio", NULL);
 	if (prop && prop->length) {
