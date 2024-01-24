@@ -291,6 +291,15 @@ bool syna_testing_compare_byte_vector(unsigned char *data,
 	return result;
 }
 
+static int syna_calibrate(void *private_data, struct gti_calibrate_cmd *cmd)
+{
+	(void)private_data;
+
+	/* Return successful calibration since there is nothing to do. */
+	cmd->result = GTI_CALIBRATE_RESULT_DONE;
+	return 0;
+}
+
 static int syna_selftest(void *private_data, struct gti_selftest_cmd *cmd)
 {
 	int retval, i;
@@ -1231,6 +1240,7 @@ static void syna_gti_init(struct syna_tcm *tcm)
 	options->get_irq_mode = get_irq_mode;
 	options->set_irq_mode = set_irq_mode;
 	options->reset = set_reset;
+	options->calibrate = syna_calibrate;
 	options->selftest = syna_selftest;
 	options->get_coord_filter_enabled = syna_get_coord_filter_enabled;
 	options->set_coord_filter_enabled = syna_set_coord_filter_enabled;
