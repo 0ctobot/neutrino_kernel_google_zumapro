@@ -29,7 +29,7 @@
  * DOLLARS.
  */
 
-/**
+/*
  * @file synaptics_touchcom_func_reflash.h
  *
  * This file declares relevant functions and structures for TouchBoot.
@@ -41,7 +41,7 @@
 #include "synaptics_touchcom_core_dev.h"
 #include "synaptics_touchcom_func_base_flash.h"
 
-/**
+/*
  * @section: Blocks to be updated
  */
 enum update_area {
@@ -51,7 +51,7 @@ enum update_area {
 	UPDATE_ALL_BLOCKS,
 };
 
-/**
+/*
  * @section: Data Type in flash memory
  */
 enum flash_data {
@@ -62,7 +62,7 @@ enum flash_data {
 	FLASH_OPEN_SHORT_TUNING_DATA,
 };
 
-/**
+/*
  * @section: Specific data blob for reflash
  *
  * The structure contains various parameters being used in reflash
@@ -81,7 +81,7 @@ struct tcm_reflash_data_blob {
 	struct tcm_buffer out;
 };
 
-/**
+/*
  * syna_tcm_compare_image_id_info()
  *
  * Compare the ID information between device and the image file,
@@ -98,7 +98,7 @@ struct tcm_reflash_data_blob {
 int syna_tcm_compare_image_id_info(struct tcm_dev *tcm_dev,
 		struct tcm_reflash_data_blob *reflash_data);
 
-/**
+/*
  * syna_tcm_read_flash_area()
  *
  * Entry function to read in the data of specific area in the flash memory.
@@ -118,7 +118,7 @@ int syna_tcm_read_flash_area(struct tcm_dev *tcm_dev,
 		enum flash_area area, struct tcm_buffer *rd_data,
 		unsigned int rd_delay_us);
 
-/**
+/*
  * syna_tcm_do_fw_update()
  *
  * The entry function to perform fw update upon TouchBoot.

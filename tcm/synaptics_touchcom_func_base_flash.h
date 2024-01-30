@@ -29,7 +29,7 @@
  * DOLLARS.
  */
 
-/**
+/*
  * @file synaptics_touchcom_func_base_flash.h
  *
  * This file declares the common functions and structures being used in relevant
@@ -41,7 +41,7 @@
 
 #include "synaptics_touchcom_core_dev.h"
 
-/**
+/*
  * @section: Some specific definition in the firmware file
  */
 #define ID_STRING_SIZE (32)
@@ -57,7 +57,7 @@
 #define FLASH_AREA_MAGIC_VALUE (0x7c05e516)
 
 
-/**
+/*
  * @section: Helper macros for firmware file parsing
  */
 #define CRC32(data, length) \
@@ -70,7 +70,7 @@
 	(syna_tcm_get_flash_area_string(area))
 
 
-/**
+/*
  * @section: Area Partitions in firmware
  */
 enum flash_area {
@@ -100,7 +100,7 @@ enum flash_area {
 	/* please add the declarations above */
 	AREA_MAX,
 };
-/**
+/*
  * @section: String of Area Partitions in firmware
  */
 static char *flash_area_str[] = {
@@ -130,7 +130,7 @@ static char *flash_area_str[] = {
 	/* please add the declarations above */
 	NULL
 };
-/**
+/*
  * @section: Header Content of app config defined
  *           in firmware file
  */
@@ -141,7 +141,7 @@ struct app_config_header {
 	unsigned char build_id[4];
 	unsigned char customer_config_id[16];
 };
-/**
+/*
  * @section: The Partition Descriptor defined
  *           in firmware file
  */
@@ -153,7 +153,7 @@ struct area_descriptor {
 	unsigned char length[4];
 	unsigned char checksum[4];
 };
-/**
+/*
  * @section: Structure for the Data Block defined
  *           in firmware file
  */
@@ -164,13 +164,13 @@ struct block_data {
 	unsigned char id;
 	bool available;
 };
-/**
+/*
  * @section: Structure for the Parsed Image File
  */
 struct image_info {
 	struct block_data data[AREA_MAX];
 };
-/**
+/*
  * @section: Header of Image File
  *
  * Define the header of firmware image file
@@ -179,7 +179,7 @@ struct image_header {
 	unsigned char magic_value[4];
 	unsigned char num_of_areas[4];
 };
-/**
+/*
  * @section: Structure for the Parsed iHex File
  */
 struct ihex_info {
@@ -189,7 +189,7 @@ struct ihex_info {
 	struct block_data block[IHEX_MAX_BLOCKS];
 };
 
-/**
+/*
  * syna_tcm_get_flash_area_string()
  *
  * Return the string ID of target area in the flash memory
@@ -208,7 +208,7 @@ static inline char *syna_tcm_get_flash_area_string(enum flash_area area)
 		return "";
 }
 
-/**
+/*
  * syna_tcm_save_flash_block_data()
  *
  * Save the block data of flash memory to the corresponding structure.
@@ -230,19 +230,19 @@ static int syna_tcm_save_flash_block_data(struct image_info *image_info,
 {
 	if (!image_info) {
 		LOGE("Invalid image_info\n");
-		return _EINVAL;
+		return -ERR_INVAL;
 	}
 
 	if (area >= AREA_MAX) {
 		LOGE("Invalid flash area\n");
-		return _EINVAL;
+		return -ERR_INVAL;
 	}
 
 	if (checksum != CRC32((const char *)content, size)) {
 		LOGE("%s checksum error, in image: 0x%x (0x%x)\n",
 			AREA_ID_STR(area), checksum,
 			CRC32((const char *)content, size));
-		return _EINVAL;
+		return -ERR_INVAL;
 	}
 	image_info->data[area].size = size;
 	image_info->data[area].data = content;
@@ -256,7 +256,7 @@ static int syna_tcm_save_flash_block_data(struct image_info *image_info,
 	return 0;
 }
 
-/**
+/*
  * syna_tcm_get_flash_area_id()
  *
  * Return the corresponding ID of flash area based on the given string
@@ -286,7 +286,7 @@ static enum flash_area syna_tcm_get_flash_area_id(char *str)
 	return AREA_MAX;
 }
 
-/**
+/*
  * syna_tcm_parse_fw_image()
  *
  * Parse and analyze the information of each areas from the given
@@ -319,12 +319,12 @@ static inline int syna_tcm_parse_fw_image(const unsigned char *image,
 
 	if (!image) {
 		LOGE("No image data\n");
-		return _EINVAL;
+		return -ERR_INVAL;
 	}
 
 	if (!image_info) {
 		LOGE("Invalid image_info blob\n");
-		return _EINVAL;
+		return -ERR_INVAL;
 	}
 
 	syna_pal_mem_set(image_info, 0x00, sizeof(struct image_info));
@@ -334,7 +334,7 @@ static inline int syna_tcm_parse_fw_image(const unsigned char *image,
 	magic_value = syna_pal_le4_to_uint(header->magic_value);
 	if (magic_value != IMAGE_FILE_MAGIC_VALUE) {
 		LOGE("Invalid image file magic value\n");
-		return _EINVAL;
+		return -ERR_INVAL;
 	}
 
 	offset = sizeof(struct image_header);
@@ -365,14 +365,14 @@ static inline int syna_tcm_parse_fw_image(const unsigned char *image,
 				length,
 				checksum);
 		if (retval < 0)
-			return _EINVAL;
+			return retval;
 	}
 
 	return 0;
 }
 
 
-/**
+/*
  * syna_tcm_parse_ihex_line()
  *
  * Parse a line in the ihex file and convert into an actual data
@@ -404,12 +404,12 @@ static inline int syna_tcm_parse_ihex_line(char *line, unsigned int *count,
 
 	if (!line) {
 		LOGE("No string line\n");
-		return _EINVAL;
+		return -ERR_INVAL;
 	}
 
 	if ((!buf) || (buf_size == 0)) {
 		LOGE("Invalid temporary data buffer\n");
-		return _EINVAL;
+		return -ERR_INVAL;
 	}
 
 	*count = syna_pal_hex_to_uint(
@@ -422,18 +422,18 @@ static inline int syna_tcm_parse_ihex_line(char *line, unsigned int *count,
 	if (*count > buf_size) {
 		LOGE("Data size mismatched, required:%d, given:%d\n",
 			*count, buf_size);
-		return _EINVAL;
+		return -ERR_INVAL;
 	}
 
 	for (pos = 0; pos < *count; pos++)
 		buf[pos] = (unsigned char)syna_pal_hex_to_uint(
-			line + (((int)(pos << 1)) + OFFSET_DATA),
+			line + (int)((pos << 1) + OFFSET_DATA),
 			SIZE_DATA);
 
 	return 0;
 }
 
-/**
+/*
  * syna_tcm_parse_fw_ihex()
  *
  * Based on the firmware ihex file given , parse and convert into a binary
@@ -466,23 +466,23 @@ static inline int syna_tcm_parse_fw_ihex(const char *ihex, int ihex_size,
 
 	if (!ihex) {
 		LOGE("No ihex data\n");
-		return _EINVAL;
+		return -ERR_INVAL;
 	}
 
 	if (!ihex_info) {
 		LOGE("Invalid ihex_info blob\n");
-		return _EINVAL;
+		return -ERR_INVAL;
 	}
 
 	if ((!ihex_info->bin) || (ihex_info->bin_size == 0)) {
 		LOGE("Invalid ihex_info->data\n");
-		return _EINVAL;
+		return -ERR_INVAL;
 	}
 
 	tmp = syna_pal_mem_alloc(len_per_line + 1, sizeof(char));
 	if (!tmp) {
 		LOGE("Fail to allocate temporary buffer\n");
-		return _ENOMEM;
+		return -ERR_NOMEM;
 	}
 
 	offset = 0;

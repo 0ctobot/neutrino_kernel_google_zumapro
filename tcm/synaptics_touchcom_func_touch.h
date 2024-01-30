@@ -29,7 +29,7 @@
  * DOLLARS.
  */
 
-/**
+/*
  * @file synaptics_tcm2_func_touch.h
  *
  * This file declares related APIs and definitions for touch report handling.
@@ -40,7 +40,7 @@
 
 #include "synaptics_touchcom_core_dev.h"
 
-/**
+/*
  * @section: Types of Object Reported
  *
  * List the object classifications
@@ -58,7 +58,7 @@ enum object_classification {
 	NOP = -1,
 };
 
-/**
+/*
  * @section: Types of Gesture ID
  *
  * List the gesture ID assigned
@@ -71,7 +71,7 @@ enum gesture_classification {
 	GESTURE_ID_ACTIVE_TAP_AND_HOLD = 7,
 };
 
-/**
+/*
  * @section: Codes for Touch Report Configuration
  *
  * Define the 8-bit codes for the touch report configuration
@@ -111,9 +111,10 @@ enum touch_report_code {
 	TOUCH_REPORT_FINGERPRINT_AREA_MEET = 0x1d,
 	TOUCH_REPORT_SENSING_MODE = 0x1e,
 	TOUCH_REPORT_KNOB_DATA = 0x24,
+	TOUCH_REPORT_KNOB_CALIB = 0x86,
 };
 
-/**
+/*
  * syna_tcm_parse_touch_report()
  *
  * Traverse through touch report configuration and parse the contents of
@@ -135,7 +136,7 @@ int syna_tcm_parse_touch_report(struct tcm_dev *tcm_dev,
 		unsigned char *report, unsigned int report_size,
 		struct tcm_touch_data_blob *touch_data);
 
-/**
+/*
  * syna_tcm_set_touch_report_config()
  *
  * Setup the format and content of touch report if needed
@@ -154,7 +155,7 @@ int syna_tcm_parse_touch_report(struct tcm_dev *tcm_dev,
 int syna_tcm_set_touch_report_config(struct tcm_dev *tcm_dev,
 		unsigned char *config, unsigned int config_size);
 
-/**
+/*
  * syna_tcm_preserve_touch_report_config()
  *
  * Retrieve and preserve the current touch report configuration.
@@ -174,7 +175,7 @@ int syna_tcm_set_touch_report_config(struct tcm_dev *tcm_dev,
 int syna_tcm_preserve_touch_report_config(struct tcm_dev *tcm_dev);
 
 
-/**
+/*
  * syna_tcm_get_touch_data()
  *
  * Get data entity from the received report according to bit offset and bit
@@ -194,7 +195,7 @@ int syna_tcm_get_touch_data(const unsigned char *report,
 		unsigned int report_size, unsigned int offset,
 		unsigned int bits, unsigned int *data);
 
-/**
+/*
  * syna_tcm_set_custom_touch_entity_callback()
  *
  * Set up callback function to handle custom touch data.
@@ -213,7 +214,7 @@ int syna_tcm_get_touch_data(const unsigned char *report,
 int syna_tcm_set_custom_touch_entity_callback(struct tcm_dev *tcm_dev,
 		tcm_custom_touch_entity_callback_t p_cb, void *p_cbdata);
 
-/**
+/*
  * syna_tcm_set_custom_gesture_callback()
  *
  * Set up callback function to handle the gesture data defined as the following

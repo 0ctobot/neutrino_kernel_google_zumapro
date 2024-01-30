@@ -29,7 +29,7 @@
  * DOLLARS.
  */
 
-/**
+/*
  * @file: syna_tcm2_platform.h
  *
  * This file declares the platform-specific or hardware relevant data.
@@ -42,17 +42,31 @@
 #define _SYNAPTICS_TCM2_PLATFORM_H_
 
 #include "syna_tcm2_runtime.h"
-
-/**
+#if IS_ENABLED(CONFIG_SPI_S3C64XX_GS)
+#include <linux/platform_data/spi-s3c64xx-gs.h>
+#endif
+/*
  * @section: The capability of bus transferred
  *
  * Declare read/write capability in bytes (0 = unlimited)
  */
-#define RD_CHUNK_SIZE (512)
-#define WR_CHUNK_SIZE (512)
+#define RD_CHUNK_SIZE (2048)
+#define WR_CHUNK_SIZE (1024)
 
+#define LIMIT_NAME_LEN 32
 
-/**
+/*
+ * @section: Type of power supply
+ *
+ * The below enumerates the type of power supply
+ */
+enum power_supply {
+	PSU_REGULATOR = 0,
+	PSU_GPIO,
+	PSU_PWR_MODULES,
+};
+
+/*
  * @section: Defined Hardware-Specific Data
  *
  * @brief: syna_hw_bus_data
@@ -88,6 +102,9 @@ struct syna_hw_bus_data {
 	unsigned int spi_block_delay_us;
 	/* mutex to protect the i/o, if needed */
 	syna_pal_mutex_t io_mutex;
+	/* parameters for io switch, if needed */
+	int switch_gpio;
+	int switch_state;
 };
 
 /* The hardware data especially for ATTN signal */
@@ -113,11 +130,18 @@ struct syna_hw_rst_data {
 
 /* The hardware data especially for power control */
 struct syna_hw_pwr_data {
+	int psu;
 	/* parameters */
 	int vdd_gpio;
 	int avdd_gpio;
 	int power_on_state;
-	unsigned int power_on_delay_ms;
+	unsigned int power_delay_ms;
+
+	unsigned int avdd_power_on_delay_ms;
+	unsigned int avdd_power_off_delay_ms;
+	unsigned int vdd_power_on_delay_ms;
+	unsigned int vdd_power_off_delay_ms;
+
 	/* voltage */
 	unsigned int vdd;
 	unsigned int vled;
@@ -130,7 +154,7 @@ struct syna_hw_pwr_data {
 	void *avdd_reg_dev;
 };
 
-/**
+/*
  * @section: Hardware Interface Abstraction Layer
  *
  * The structure contains the hardware-specific implementations
@@ -139,42 +163,87 @@ struct syna_hw_pwr_data {
 struct syna_hw_interface {
 	/* The handle of hardware device */
 	void *pdev;
-
+#if IS_ENABLED(CONFIG_SPI_S3C64XX_GS)
+	struct s3c64xx_spi_info *s3c64xx_sci;
+#endif
 	/* Hardware specific data */
 	struct syna_hw_bus_data bdata_io;
 	struct syna_hw_attn_data bdata_attn;
 	struct syna_hw_rst_data bdata_rst;
 	struct syna_hw_pwr_data bdata_pwr;
-	const char *fw_name;
+	char fw_name[LIMIT_NAME_LEN];
+	char pt05_high_limit_name[LIMIT_NAME_LEN];
+	char pt05_low_limit_name[LIMIT_NAME_LEN];
+	char pt05_gap_x_limit_name[LIMIT_NAME_LEN];
+	char pt05_gap_y_limit_name[LIMIT_NAME_LEN];
+	char pt0a_high_limit_name[LIMIT_NAME_LEN];
+	char pt0a_low_limit_name[LIMIT_NAME_LEN];
+	char pt10_high_limit_name[LIMIT_NAME_LEN];
+	char pt10_low_limit_name[LIMIT_NAME_LEN];
+	char pt10_gap_x_limit_name[LIMIT_NAME_LEN];
+	char pt10_gap_y_limit_name[LIMIT_NAME_LEN];
+	char pt11_high_limit_name[LIMIT_NAME_LEN];
+	char pt11_low_limit_name[LIMIT_NAME_LEN];
+	char pt12_high_limit_name[LIMIT_NAME_LEN];
+	char pt12_low_limit_name[LIMIT_NAME_LEN];
+	char pt16_high_limit_name[LIMIT_NAME_LEN];
+	char pt16_low_limit_name[LIMIT_NAME_LEN];
+	char pt_tag_moisture_limit_name[LIMIT_NAME_LEN];
 	int pixels_per_mm;
+	int test_algo;
 	u16 compression_threhsold;
 	u16 grip_delta_threshold;
 	u16 grip_border_threshold;
-#if IS_ENABLED(CONFIG_TOUCHSCREEN_OFFLOAD)
-	u32 offload_id;
-#endif
-	int udfps_x;
-	int udfps_y;
-	bool dynamic_report_rate;
+	bool dma_mode;
+
+	/* Operation to read data from bus
+	 *
+	 * This is an essential operation; otherwise, the communication
+	 * will not be created.
+	 *
+	 * @param
+	 *    [ in] hw_if:   the handle of hw interface
+	 *    [out] rd_data: buffer for storing data retrieved
+	 *    [ in] rd_len:  length of reading data in bytes
+	 *
+	 * @return
+	 *    0 or positive value on success; otherwise, on error.
+	 */
+	int (*ops_read_data)(struct syna_hw_interface *hw_if,
+			unsigned char *rd_data, unsigned int rd_len);
+
+	/* Operation to write data to bus
+	 *
+	 * This is an essential operation; otherwise, the communication
+	 * will not be created.
+	 *
+	 * @param
+	 *    [ in] hw_if:   the handle of hw interface
+	 *    [ in] wr_data: written data
+	 *    [ in] wr_len:  length of written data in bytes
+	 *
+	 * @return
+	 *    0 or positive value on success; otherwise, on error.
+	 */
+	int (*ops_write_data)(struct syna_hw_interface *hw_if,
+			unsigned char *wr_data, unsigned int wr_len);
 
 	/* Operation to do power on/off, if supported
 	 *
 	 * This is an optional operation.
 	 *
-	 * Implementation should request that the power device be
-	 * enabled with the output at the proper voltage.
+	 * Implementation should set up the proper power rails to the device.
 	 *
 	 * Assign the pointer NULL if power supply module is not controllable.
 	 *
 	 * @param
 	 *    [ in] hw_if: the handle of hw interface
-	 *    [ in] en:    '1' for powering on, and '0' for powering off
+	 *    [ in] on:    '1' to power-on, and '0' to power-off
 	 *
 	 * @return
 	 *    0 on success; otherwise, on error.
 	 */
-	int (*ops_power_on)(struct syna_hw_interface *hw_if,
-			bool en);
+	int (*ops_power_on)(struct syna_hw_interface *hw_if, bool on);
 
 	/* Operation to perform the hardware reset, if supported
 	 *
@@ -192,55 +261,6 @@ struct syna_hw_interface {
 	 */
 	void (*ops_hw_reset)(struct syna_hw_interface *hw_if);
 
-	/* Operation to set up the bus connection
-	 *
-	 * This is an optional operation to add in the extra configuration
-	 * before doing connection.
-	 *
-	 * Assign the pointer NULL if this operation is not required.
-	 *
-	 * @param
-	 *    [ in] hw_if:   the handle of hw interface
-	 *    [ in] config:  parameters to change
-	 *
-	 * @return
-	 *    0 or positive value on success; otherwise, on error.
-	 */
-	int (*ops_bus_setup)(struct syna_hw_interface *hw_if,
-			struct syna_hw_bus_data *config);
-
-	/* Operation to read the bare data from bus
-	 *
-	 * This is an essential operation; otherwise, the communication
-	 * will not be created.
-	 *
-	 * @param
-	 *    [ in] hw_if:   the handle of hw interface
-	 *    [out] rd_data: buffer for storing data retrieved
-	 *    [ in] rd_len:  length of reading data in bytes
-	 *
-	 * @return
-	 *    0 or positive value on success; otherwise, on error.
-	 */
-	int (*ops_read_data)(struct syna_hw_interface *hw_if,
-			unsigned char *rd_data, unsigned int rd_len);
-
-	/* Operation to write the bare data to bus
-	 *
-	 * This is an essential operation; otherwise, the communication
-	 * will not be created.
-	 *
-	 * @param
-	 *    [ in] hw_if:   the handle of hw interface
-	 *    [ in] wr_data: written data
-	 *    [ in] wr_len:  length of written data in bytes
-	 *
-	 * @return
-	 *    0 or positive value on success; otherwise, on error.
-	 */
-	int (*ops_write_data)(struct syna_hw_interface *hw_if,
-			unsigned char *wr_data, unsigned int wr_len);
-
 	/* Operation to enable/disable the irq, if supported
 	 *
 	 * This is an optional operation. Providing this operation could
@@ -257,8 +277,8 @@ struct syna_hw_interface {
 	 * @return
 	 *    0 on success; otherwise, on error.
 	 */
-	int (*ops_enable_irq)(struct syna_hw_interface *hw_if,
-			bool en);
+	int (*ops_enable_irq)(struct syna_hw_interface *hw_if, bool en);
+	int (*ops_disable_irq_sync)(struct syna_hw_interface *hw_if);
 
 	/* Operation to wait for the signal of interrupt, if supported
 	 *
@@ -286,7 +306,7 @@ struct syna_hw_interface {
 /* end of structure syna_hw_interface */
 
 
-/**
+/*
  * syna_hw_interface_init()
  *
  * Initialize the lower-level hardware interface module.
@@ -300,7 +320,7 @@ struct syna_hw_interface {
  */
 int syna_hw_interface_init(void);
 
-/**
+/*
  * syna_hw_interface_exit()
  *
  * Delete the lower-level hardware interface module.

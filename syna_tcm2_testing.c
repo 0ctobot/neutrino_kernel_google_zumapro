@@ -29,7 +29,7 @@
  * DOLLARS.
  */
 
-/**
+/*
  * @file syna_tcm2_testing.c
  *
  * This file implements the sample code to perform chip testing.
@@ -44,65 +44,93 @@
 static struct kobject *g_testing_dir;
 static struct syna_tcm *g_tcm_ptr;
 
+typedef enum{
+	RAW_GAP_TEST = 1,
+	SENSOR_SPEED_TEST
+}gaptesttype_t;
 
-/**
- * syna_testing_compare_byte_vector()
+/*
+ * syna_parse_test_limit16()
  *
- * Sample code to compare the test result with limits
- * by byte vector
+ * Parse the test limit from the device tree.
  *
  * @param
- *    [ in] data: target test data
- *    [ in] data_size: size of test data
- *    [ in] limit: test limit value to be compared with
- *    [ in] limit_size: size of test limit
+ *    [ in] np: device node
+ *    [ in] name: property name
+ *    [out] array: test limit array
+ *    [ in] size: size of the array
  *
  * @return
- *    on success, true; otherwise, return false
+ *    on success, 0; otherwise, return error code
  */
-static bool syna_testing_compare_byte_vector(unsigned char *data,
-		unsigned int data_size, const unsigned char *limit,
-		unsigned int limit_size)
+static int syna_parse_test_limit_16(struct syna_tcm *tcm, const char *name, u16 *array, int size)
 {
-	bool result = false;
-	unsigned char tmp;
-	unsigned char p, l;
-	int i, j;
+	int length;
+	struct device_node *np = tcm->pdev->dev.parent->of_node;
 
-	if (!data || (data_size == 0)) {
-		LOGE("Invalid test data\n");
-		return false;
-	}
-	if (!limit || (limit_size == 0)) {
-		LOGE("Invalid limits\n");
-		return false;
+	length = of_property_count_u16_elems(np, name);
+	if (length < 0) {
+		LOGE("Fail to get %s elements count, ret = %d\n", name, length);
+		return length;
 	}
 
-	if (limit_size < data_size) {
-		LOGE("Limit size mismatched, data size: %d, limits: %d\n",
-			data_size, limit_size);
-		return false;
+	if (length != size) {
+		LOGE("invalid array length %d\n", length);
+		return -EINVAL;
 	}
 
-	result = true;
-	for (i = 0; i < data_size; i++) {
-		tmp = data[i];
-
-		for (j = 0; j < 8; j++) {
-			p = GET_BIT(tmp, j);
-			l = GET_BIT(limit[i], j);
-			if (p != l) {
-				LOGE("Fail on TRX-%03d (data:%X, limit:%X)\n",
-					(i*8 + j), p, l);
-				result = false;
-			}
-		}
+	if (of_property_read_u16_array(np, name, array, length) < 0) {
+		LOGE("Error reading array %s\n", name);
+		return -EINVAL;
 	}
 
-	return result;
+	LOGI("Parsed %s from device tree", name);
+
+	return 0;
 }
 
-/**
+/*
+ * syna_parse_test_limit32()
+ *
+ * Parse the test limit from the device tree.
+ *
+ * @param
+ *    [ in] np: device node
+ *    [ in] name: property name
+ *    [out] array: test limit array
+ *    [ in] size: size of the array
+ *
+ * @return
+ *    on success, 0; otherwise, return error code
+ */
+static int syna_parse_test_limit_32(struct syna_tcm *tcm, const char *name, u32 *array, int size)
+{
+	int length;
+	struct device_node *np = tcm->pdev->dev.parent->of_node;
+
+	length = of_property_count_u32_elems(np, name);
+	if (length < 0) {
+		LOGE("Fail to get %s elements count, ret = %d\n", name, length);
+		return -EINVAL;
+	}
+
+	if (length != size) {
+		LOGE("invalid array length %d\n", length);
+		return -EINVAL;
+	}
+
+	if (of_property_read_u32_array(np, name, array, length)) {
+		LOGE("Error reading array %s\n", name);
+		kfree(array);
+		return -EINVAL;
+	}
+
+	LOGI("Parsed %s from device tree", name);
+
+	return 0;
+}
+
+/*
  * syna_testing_compare_frame()
  *
  * Sample code to compare the test result with limits
@@ -134,21 +162,21 @@ static bool syna_testing_compare_frame(unsigned char *data,
 	}
 
 	if (data_size < (2 * rows * cols)) {
-		LOGE("Size mismatched, data:%d (exppected:%d)\n",
+		LOGE("Size mismatched, data:%d (expected:%d)\n",
 			data_size, (2 * rows * cols));
 		result = false;
 		return false;
 	}
 
 	if (rows > LIMIT_BOUNDARY) {
-		LOGE("Rows mismatched, rows:%d (exppected:%d)\n",
+		LOGE("Rows mismatched, rows:%d (expected:%d)\n",
 			rows, LIMIT_BOUNDARY);
 		result = false;
 		return false;
 	}
 
 	if (cols > LIMIT_BOUNDARY) {
-		LOGE("Columns mismatched, cols: %d (exppected:%d)\n",
+		LOGE("Columns mismatched, cols: %d (expected:%d)\n",
 			cols, LIMIT_BOUNDARY);
 		result = false;
 		return false;
@@ -162,7 +190,7 @@ static bool syna_testing_compare_frame(unsigned char *data,
 	data_ptr = (short *)&data[0];
 	for (i = 0; i < rows; i++) {
 		for (j = 0; j < cols; j++) {
-			limit = limits_hi[i * LIMIT_BOUNDARY + j];
+			limit = limits_hi[i * cols + j];
 			if (*data_ptr > limit) {
 				LOGE("Fail on (%2d,%2d)=%5d, limits_hi:%4d\n",
 					i, j, *data_ptr, limit);
@@ -180,7 +208,7 @@ end_of_upper_bound_limit:
 	data_ptr = (short *)&data[0];
 	for (i = 0; i < rows; i++) {
 		for (j = 0; j < cols; j++) {
-			limit = limits_lo[i * LIMIT_BOUNDARY + j];
+			limit = limits_lo[i * cols + j];
 			if (*data_ptr < limit) {
 				LOGE("Fail on (%2d,%2d)=%5d, limits_lo:%4d\n",
 					i, j, *data_ptr, limit);
@@ -194,7 +222,7 @@ end_of_lower_bound_limit:
 	return result;
 }
 
-/**
+/*
  * syna_testing_compare_list()
  *
  * Sample code to compare the test result with limits
@@ -226,21 +254,21 @@ static bool syna_testing_compare_list(unsigned char *data,
 	}
 
 	if (data_size % (rows + cols) != 0) {
-		LOGE("Size mismatched, data:%d (exppected:%d * N)\n",
+		LOGE("Size mismatched, data:%d (expected:%d * N)\n",
 			data_size, (rows + cols));
 		result = false;
 		return false;
 	}
 
 	if (rows > LIMIT_BOUNDARY) {
-		LOGE("Rows mismatched, rows:%d (exppected:%d)\n",
+		LOGE("Rows mismatched, rows:%d (expected:%d)\n",
 			rows, LIMIT_BOUNDARY);
 		result = false;
 		return false;
 	}
 
 	if (cols > LIMIT_BOUNDARY) {
-		LOGE("Columns mismatched, cols: %d (exppected:%d)\n",
+		LOGE("Columns mismatched, cols: %d (expected:%d)\n",
 			cols, LIMIT_BOUNDARY);
 		result = false;
 		return false;
@@ -262,7 +290,7 @@ static bool syna_testing_compare_list(unsigned char *data,
 		data_ptr++;
 	}
 	for (i = 0; i < rows; i++) {
-		limit = limits_hi[LIMIT_BOUNDARY + i];
+		limit = limits_hi[cols + i];
 		if (*data_ptr > limit) {
 			LOGE("Fail on row-%2d=%5d, limits_hi:%4d\n",
 				i, *data_ptr, limit);
@@ -287,7 +315,7 @@ end_of_upper_bound_limit:
 		data_ptr++;
 	}
 	for (i = 0; i < rows; i++) {
-		limit = limits_lo[LIMIT_BOUNDARY + i];
+		limit = limits_lo[cols + i];
 		if (*data_ptr < limit) {
 			LOGE("Fail on row-%2d=%5d, limits_lo:%4d\n",
 				i, *data_ptr, limit);
@@ -300,7 +328,151 @@ end_of_lower_bound_limit:
 	return result;
 }
 
-/**
+/*
+ * syna_testing_calculate_gap_frame()
+ *
+ * Sample code to calculate the GAP frame for the test
+ *
+ * @param
+ *    [ in] in: input frame
+ *    [out] out: output frame
+ *    [ in] rows: number of rows
+ *    [ in] cols: number of cols
+ *    [ in] testtype: type of the test to be performed ( 1- full raw cap, 2 - sensor speed test )
+ *
+ * @return
+ *    on success, 0; otherwise, negative value on error.
+ */
+static int syna_testing_calculate_gap_frame(short *in, short *out,
+		int rows, int cols, gaptesttype_t testtype)
+{
+	int i, j, idx;
+	int val_1, val_2, val_3;
+	int x_gap, y_gap;
+
+	if (!in || !out) {
+		LOGE("Invalid frame to calculate\n");
+		return -1;
+	}
+
+	if (rows * cols <= 0) {
+		LOGE("Invalid parameter of rows and cols\n");
+		return -1;
+	}
+
+	idx = 0;
+	for (i = 0; i < rows; i++) {
+		for (j = 0; j < cols; j++) {
+			val_1 = in[i * cols + j];
+
+			if(j == cols -1)
+				val_2 = val_1;
+			else
+				val_2 = in[i * cols + (j+1)];
+
+			if(i == rows -1)
+				val_3 = val_1;
+			else
+				val_3 = in[(i+1) * cols + j];
+
+			if(testtype == RAW_GAP_TEST){
+				if((val_1 == 0) && (val_2 == 0)) {
+					x_gap = 0;
+				} else {
+					x_gap = (val_1 > val_2) ?
+						(100 - ((val_2*100 + val_1/2)/val_1)) :
+							(100 - ((val_1*100 + val_2/2)/val_2));
+				}
+
+				if((val_1 == 0) && (val_3 == 0)) {
+					y_gap = 0;
+				} else {
+					y_gap = (val_1 > val_3) ?
+						(100 - ((val_3*100 + val_1/2)/val_1)) :
+							(100 - ((val_1*100 + val_3/2)/val_3));
+				}
+
+				out[idx++] = (x_gap > y_gap)? x_gap : y_gap;
+			}
+			else if(testtype == SENSOR_SPEED_TEST){
+				x_gap = abs(val_1 - val_2);
+				y_gap = abs(val_1 - val_3);
+
+				out[idx++] = (x_gap > y_gap)? x_gap: y_gap;
+			}
+		}
+	}
+	return 0;
+}
+
+/*
+ * syna_testing_calculate_gap_frame_b()
+ *
+ * Sample code to calculate the GAP frame for the test
+ *
+ * @param
+ *    [ in] in: input frame
+ *    [out] out: output frame
+ *    [ in] rows: number of rows
+ *    [ in] cols: number of cols
+ *    [ in] direction_x: appoint the gap direction x. Follow the panel maker
+ *                       that the x direction is the longer side.
+ *    [ in] percentage: true for gap percentage, false for gap value.
+ *    [ in] abs_only: indicate to return the abs value
+ *
+ * @return
+ *    on success, 0; otherwise, negative value on error.
+ */
+static int syna_testing_calculate_gap_frame_b(short *in, short *out,
+		int rows, int cols, bool direction_x, bool abs_only)
+{
+	int i, j, idx;
+	short val_1, val_2;
+
+	if (!in || !out) {
+		LOGE("Invalid frame to calculate\n");
+		return -1;
+	}
+
+	if (rows * cols <= 0) {
+		LOGE("Invalid parameter of rows and cols\n");
+		return -1;
+	}
+
+	idx = 0;
+	if (direction_x) {
+		for (i = 0; i < rows; i++) {
+			for (j = 1; j < cols; j++) {
+				val_1 = in[i * cols + j];
+				val_2 = in[i * cols + (j-1)];
+				if (abs_only) {
+					out[idx++] = (short)abs(val_1 - val_2);
+				} else {
+					out[idx++] = (val_2 == 0) ? 0 :
+						((abs(val_1 - val_2)) * 100 / val_2);
+				}
+			}
+		}
+	} else {
+		for (i = 1; i < rows; i++) {
+			for (j = 0; j < cols; j++) {
+				val_1 = in[i * cols + j];
+				val_2 = in[(i-1) * cols + j];
+				if (abs_only) {
+					out[idx++] = (short)abs(val_1 - val_2);
+				} else {
+					out[idx++] = (val_2 == 0) ? 0 :
+						((abs(val_1 - val_2)) * 100 / val_2);
+				}
+			}
+		}
+	}
+
+
+	return 0;
+}
+
+/*
  * syna_testing_device_id()
  *
  * Sample code to ensure the device id is expected
@@ -344,7 +516,7 @@ exit:
 	return ((result) ? 0 : -1);
 }
 
-/**
+/*
  * syna_testing_config_id()
  *
  * Sample code to ensure the config id is expected
@@ -387,7 +559,7 @@ exit:
 	return ((result) ? 0 : -1);
 }
 
-/**
+/*
  * syna_testing_check_id_show()
  *
  * Attribute to show the result of ID comparsion to the console.
@@ -442,7 +614,7 @@ exit:
 static struct kobj_attribute kobj_attr_check_id =
 	__ATTR(check_id, 0444, syna_testing_check_id_show, NULL);
 
-/**
+/*
  * syna_testing_pt01()
  *
  * Sample code to perform PT01 testing
@@ -480,7 +652,7 @@ exit:
 	return ((result) ? 0 : -1);
 }
 
-/**
+/*
  * syna_testing_pt01_show()
  *
  * Attribute to show the result of PT01 test to the console.
@@ -508,8 +680,6 @@ static ssize_t syna_testing_pt01_show(struct kobject *kobj,
 		goto exit;
 	}
 
-	syna_set_bus_ref(tcm, SYNA_BUS_REF_SYSFS, true);
-
 	syna_tcm_buf_init(&test_data);
 
 	retval = syna_testing_pt01(tcm, &test_data);
@@ -524,8 +694,6 @@ static ssize_t syna_testing_pt01_show(struct kobject *kobj,
 	count += scnprintf(buf + count, PAGE_SIZE - count, "\n");
 
 	syna_tcm_buf_release(&test_data);
-
-	syna_set_bus_ref(tcm, SYNA_BUS_REF_SYSFS, false);
 exit:
 	return count;
 }
@@ -533,7 +701,7 @@ exit:
 static struct kobj_attribute kobj_attr_pt01 =
 	__ATTR(pt01, 0444, syna_testing_pt01_show, NULL);
 
-/**
+/*
  * syna_testing_pt05()
  *
  * Sample code to perform PT05 testing
@@ -560,6 +728,11 @@ static int syna_testing_pt05(struct syna_tcm *tcm, struct tcm_buffer *test_data)
 		goto exit;
 	}
 
+	syna_parse_test_limit_16(tcm, tcm->hw_if->pt05_high_limit_name,
+			(u16*) pt05_hi_limits, tcm->tcm_dev->rows * tcm->tcm_dev->cols);
+	syna_parse_test_limit_16(tcm, tcm->hw_if->pt05_low_limit_name,
+			(u16*) pt05_lo_limits, tcm->tcm_dev->rows * tcm->tcm_dev->cols);
+
 	result = syna_testing_compare_frame(test_data->buf,
 			test_data->data_length,
 			tcm->tcm_dev->rows,
@@ -573,7 +746,149 @@ exit:
 	return ((result) ? 0 : -1);
 }
 
-/**
+/*
+ * syna_testing_pt05_gap()
+ *
+ * Sample code to implement GAP test based on PT05
+ *
+ * @param
+ *    [ in] tcm: the driver handle
+ *
+ * @return
+ *    on success, 0; otherwise, negative value on error.
+ */
+static int syna_testing_pt05_gap(struct syna_tcm *tcm, struct tcm_buffer *test_data)
+{
+	int retval;
+	bool result = false;
+	int rows = tcm->tcm_dev->rows;
+	int cols = tcm->tcm_dev->cols;
+	short *data_ptr = NULL;
+	short *frame = NULL;
+	short *gap_frame_x = NULL;
+	short *gap_frame_y = NULL;
+	int i, j, idx;
+
+	LOGI("Start testing\n");
+
+	frame = syna_pal_mem_alloc(rows * cols, sizeof(short));
+	if (!frame) {
+		LOGE("Fail to allocate image for gap test\n");
+		result = false;
+		frame = NULL;
+		goto exit;
+	}
+	gap_frame_x = syna_pal_mem_alloc(rows * cols, sizeof(short));
+	if (!gap_frame_x) {
+		LOGE("Fail to allocate gap image x for gap test\n");
+		result = false;
+		gap_frame_x = NULL;
+		goto exit;
+	}
+	gap_frame_y = syna_pal_mem_alloc(rows * cols, sizeof(short));
+	if (!gap_frame_y) {
+		LOGE("Fail to allocate gap image y for gap test\n");
+		result = false;
+		gap_frame_y = NULL;
+		goto exit;
+	}
+
+	data_ptr = (short *)&test_data->buf[0];
+	for (i = 0; i < rows; i++) {
+		for (j = 0; j < cols; j++) {
+			frame[i * cols + j] = *data_ptr;
+			data_ptr++;
+		}
+	}
+
+	if (tcm->hw_if->test_algo == 1) {
+		LOGI("Gap test algo b");
+		retval = syna_testing_calculate_gap_frame_b(frame,
+				gap_frame_x, rows, cols, true, false);
+		if (retval < 0) {
+			LOGE("Fail to get the gap frame x\n");
+			result = false;
+			goto exit;
+		}
+
+		retval = syna_testing_calculate_gap_frame_b(frame,
+				gap_frame_y, rows, cols, false, false);
+		if (retval < 0) {
+			LOGE("Fail to get the gap frame y\n");
+			result = false;
+			goto exit;
+		}
+
+		syna_parse_test_limit_16(tcm, tcm->hw_if->pt05_gap_x_limit_name,
+				(u16*) pt05_gap_x_limits, rows * (cols - 1));
+		syna_parse_test_limit_16(tcm, tcm->hw_if->pt05_gap_y_limit_name,
+				(u16*) pt05_gap_y_limits, (rows - 1) * cols);
+
+		/* compare to the limits */
+		result = true;
+		for (i = 0; i < rows; i++) {
+			for (j = 0; j < cols - 1; j++) {
+				idx = i * (cols - 1) + j;
+				if (gap_frame_x[idx] > pt05_gap_x_limits[idx]) {
+					LOGE("Fail on gapX (%2d,%2d)=%5d, max:%4d\n",
+						j, i, gap_frame_x[idx], pt05_gap_x_limits[idx]);
+					result = false;
+				}
+			}
+		}
+
+		for (i = 0; i < rows - 1; i++) {
+			for (j = 0; j < cols; j++) {
+				idx = i * cols + j;
+				if (gap_frame_y[idx] > pt05_gap_y_limits[idx]) {
+					LOGE("Fail on gapY (%2d,%2d)=%5d, max:%4d\n",
+						j, i, gap_frame_y[idx], pt05_gap_y_limits[idx]);
+					result = false;
+				}
+
+			}
+		}
+	} else {
+		LOGI("Gap test algo a");
+		retval = syna_testing_calculate_gap_frame(frame,
+				gap_frame_x, rows, cols, RAW_GAP_TEST);
+		if (retval < 0) {
+			LOGE("Fail to get the gap frame\n");
+			result = false;
+			goto exit;
+		}
+
+		syna_parse_test_limit_16(tcm, tcm->hw_if->pt05_gap_x_limit_name,
+				(u16*) pt05_gap_x_limits, rows * cols);
+
+		/* compare to the limits */
+		result = true;
+		for (i = 0; i < rows; i++) {
+			for (j = 0; j < cols; j++) {
+				idx = i * cols + j;
+				if (gap_frame_x[idx] > pt05_gap_x_limits[idx]) {
+					LOGE("Fail on gap frame(%2d,%2d)=%5d, max:%4d\n",
+						i, j, gap_frame_x[idx], pt05_gap_x_limits[idx]);
+					result = false;
+				}
+			}
+		}
+	}
+
+exit:
+	LOGI("Result = %s\n", (result)?"pass":"fail");
+
+	if (gap_frame_x)
+		syna_pal_mem_free(gap_frame_x);
+	if (gap_frame_y)
+		syna_pal_mem_free(gap_frame_y);
+	if (frame)
+		syna_pal_mem_free(frame);
+
+	return ((result) ? 0 : -1);
+}
+
+/*
  * syna_testing_pt05_show()
  *
  * Attribute to show the result of PT05 test to the console.
@@ -590,7 +905,7 @@ exit:
 static ssize_t syna_testing_pt05_show(struct kobject *kobj,
 		struct kobj_attribute *attr, char *buf)
 {
-	int retval, i, j;
+	int retval, retval_gap, i, j;
 	short *data_ptr = NULL;
 	unsigned int count = 0;
 	struct syna_tcm *tcm = g_tcm_ptr;
@@ -602,14 +917,15 @@ static ssize_t syna_testing_pt05_show(struct kobject *kobj,
 		goto exit;
 	}
 
-	syna_set_bus_ref(tcm, SYNA_BUS_REF_SYSFS, true);
-
 	syna_tcm_buf_init(&test_data);
 
 	retval = syna_testing_pt05(tcm, &test_data);
 
+	retval_gap = syna_testing_pt05_gap(tcm, &test_data);
+
 	count += scnprintf(buf, PAGE_SIZE,
-			"TEST PT$05: %s\n", (retval < 0) ? "fail" : "pass");
+			"TEST PT$05: %s\n",
+			(retval < 0) || (retval_gap < 0) ? "fail" : "pass");
 
 	count += scnprintf(buf + count, PAGE_SIZE - count, "%d %d\n",
 			tcm->tcm_dev->cols, tcm->tcm_dev->rows);
@@ -624,8 +940,6 @@ static ssize_t syna_testing_pt05_show(struct kobject *kobj,
 	}
 
 	syna_tcm_buf_release(&test_data);
-
-	syna_set_bus_ref(tcm, SYNA_BUS_REF_SYSFS, false);
 exit:
 	return count;
 }
@@ -633,7 +947,7 @@ exit:
 static struct kobj_attribute kobj_attr_pt05 =
 	__ATTR(pt05, 0444, syna_testing_pt05_show, NULL);
 
-/**
+/*
  * syna_testing_pt0a()
  *
  * Sample code to perform PT0A testing
@@ -660,6 +974,11 @@ static int syna_testing_pt0a(struct syna_tcm *tcm, struct tcm_buffer *test_data)
 		goto exit;
 	}
 
+	syna_parse_test_limit_16(tcm, tcm->hw_if->pt0a_high_limit_name,
+			(u16*) pt0a_hi_limits, tcm->tcm_dev->rows * tcm->tcm_dev->cols);
+	syna_parse_test_limit_16(tcm, tcm->hw_if->pt0a_low_limit_name,
+			(u16*) pt0a_lo_limits, tcm->tcm_dev->rows * tcm->tcm_dev->cols);
+
 	result = syna_testing_compare_frame(test_data->buf,
 			test_data->data_length,
 			tcm->tcm_dev->rows,
@@ -673,7 +992,7 @@ exit:
 	return ((result) ? 0 : -1);
 }
 
-/**
+/*
  * syna_testing_pt0a_show()
  *
  * Attribute to show the result of PT0A test to the console.
@@ -702,8 +1021,6 @@ static ssize_t syna_testing_pt0a_show(struct kobject *kobj,
 		goto exit;
 	}
 
-	syna_set_bus_ref(tcm, SYNA_BUS_REF_SYSFS, true);
-
 	syna_tcm_buf_init(&test_data);
 
 	retval = syna_testing_pt0a(tcm, &test_data);
@@ -724,8 +1041,6 @@ static ssize_t syna_testing_pt0a_show(struct kobject *kobj,
 	}
 
 	syna_tcm_buf_release(&test_data);
-
-	syna_set_bus_ref(tcm, SYNA_BUS_REF_SYSFS, false);
 exit:
 	return count;
 }
@@ -733,7 +1048,7 @@ exit:
 static struct kobj_attribute kobj_attr_pt0a =
 	__ATTR(pt0a, 0444, syna_testing_pt0a_show, NULL);
 
-/**
+/*
  * syna_testing_pt10()
  *
  * Sample code to perform PT10 testing
@@ -760,6 +1075,11 @@ static int syna_testing_pt10(struct syna_tcm *tcm, struct tcm_buffer *test_data)
 		goto exit;
 	}
 
+	syna_parse_test_limit_16(tcm, tcm->hw_if->pt10_high_limit_name,
+			(u16*) pt10_hi_limits, tcm->tcm_dev->rows * tcm->tcm_dev->cols);
+	syna_parse_test_limit_16(tcm, tcm->hw_if->pt10_low_limit_name,
+			(u16*) pt10_lo_limits, tcm->tcm_dev->rows * tcm->tcm_dev->cols);
+
 	result = syna_testing_compare_frame(test_data->buf,
 			test_data->data_length,
 			tcm->tcm_dev->rows,
@@ -773,7 +1093,148 @@ exit:
 	return ((result) ? 0 : -1);
 }
 
-/**
+/*
+ * syna_testing_pt10_gap()
+ *
+ * Sample code to implement GAP test based on PT10
+ *
+ * @param
+ *    [ in] tcm: the driver handle
+ *
+ * @return
+ *    on success, 0; otherwise, negative value on error.
+ */
+static int syna_testing_pt10_gap(struct syna_tcm *tcm, struct tcm_buffer *test_data)
+{
+	int retval;
+	bool result = false;
+	int rows = tcm->tcm_dev->rows;
+	int cols = tcm->tcm_dev->cols;
+	short *data_ptr = NULL;
+	short *frame = NULL;
+	short *gap_frame_x = NULL;
+	short *gap_frame_y = NULL;
+	int i, j, idx;
+
+	LOGI("Start testing\n");
+
+	frame = syna_pal_mem_alloc(rows * cols, sizeof(short));
+	if (!frame) {
+		LOGE("Fail to allocate image for gap test\n");
+		result = false;
+		frame = NULL;
+		goto exit;
+	}
+	gap_frame_x = syna_pal_mem_alloc(rows * cols, sizeof(short));
+	if (!gap_frame_x) {
+		LOGE("Fail to allocate gap image x for gap test\n");
+		result = false;
+		gap_frame_x = NULL;
+		goto exit;
+	}
+	gap_frame_y = syna_pal_mem_alloc(rows * cols, sizeof(short));
+	if (!gap_frame_y) {
+		LOGE("Fail to allocate gap image y for gap test\n");
+		result = false;
+		gap_frame_y = NULL;
+		goto exit;
+	}
+
+	data_ptr = (short *)&test_data->buf[0];
+	for (i = 0; i < rows; i++) {
+		for (j = 0; j < cols; j++) {
+			frame[i * cols + j] = *data_ptr;
+			data_ptr++;
+		}
+	}
+
+	if (tcm->hw_if->test_algo == 1) {
+		LOGI("Gap test algo b");
+		retval = syna_testing_calculate_gap_frame_b(frame,
+				gap_frame_x, rows, cols, true, true);
+		if (retval < 0) {
+			LOGE("Fail to get the gap frame x\n");
+			result = false;
+			goto exit;
+		}
+
+		retval = syna_testing_calculate_gap_frame_b(frame,
+				gap_frame_y, rows, cols, false, true);
+		if (retval < 0) {
+			LOGE("Fail to get the gap frame y\n");
+			result = false;
+			goto exit;
+		}
+
+		syna_parse_test_limit_16(tcm, tcm->hw_if->pt10_gap_x_limit_name,
+				(u16*) pt10_gap_x_limits, rows * (cols - 1));
+		syna_parse_test_limit_16(tcm, tcm->hw_if->pt10_gap_y_limit_name,
+				(u16*) pt10_gap_y_limits, (rows - 1) * cols);
+
+		/* compare to the limits */
+		result = true;
+		for (i = 0; i < rows; i++) {
+			for (j = 0; j < cols - 1; j++) {
+				idx = i * (cols - 1) + j;
+				if (gap_frame_x[idx] > pt10_gap_x_limits[idx]) {
+					LOGE("Fail on gapX (%2d,%2d)=%5d, max:%4d\n",
+						j, i, gap_frame_x[idx], pt10_gap_x_limits[idx]);
+					result = false;
+				}
+			}
+		}
+
+		for (i = 0; i < rows - 1; i++) {
+			for (j = 0; j < cols; j++) {
+				idx = i * cols + j;
+				if (gap_frame_y[idx] > pt10_gap_y_limits[idx]) {
+					LOGE("Fail on gapY (%2d,%2d)=%5d, max:%4d\n",
+						j, i, gap_frame_y[idx], pt10_gap_y_limits[idx]);
+					result = false;
+				}
+			}
+		}
+	} else {
+		LOGI("Gap test algo a");
+		retval = syna_testing_calculate_gap_frame(frame,
+			 gap_frame_x, rows, cols, SENSOR_SPEED_TEST);
+		if (retval < 0) {
+			LOGE("Fail to get the gap frame\n");
+			result = false;
+			goto exit;
+		}
+
+		syna_parse_test_limit_16(tcm, tcm->hw_if->pt10_gap_x_limit_name,
+				(u16*) pt10_gap_x_limits, rows * cols);
+
+		/* compare to the limits */
+		result = true;
+		for (i = 0; i < rows; i++) {
+			for (j = 0; j < cols; j++) {
+				idx = i * cols + j;
+				if (gap_frame_x[idx] > pt10_gap_x_limits[idx]) {
+					LOGE("Fail on gap frame(%2d,%2d)=%5d, max:%4d\n",
+						i, j, gap_frame_x[idx], pt10_gap_x_limits[idx]);
+					result = false;
+				}
+			}
+		}
+	}
+
+exit:
+	LOGI("Result = %s\n", (result)?"pass":"fail");
+
+	if (gap_frame_x)
+		syna_pal_mem_free(gap_frame_x);
+	if (gap_frame_y)
+		syna_pal_mem_free(gap_frame_y);
+	if (frame)
+		syna_pal_mem_free(frame);
+
+	return ((result) ? 0 : -1);
+}
+
+/*
  * syna_testing_pt10_show()
  *
  * Attribute to show the result of PT10 test to the console.
@@ -790,7 +1251,7 @@ exit:
 static ssize_t syna_testing_pt10_show(struct kobject *kobj,
 		struct kobj_attribute *attr, char *buf)
 {
-	int retval, i, j;
+	int retval, retval_gap, i, j;
 	short *data_ptr = NULL;
 	unsigned int count = 0;
 	struct syna_tcm *tcm = g_tcm_ptr;
@@ -802,14 +1263,15 @@ static ssize_t syna_testing_pt10_show(struct kobject *kobj,
 		goto exit;
 	}
 
-	syna_set_bus_ref(tcm, SYNA_BUS_REF_SYSFS, true);
-
 	syna_tcm_buf_init(&test_data);
 
 	retval = syna_testing_pt10(tcm, &test_data);
 
+	retval_gap = syna_testing_pt10_gap(tcm, &test_data);
+
 	count += scnprintf(buf, PAGE_SIZE,
-			"TEST PT$10: %s\n", (retval < 0) ? "fail" : "pass");
+			"TEST PT$10: %s\n",
+			(retval < 0) || (retval_gap < 0) ? "fail" : "pass");
 
 	count += scnprintf(buf + count, PAGE_SIZE - count, "%d %d\n",
 			tcm->tcm_dev->cols, tcm->tcm_dev->rows);
@@ -824,8 +1286,6 @@ static ssize_t syna_testing_pt10_show(struct kobject *kobj,
 	}
 
 	syna_tcm_buf_release(&test_data);
-
-	syna_set_bus_ref(tcm, SYNA_BUS_REF_SYSFS, false);
 exit:
 	return count;
 }
@@ -833,7 +1293,7 @@ exit:
 static struct kobj_attribute kobj_attr_pt10 =
 	__ATTR(pt10, 0444, syna_testing_pt10_show, NULL);
 
-/**
+/*
  * syna_testing_pt11()
  *
  * Sample code to perform PT11 testing
@@ -860,6 +1320,11 @@ static int syna_testing_pt11(struct syna_tcm *tcm, struct tcm_buffer *test_data)
 		goto exit;
 	}
 
+	syna_parse_test_limit_16(tcm, tcm->hw_if->pt11_high_limit_name,
+			(u16*) pt11_hi_limits, tcm->tcm_dev->rows * tcm->tcm_dev->cols);
+	syna_parse_test_limit_16(tcm, tcm->hw_if->pt11_low_limit_name,
+			(u16*) pt11_lo_limits, tcm->tcm_dev->rows * tcm->tcm_dev->cols);
+
 	result = syna_testing_compare_frame(test_data->buf,
 			test_data->data_length,
 			tcm->tcm_dev->rows,
@@ -873,7 +1338,7 @@ exit:
 	return ((result) ? 0 : -1);
 }
 
-/**
+/*
  * syna_testing_pt11_show()
  *
  * Attribute to show the result of PT11 test to the console.
@@ -902,8 +1367,6 @@ static ssize_t syna_testing_pt11_show(struct kobject *kobj,
 		goto exit;
 	}
 
-	syna_set_bus_ref(tcm, SYNA_BUS_REF_SYSFS, true);
-
 	syna_tcm_buf_init(&test_data);
 
 	retval = syna_testing_pt11(tcm, &test_data);
@@ -924,8 +1387,6 @@ static ssize_t syna_testing_pt11_show(struct kobject *kobj,
 	}
 
 	syna_tcm_buf_release(&test_data);
-
-	syna_set_bus_ref(tcm, SYNA_BUS_REF_SYSFS, false);
 exit:
 	return count;
 }
@@ -933,7 +1394,7 @@ exit:
 static struct kobj_attribute kobj_attr_pt11 =
 	__ATTR(pt11, 0444, syna_testing_pt11_show, NULL);
 
-/**
+/*
  * syna_testing_pt12()
  *
  * Sample code to perform PT12 testing
@@ -960,12 +1421,17 @@ static int syna_testing_pt12(struct syna_tcm *tcm, struct tcm_buffer *test_data)
 		goto exit;
 	}
 
+	syna_parse_test_limit_32(tcm, tcm->hw_if->pt12_high_limit_name,
+			(u32*) pt12_hi_limits, tcm->tcm_dev->rows + tcm->tcm_dev->cols);
+	syna_parse_test_limit_32(tcm, tcm->hw_if->pt12_low_limit_name,
+			(u32*) pt12_lo_limits, tcm->tcm_dev->rows + tcm->tcm_dev->cols);
+
 	result = syna_testing_compare_list(test_data->buf,
 			test_data->data_length,
 			tcm->tcm_dev->rows,
 			tcm->tcm_dev->cols,
-			(const int *)&pt12_limits[0],
-			NULL);
+			(const int *)&pt12_hi_limits[0],
+			(const int *)&pt12_lo_limits[0]);
 
 exit:
 	LOGI("Result = %s\n", (result)?"pass":"fail");
@@ -973,7 +1439,7 @@ exit:
 	return ((result) ? 0 : -1);
 }
 
-/**
+/*
  * syna_testing_pt12_show()
  *
  * Attribute to show the result of PT12 test to the console.
@@ -1002,8 +1468,6 @@ static ssize_t syna_testing_pt12_show(struct kobject *kobj,
 		goto exit;
 	}
 
-	syna_set_bus_ref(tcm, SYNA_BUS_REF_SYSFS, true);
-
 	syna_tcm_buf_init(&test_data);
 
 	retval = syna_testing_pt12(tcm, &test_data);
@@ -1027,8 +1491,6 @@ static ssize_t syna_testing_pt12_show(struct kobject *kobj,
 	count += scnprintf(buf + count, PAGE_SIZE - count, "\n");
 
 	syna_tcm_buf_release(&test_data);
-
-	syna_set_bus_ref(tcm, SYNA_BUS_REF_SYSFS, false);
 exit:
 	return count;
 }
@@ -1036,7 +1498,7 @@ exit:
 static struct kobj_attribute kobj_attr_pt12 =
 	__ATTR(pt12, 0444, syna_testing_pt12_show, NULL);
 
-/**
+/*
  * syna_testing_pt16()
  *
  * Sample code to perform PT16 testing
@@ -1063,6 +1525,11 @@ static int syna_testing_pt16(struct syna_tcm *tcm, struct tcm_buffer *test_data)
 		goto exit;
 	}
 
+	syna_parse_test_limit_16(tcm, tcm->hw_if->pt16_high_limit_name,
+			(u16*) pt16_hi_limits, tcm->tcm_dev->rows * tcm->tcm_dev->cols);
+	syna_parse_test_limit_16(tcm, tcm->hw_if->pt16_low_limit_name,
+			(u16*) pt16_lo_limits, tcm->tcm_dev->rows * tcm->tcm_dev->cols);
+
 	result = syna_testing_compare_frame(test_data->buf,
 			test_data->data_length,
 			tcm->tcm_dev->rows,
@@ -1076,7 +1543,7 @@ exit:
 	return ((result) ? 0 : -1);
 }
 
-/**
+/*
  * syna_testing_pt16_show()
  *
  * Attribute to show the result of PT11 test to the console.
@@ -1105,8 +1572,6 @@ static ssize_t syna_testing_pt16_show(struct kobject *kobj,
 		goto exit;
 	}
 
-	syna_set_bus_ref(tcm, SYNA_BUS_REF_SYSFS, true);
-
 	syna_tcm_buf_init(&test_data);
 
 	retval = syna_testing_pt16(tcm, &test_data);
@@ -1127,8 +1592,6 @@ static ssize_t syna_testing_pt16_show(struct kobject *kobj,
 	}
 
 	syna_tcm_buf_release(&test_data);
-
-	syna_set_bus_ref(tcm, SYNA_BUS_REF_SYSFS, false);
 exit:
 	return count;
 }
@@ -1137,7 +1600,7 @@ static struct kobj_attribute kobj_attr_pt16 =
 	__ATTR(pt16, 0444, syna_testing_pt16_show, NULL);
 
 
-/**
+/*
  * syna_testing_pt_tag_moisture()
  *
  * Sample code to perform Tags Moisture (RID30) testing
@@ -1202,6 +1665,9 @@ static int syna_testing_pt_tag_moisture(struct syna_tcm *tcm, struct tcm_buffer 
 		goto exit;
 	}
 
+	syna_parse_test_limit_16(tcm, tcm->hw_if->pt_tag_moisture_limit_name,
+			(u16*) pt_moisture_limits, rows * cols);
+
 	/* compare to the limits */
 	result = true;
 	data_ptr = (short *)&test_data->buf[0];
@@ -1210,7 +1676,7 @@ static int syna_testing_pt_tag_moisture(struct syna_tcm *tcm, struct tcm_buffer 
 			if (*data_ptr < 0)
 				continue;
 
-			limit = pt_moisture_limits[i * LIMIT_BOUNDARY + j];
+			limit = pt_moisture_limits[i * cols + j];
 			if (*data_ptr > limit) {
 				LOGE("Fail on (%2d,%2d)=%5d, limits_hi:%4d\n",
 					i, j, *data_ptr, limit);
@@ -1232,7 +1698,7 @@ exit:
 	return ((result) ? 0 : -1);
 }
 
-/**
+/*
  * syna_testing_pt_moisture_show()
  *
  * Attribute to show the result of Tags Moisture (RID30) to the console.
@@ -1261,8 +1727,6 @@ static ssize_t syna_testing_pt_moisture_show(struct kobject *kobj,
 		goto exit;
 	}
 
-	syna_set_bus_ref(tcm, SYNA_BUS_REF_SYSFS, true);
-
 	syna_tcm_buf_init(&test_data);
 
 	retval = syna_testing_pt_tag_moisture(tcm, &test_data);
@@ -1274,7 +1738,7 @@ static ssize_t syna_testing_pt_moisture_show(struct kobject *kobj,
 	count += scnprintf(buf + count, PAGE_SIZE - count, "%d %d\n",
 			tcm->tcm_dev->cols, tcm->tcm_dev->rows);
 
-	if (retval == 0) {
+	if (test_data.buf) {
 		data_ptr = (short *)&(test_data.buf[0]);
 		for (i = 0; i < tcm->tcm_dev->rows; i++) {
 			for (j = 0; j < tcm->tcm_dev->cols; j++) {
@@ -1286,9 +1750,6 @@ static ssize_t syna_testing_pt_moisture_show(struct kobject *kobj,
 	}
 
 	syna_tcm_buf_release(&test_data);
-
-	syna_set_bus_ref(tcm, SYNA_BUS_REF_SYSFS, false);
-
 exit:
 	return count;
 }
@@ -1316,7 +1777,7 @@ static struct attribute_group attr_testing_group = {
 	.attrs = attrs,
 };
 
-/**
+/*
  * syna_testing_create_dir()
  *
  * Create a directory and register it with sysfs.
@@ -1353,7 +1814,7 @@ int syna_testing_create_dir(struct syna_tcm *tcm,
 
 	return 0;
 }
-/**
+/*
  *syna_testing_remove_dir()
  *
  * Remove the allocate sysfs directory
