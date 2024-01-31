@@ -80,6 +80,9 @@ static const struct drm_dsc_config pps_config = {
 #define TK4C_WRCTRLD_DIMMING_BIT 0x08
 #define TK4C_WRCTRLD_BCTRL_BIT 0x20
 
+#define MIPI_DSI_FREQ_DEFAULT 756
+#define MIPI_DSI_FREQ_ALTERNATIVE 776
+
 static const u8 test_key_enable[] = { 0xF0, 0x5A, 0x5A };
 static const u8 test_key_disable[] = { 0xF0, 0xA5, 0xA5 };
 static const u8 test_key_fc_enable[] = { 0xFC, 0x5A, 0x5A };
@@ -137,13 +140,13 @@ static const struct gs_dsi_cmd tk4c_init_cmds[] = {
 	/* PASET: 2424 */
 	GS_DSI_CMD(MIPI_DCS_SET_PAGE_ADDRESS, 0x00, 0x00, 0x09, 0x77),
 
-	/* FFC Setting @756Mbps */
+	/* FFC Off (756Mpbs) Setting */
 	GS_DSI_CMDLIST(test_key_enable),
 	GS_DSI_CMDLIST(test_key_fc_enable),
 	GS_DSI_CMD(0xB0, 0x00, 0x3A, 0xC5),
 	GS_DSI_CMD(0xC5, 0x6C, 0x5C),
 	GS_DSI_CMD(0xB0, 0x00, 0x36, 0xC5),
-	GS_DSI_CMD(0xC5, 0x11, 0x10, 0x50, 0x05),
+	GS_DSI_CMD(0xC5, 0x10),
 	GS_DSI_CMDLIST(test_key_disable),
 	GS_DSI_CMDLIST(test_key_fc_disable),
 
@@ -487,6 +490,8 @@ static int tk4c_enable(struct drm_panel *panel)
 
 	GS_DCS_WRITE_CMD(dev, MIPI_DCS_SET_DISPLAY_ON);
 
+	ctx->dsi_hs_clk_mbps = MIPI_DSI_FREQ_DEFAULT;
+
 	return 0;
 }
 
@@ -501,6 +506,59 @@ static int tk4c_panel_probe(struct mipi_dsi_device *dsi)
 	spanel->is_pixel_off = false;
 
 	return gs_dsi_panel_common_init(dsi, &spanel->base);
+}
+
+static void tk4c_pre_update_ffc(struct gs_panel *ctx)
+{
+	struct device *dev = ctx->dev;
+
+	dev_dbg(ctx->dev, "%s\n", __func__);
+
+	PANEL_ATRACE_BEGIN(__func__);
+
+	/* FFC off */
+	GS_DCS_BUF_ADD_CMDLIST(dev, test_key_enable);
+	GS_DCS_BUF_ADD_CMDLIST(dev, test_key_fc_enable);
+	GS_DCS_BUF_ADD_CMD(dev, 0xB0, 0x00, 0x36, 0xC5);
+	GS_DCS_BUF_ADD_CMD(dev, 0xC5, 0x10);
+	GS_DCS_BUF_ADD_CMDLIST(dev, test_key_fc_disable);
+	GS_DCS_BUF_ADD_CMDLIST_AND_FLUSH(dev, test_key_disable);
+
+	PANEL_ATRACE_END(__func__);
+}
+
+static void tk4c_update_ffc(struct gs_panel *ctx, unsigned int hs_clk_mbps)
+{
+	struct device *dev = ctx->dev;
+
+	dev_dbg(ctx->dev, "%s: hs_clk_mbps: current=%u, target=%u\n",
+		__func__, ctx->dsi_hs_clk_mbps, hs_clk_mbps);
+
+	PANEL_ATRACE_BEGIN(__func__);
+
+	GS_DCS_BUF_ADD_CMDLIST(dev, test_key_enable);
+	GS_DCS_BUF_ADD_CMDLIST(dev, test_key_fc_enable);
+
+	if (hs_clk_mbps != MIPI_DSI_FREQ_DEFAULT && hs_clk_mbps != MIPI_DSI_FREQ_ALTERNATIVE) {
+		dev_warn(ctx->dev, "%s: invalid hs_clk_mbps=%u for FFC\n", __func__, hs_clk_mbps);
+	} else if (ctx->dsi_hs_clk_mbps != hs_clk_mbps) {
+		dev_info(ctx->dev, "%s: updating for hs_clk_mbps=%u\n", __func__, hs_clk_mbps);
+		ctx->dsi_hs_clk_mbps = hs_clk_mbps;
+
+		/* Update FFC */
+		GS_DCS_BUF_ADD_CMD(dev, 0xB0, 0x00, 0x3A, 0xC5);
+		if (hs_clk_mbps == MIPI_DSI_FREQ_DEFAULT) {
+			GS_DCS_BUF_ADD_CMD(dev, 0xC5, 0x6C, 0x5C);
+		} else { /* MIPI_DSI_FREQ_ALTERNATIVE */
+			GS_DCS_BUF_ADD_CMD(dev, 0xC5, 0x69, 0x91);
+		}
+	}
+	GS_DCS_BUF_ADD_CMD(dev, 0xB0, 0x00, 0x36, 0xC5);
+	GS_DCS_BUF_ADD_CMD(dev, 0xC5, 0x11, 0x10, 0x50, 0x05);
+	GS_DCS_BUF_ADD_CMDLIST(dev, test_key_fc_disable);
+	GS_DCS_BUF_ADD_CMDLIST_AND_FLUSH(dev, test_key_disable);
+
+	PANEL_ATRACE_END(__func__);
 }
 
 static const struct gs_display_underrun_param underrun_param = {
@@ -637,6 +695,8 @@ static const struct gs_panel_funcs tk4c_gs_funcs = {
 	.get_panel_rev = tk4c_get_panel_rev,
 	.read_id = gs_panel_read_slsi_ddic_id,
 	.atomic_check = tk4c_atomic_check,
+	.pre_update_ffc = tk4c_pre_update_ffc,
+	.update_ffc = tk4c_update_ffc,
 };
 
 const struct gs_panel_brightness_desc tk4c_brightness_desc = {
@@ -680,6 +740,7 @@ const struct gs_panel_desc google_tk4c = {
 	.reg_ctrl_desc = &tk4c_reg_ctrl_desc,
 	.panel_func = &tk4c_drm_funcs,
 	.gs_panel_func = &tk4c_gs_funcs,
+	.default_dsi_hs_clk_mbps = MIPI_DSI_FREQ_DEFAULT,
 	.reset_timing_ms = { -1, 1, 1 },
 };
 
