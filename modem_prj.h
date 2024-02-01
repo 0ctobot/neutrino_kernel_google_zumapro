@@ -720,6 +720,7 @@ struct modem_ctl {
 	int pcie_linkdown_retry_cnt_all;
 	int pcie_cto_retry_cnt;
 	int pcie_cto_retry_cnt_all;
+	int sbb_debug;
 
 	bool reserve_doorbell_int;
 	bool pcie_registered;

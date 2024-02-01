@@ -29,6 +29,7 @@
 #include <linux/exynos-pci-ctrl.h>
 #include <linux/shm_ipc.h>
 #include <dt-bindings/pci/pci.h>
+#include <misc/sbbm.h>
 
 #include "modem_notifier.h"
 #include "modem_prj.h"
@@ -231,12 +232,42 @@ static ssize_t pcie_event_stats_show(struct device *dev,
 	return count;
 }
 
+static ssize_t sbb_debug_show(struct device *dev,
+			      struct device_attribute *attr, char *buf)
+{
+	struct modem_ctl *mc = dev_get_drvdata(dev);
+
+	return sysfs_emit(buf, "%d\n", mc->sbb_debug);
+}
+
+static ssize_t sbb_debug_store(struct device *dev,
+			       struct device_attribute *attr,
+			       const char *buf, size_t count)
+{
+	int ret;
+	int value;
+	struct modem_ctl *mc = dev_get_drvdata(dev);
+
+	ret = kstrtoint(buf, 0, &value);
+	if (ret != 0)
+		return -EINVAL;
+
+	if (value < 0 || value > 1)
+		return -EINVAL;
+
+	mc->sbb_debug = value;
+
+	return count;
+}
+
 static DEVICE_ATTR_RO(power_stats);
 static DEVICE_ATTR_RO(pcie_event_stats);
+static DEVICE_ATTR_RW(sbb_debug);
 
 static struct attribute *modem_attrs[] = {
 	&dev_attr_power_stats.attr,
 	&dev_attr_pcie_event_stats.attr,
+	&dev_attr_sbb_debug.attr,
 	NULL,
 };
 
@@ -299,6 +330,9 @@ static irqreturn_t ap_wakeup_handler(int irq, void *data)
 	int gpio_val = mif_gpio_get_value(&mc->cp_gpio[CP_GPIO_CP2AP_WAKEUP], true);
 	unsigned long flags;
 
+	if (mc->sbb_debug)
+		SBBM_SIGNAL_UPDATE(SBB_SIG_MODEM_CP2AP_WAKE_ISR, 1);
+
 	mif_disable_irq(&mc->cp_gpio_irq[CP_GPIO_IRQ_CP2AP_WAKEUP]);
 
 	if (mc->mdm_data->mif_off_during_volte) {
@@ -312,7 +346,7 @@ static irqreturn_t ap_wakeup_handler(int irq, void *data)
 
 	if (mc->device_reboot) {
 		mif_err("skip : device is rebooting..!!!\n");
-		return IRQ_HANDLED;
+		goto irq_handled;
 	}
 
 	if (gpio_val == check_link_order)
@@ -332,7 +366,7 @@ static irqreturn_t ap_wakeup_handler(int irq, void *data)
 		mc->pcie_pm_resume_gpio_val = gpio_val;
 
 		spin_unlock_irqrestore(&mc->pcie_pm_lock, flags);
-		return IRQ_HANDLED;
+		goto irq_handled;
 	}
 	spin_unlock_irqrestore(&mc->pcie_pm_lock, flags);
 
@@ -343,6 +377,10 @@ static irqreturn_t ap_wakeup_handler(int irq, void *data)
 
 	queue_work_on(RUNTIME_PM_AFFINITY_CORE, mc->wakeup_wq,
 			(gpio_val == 1 ? &mc->wakeup_work : &mc->suspend_work));
+
+irq_handled:
+	if (mc->sbb_debug)
+		SBBM_SIGNAL_UPDATE(SBB_SIG_MODEM_CP2AP_WAKE_ISR, 0);
 
 	return IRQ_HANDLED;
 }
