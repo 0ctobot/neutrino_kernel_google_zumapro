@@ -2101,6 +2101,7 @@ int s5100_poweron_pcie(struct modem_ctl *mc, enum link_mode mode)
 		width = pcie_get_max_link_width(mc->pcie_ch_num);
 	}
 
+	pcie_set_msi_ctrl_addr(mc->pcie_ch_num, shm_get_msi_base());
 	if (pcie_poweron(mc->pcie_ch_num, speed, width) != 0) {
 		if (boot_on) {
 			mif_err("PCIe gen1 linkup with CP ROM failed.\n");

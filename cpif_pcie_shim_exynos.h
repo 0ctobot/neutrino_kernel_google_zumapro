@@ -34,6 +34,7 @@ extern void exynos_pcie_set_perst_gpio(int ch_num, bool on);
 extern void exynos_pcie_set_ready_cto_recovery(int ch_num);
 extern int register_separated_msi_vector(int ch_num, irq_handler_t handler,
 					 void *context, int *irq_num);
+extern int exynos_pcie_set_msi_ctrl_addr(int num, u64 msi_ctrl_addr);
 
 #define pcie_register_event(event) exynos_pcie_register_event(event)
 #define pcie_deregister_event(event) exynos_pcie_deregister_event(event)
@@ -60,3 +61,5 @@ extern int register_separated_msi_vector(int ch_num, irq_handler_t handler,
 #define pcie_set_ready_cto_recovery(ch) exynos_pcie_set_ready_cto_recovery(ch)
 #define pcie_register_separated_msi_vector(ch, handler, context, irq) \
 	register_separated_msi_vector(ch, handler, context, irq)
+#define pcie_set_msi_ctrl_addr(num, msi_ctrl_addr) \
+	exynos_pcie_set_msi_ctrl_addr(num, msi_ctrl_addr)
