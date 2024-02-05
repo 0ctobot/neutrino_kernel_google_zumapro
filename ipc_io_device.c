@@ -85,14 +85,12 @@ static unsigned int ipc_poll(struct file *filp, struct poll_table_struct *wait)
 	struct io_device *iod = (struct io_device *)filp->private_data;
 	struct modem_ctl *mc;
 	struct sk_buff_head *rxq;
-	struct link_device *ld;
 
 	if (!iod)
 		return POLLERR;
 
 	mc = iod->mc;
 	rxq = &iod->sk_rx_q;
-	ld = get_current_link(iod);
 
 	if (skb_queue_empty(rxq))
 		poll_wait(filp, &iod->wq, wait);

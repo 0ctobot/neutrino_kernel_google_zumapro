@@ -98,8 +98,8 @@ static netdev_tx_t vnet_xmit(struct sk_buff *skb, struct net_device *ndev)
 	struct sk_buff *skb_new = skb;
 	char *buff;
 	int ret;
-	u8 cfg = 0;
-	u16 cfg_sit = 0;
+	u8 __maybe_unused cfg;
+	u16 __maybe_unused cfg_sit;
 	unsigned int headroom;
 	unsigned int tailroom;
 	unsigned int tx_bytes;

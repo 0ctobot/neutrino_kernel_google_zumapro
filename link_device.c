@@ -3342,11 +3342,13 @@ static ssize_t rx_int_count_store(struct device *dev,
 		const char *buf, size_t count)
 {
 	struct modem_data *modem;
-	unsigned int val = 0;
-	int ret;
+	unsigned int ret, val = 0;
 
 	modem = (struct modem_data *)dev->platform_data;
 	ret = kstrtouint(buf, 0, &val);
+	if (ret < 0) {
+		mif_err("kstrtouint() failed, rc:%d\n", ret);
+	}
 
 	if (val == 0)
 		modem->mld->rx_int_count = 0;
@@ -3394,11 +3396,13 @@ static ssize_t rx_int_disabled_time_store(struct device *dev,
 		const char *buf, size_t count)
 {
 	struct modem_data *modem;
-	unsigned int val = 0;
-	int ret;
+	unsigned int ret, val = 0;
 
 	modem = (struct modem_data *)dev->platform_data;
 	ret = kstrtouint(buf, 0, &val);
+	if (ret < 0) {
+		mif_err("kstrtouint() failed, rc:%d", ret);
+	}
 
 	if (val == 0)
 		modem->mld->rx_int_disabled_time = 0;

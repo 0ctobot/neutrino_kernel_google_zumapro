@@ -626,7 +626,7 @@ enum mif_sim_mode {
 
 static int simslot_count(struct seq_file *m, void *v)
 {
-	enum mif_sim_mode mode = (enum mif_sim_mode)m->private;
+	enum mif_sim_mode mode = (enum mif_sim_mode)(uintptr_t)(m->private);
 
 	seq_printf(m, "%u\n", mode);
 	return 0;
@@ -637,7 +637,7 @@ static int simslot_count_open(struct inode *inode, struct file *file)
 	return single_open(file, simslot_count, pde_data(inode));
 }
 
-static const struct file_operations simslot_count_fops = {
+static const struct file_operations __maybe_unused simslot_count_fops = {
 	.open	= simslot_count_open,
 	.read	= seq_read,
 	.llseek	= seq_lseek,

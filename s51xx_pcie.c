@@ -484,6 +484,9 @@ static int s51xx_pcie_probe(struct pci_dev *pdev, const struct pci_device_id *en
 
 	mif_info("Enable PCI device...\n");
 	ret = pci_enable_device(pdev);
+	if (ret < 0) {
+		mif_err("pci_enable_device() failed, rc:%d\n", ret);
+	}
 
 	pci_set_master(pdev);
 
@@ -558,14 +561,17 @@ static struct pci_driver s51xx_driver = {
  */
 int s51xx_pcie_init(struct modem_ctl *mc)
 {
-	int ch_num = mc->pcie_ch_num;
 	int ret;
+	int ch_num = mc->pcie_ch_num;
 
 	mif_info("Register PCIE drvier for s51xx.(chNum: %d, mc: 0x%p)\n", ch_num, mc);
 
 	mc->pci_driver = s51xx_driver;
 
 	ret = pci_register_driver(&mc->pci_driver);
+	if (ret < 0) {
+		mif_err("pci_register_driver() failed, rc:%d\n", ret);
+	}
 
 	/* Create PROC fs */
 	proc_create("driver/s51xx_pcie_proc", 0, NULL, &s51xx_pcie_proc_fops);

@@ -2449,10 +2449,7 @@ static int s5100_get_pdata(struct modem_ctl *mc, struct modem_data *pdata)
 static int send_panic_to_cp_notifier(struct notifier_block *nb,
 		unsigned long action, void *nb_data)
 {
-	int ret = 0;
-
-	ret = s5100_send_panic_noti_ext();
-
+	s5100_send_panic_noti_ext();
 	return NOTIFY_DONE;
 }
 
