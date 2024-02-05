@@ -987,8 +987,8 @@ void qbt_lptw_report_event(int x, int y, int state) {
 	pr_debug("lptw touch: x=%d y=%d state=%d", x, y, state);
 	event.X = x;
 	event.Y = y;
-	// LPTW finger will always be first finger down.
-	event.id = 0;
+	// Use a unique finger ID so AOD touches can be recognized.
+	event.id = QBT_LPTW_FINGER_ID;
 	event.state = state;
 	event.touch_valid = true;
 	event.timestamp = ktime_to_timespec64(ktime_get());

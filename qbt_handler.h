@@ -29,6 +29,8 @@
 
 #define QBT_LPTW_TOUCH            1000
 
+#define QBT_LPTW_FINGER_ID        -1
+
 /*
  * enum qbt_finger_events -
  *      enumeration of qbt finger events
