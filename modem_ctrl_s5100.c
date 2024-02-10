@@ -1216,6 +1216,8 @@ static int power_reset_partial_cp(struct modem_ctl *mc)
 		pcie_clean_dislink(mc);
 	}
 
+	mif_gpio_set_value(&mc->cp_gpio[CP_GPIO_AP2CP_DUMP_NOTI], 0, 0);
+
 	mif_info("s5100_cp_reset_required:%d\n", mc->s5100_cp_reset_required);
 	if (mc->s5100_cp_reset_required)
 		gpio_power_offon_cp(mc);
@@ -1336,6 +1338,8 @@ static int power_reset_warm_cp(struct modem_ctl *mc)
 		s51xx_pcie_save_state(mc->s51xx_pdev);
 		pcie_clean_dislink(mc);
 	}
+
+	mif_gpio_set_value(&mc->cp_gpio[CP_GPIO_AP2CP_DUMP_NOTI], 0, 0);
 
 	mif_info("s5100_cp_reset_required:%d\n", mc->s5100_cp_reset_required);
 	if (mc->s5100_cp_reset_required)
