@@ -1319,6 +1319,13 @@ static int power_reset_warm_cp(struct modem_ctl *mc)
 	}
 
 	drain_workqueue(mc->wakeup_wq);
+
+	if (mc->phone_state != STATE_OFFLINE) {
+		change_modem_state(mc, STATE_RESET);
+		msleep(STATE_RESET_INTERVAL_MS);
+	}
+	change_modem_state(mc, STATE_OFFLINE);
+
 	pcie_clean_dislink(mc);
 
 	if (mc->s51xx_pdev != NULL)
