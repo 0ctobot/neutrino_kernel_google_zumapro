@@ -2294,7 +2294,12 @@ static int suspend_cp(struct modem_ctl *mc)
 #endif
 
 		if (mif_gpio_get_value(&mc->cp_gpio[CP_GPIO_CP2AP_WAKEUP], true) == 1) {
-			mif_err("abort suspend\n");
+			mif_info("abort suspend\n");
+			return -EBUSY;
+		}
+		if (mc->phone_state != STATE_ONLINE) {
+			mif_info("Abort suspend since CP state (%s) is not ONLINE\n",
+					cp_state_str(mc->phone_state));
 			return -EBUSY;
 		}
 	} while (0);
