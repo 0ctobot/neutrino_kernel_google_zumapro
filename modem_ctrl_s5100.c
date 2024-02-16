@@ -2709,8 +2709,7 @@ int s5100_init_modemctl_device(struct modem_ctl *mc, struct modem_data *pdata)
 	}
 #endif
 
-	if (mc->pcie_dynamic_spd_enabled &&
-		sysfs_create_group(&pdev->dev.kobj, &dynamic_pcie_spd_group))
+	if (sysfs_create_group(&pdev->dev.kobj, &dynamic_pcie_spd_group))
 		mif_err("failed to create sysfs node for dynamic_pcie_spd\n");
 
 	if (sysfs_create_group(&pdev->dev.kobj, &sim_group))
@@ -2730,8 +2729,7 @@ int s5100_init_modemctl_device(struct modem_ctl *mc, struct modem_data *pdata)
 err_dev_create_file:
 	sysfs_remove_group(&pdev->dev.kobj, &modem_group);
 	sysfs_remove_group(&pdev->dev.kobj, &sim_group);
-	if (mc->pcie_dynamic_spd_enabled)
-		sysfs_remove_group(&pdev->dev.kobj, &dynamic_pcie_spd_group);
+	sysfs_remove_group(&pdev->dev.kobj, &dynamic_pcie_spd_group);
 #if IS_ENABLED(CONFIG_CPIF_AP_SUSPEND_DURING_VOICE_CALL)
 	unregister_modem_voice_call_event_notifier(&mc->call_state_nb);
 err_modem_vce_notifier:
@@ -2760,8 +2758,7 @@ void s5100_uninit_modemctl_device(struct modem_ctl *mc, struct modem_data *pdata
 	device_remove_file(dev, &dev_attr_s5100_wake_lock);
 	sysfs_remove_group(&dev->kobj, &modem_group);
 	sysfs_remove_group(&dev->kobj, &sim_group);
-	if (mc->pcie_dynamic_spd_enabled)
-		sysfs_remove_group(&dev->kobj, &dynamic_pcie_spd_group);
+	sysfs_remove_group(&dev->kobj, &dynamic_pcie_spd_group);
 #if IS_ENABLED(CONFIG_CPIF_AP_SUSPEND_DURING_VOICE_CALL)
 	unregister_modem_voice_call_event_notifier(&mc->call_state_nb);
 #endif
