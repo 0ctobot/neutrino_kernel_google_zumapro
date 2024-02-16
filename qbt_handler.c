@@ -909,57 +909,6 @@ err_cdev_add:
 err_alloc:
 	return ret;
 }
-/**
- * qbt_create_input_device() - Function allocates an input
- * device, configures it for key events and registers it
- *
- * @drvdata:	ptr to driver data
- *
- * Return: 0 on success. Error code on failure.
- */
-static int qbt_create_input_device(struct qbt_drvdata *drvdata)
-{
-	int rc = 0;
-	drvdata->in_dev = input_allocate_device();
-	if (drvdata->in_dev == NULL) {
-		dev_err(drvdata->dev, "%s: input_allocate_device() failed\n",
-			__func__);
-		rc = -ENOMEM;
-		goto end;
-	}
-	drvdata->in_dev->name = QBT_INPUT_DEV_NAME;
-	drvdata->in_dev->phys = NULL;
-	drvdata->in_dev->id.bustype = BUS_HOST;
-	drvdata->in_dev->id.vendor  = 0x0001;
-	drvdata->in_dev->id.product = 0x0001;
-	drvdata->in_dev->id.version = QBT_INPUT_DEV_VERSION;
-	drvdata->in_dev->evbit[0] = BIT_MASK(EV_KEY) |  BIT_MASK(EV_ABS);
-	drvdata->in_dev->keybit[BIT_WORD(BTN_TOUCH)] = BIT_MASK(BTN_TOUCH);
-	drvdata->in_dev->keybit[BIT_WORD(KEY_HOMEPAGE)] |=
-		BIT_MASK(KEY_HOMEPAGE);
-	drvdata->in_dev->keybit[BIT_WORD(KEY_VOLUMEDOWN)] |=
-		BIT_MASK(KEY_VOLUMEDOWN);
-	drvdata->in_dev->keybit[BIT_WORD(KEY_POWER)] |=
-		BIT_MASK(KEY_POWER);
-	input_set_abs_params(drvdata->in_dev, ABS_X,
-					 0,
-					 1000,
-					 0, 0);
-	input_set_abs_params(drvdata->in_dev, ABS_Y,
-					 0,
-					 1000,
-					 0, 0);
-	rc = input_register_device(drvdata->in_dev);
-	if (rc) {
-		dev_err(drvdata->dev, "%s: input_reg_dev() failed %d\n",
-			__func__, rc);
-		goto end;
-	}
-end:
-	if (rc)
-		input_free_device(drvdata->in_dev);
-	return rc;
-}
 static void qbt_gpio_report_event(struct qbt_drvdata *drvdata, int state)
 {
 	struct fd_event event;
@@ -1235,9 +1184,6 @@ static int qbt_probe(struct platform_device *pdev)
 	mutex_init(&drvdata->fd_events_mutex);
 	mutex_init(&drvdata->ipc_events_mutex);
 	rc = qbt_dev_register(drvdata);
-	if (rc < 0)
-		goto end;
-	rc = qbt_create_input_device(drvdata);
 	if (rc < 0)
 		goto end;
 	INIT_KFIFO(drvdata->fd_events);
