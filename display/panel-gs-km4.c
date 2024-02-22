@@ -2194,6 +2194,31 @@ panel_out:
 #endif
 }
 
+static void km4_set_ssc_en(struct gs_panel *ctx, bool enabled)
+{
+	struct device *dev = ctx->dev;
+	const bool ssc_mode_update = ctx->ssc_en != enabled;
+
+	if (!ssc_mode_update) {
+		dev_dbg(ctx->dev, "ssc_mode skip update\n");
+		return;
+	}
+
+	ctx->ssc_en = enabled;
+	GS_DCS_BUF_ADD_CMDLIST(dev, unlock_cmd_f0);
+	GS_DCS_BUF_ADD_CMD(dev, 0xFC, 0x5A, 0x5A); /* test_key_on */
+	GS_DCS_BUF_ADD_CMD(dev, 0xB0, 0x00, 0x6E, 0xC5); /* global para */
+
+	if (enabled)
+		GS_DCS_BUF_ADD_CMD(dev, 0xC5, 0x07, 0x7F, 0x00, 0x00); /* ssc enable */
+	else
+		GS_DCS_BUF_ADD_CMD(dev, 0xC5, 0x04, 0x00); /* ssc disable */
+
+	GS_DCS_BUF_ADD_CMD(dev, 0xFC, 0xA5, 0xA5); /* test_key_off */
+	GS_DCS_BUF_ADD_CMDLIST_AND_FLUSH(dev, lock_cmd_f0);
+	dev_info(ctx->dev, "ssc_mode=%d \n", ctx->ssc_en);
+}
+
 /* this function is called at drm bridge atomic_enable() while presenting 1st frame */
 static void km4_panel_init(struct gs_panel *ctx)
 {
@@ -2283,6 +2308,7 @@ static const struct gs_panel_funcs km4_gs_funcs = {
 	.run_normal_mode_work = km4_normal_mode_work,
 	.pre_update_ffc = km4_pre_update_ffc,
 	.update_ffc = km4_update_ffc,
+	.set_ssc_en = km4_set_ssc_en,
 };
 
 static const struct gs_brightness_configuration km4_btr_configs[] = {
