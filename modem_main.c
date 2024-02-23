@@ -939,17 +939,20 @@ static void cpif_shutdown(struct platform_device *pdev)
 
 static int modem_suspend(struct device *pdev)
 {
+	int ret = 0;
 	struct modem_ctl *mc = dev_get_drvdata(pdev);
 
 	if (mc->ops.suspend)
-		mc->ops.suspend(mc);
+		ret = mc->ops.suspend(mc);
 
+	if (!ret) {
 #if defined(CPIF_WAKEPKT_SET_MARK)
-	atomic_set(&mc->mark_skb_wakeup, 1);
+		atomic_set(&mc->mark_skb_wakeup, 1);
 #endif
-	set_wakeup_packet_log(true);
+		set_wakeup_packet_log(true);
+	}
 
-	return 0;
+	return ret;
 }
 
 static int modem_resume(struct device *pdev)
