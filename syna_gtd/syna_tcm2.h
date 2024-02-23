@@ -567,6 +567,19 @@ struct syna_tcm {
 	 *    on success, 0; otherwise, negative value on error.
 	 */
 	int (*dev_suspend)(struct device *dev);
+
+#if IS_ENABLED(CONFIG_GOOG_TOUCH_INTERFACE)
+	/* Self test function pointer.
+	 *
+	 * @param
+	 *    [ in] private_data: driver data
+	 *    [out] cmd: self test result
+	 *
+	 * @return
+	 *    on success, 0; otherwise, negative value on error.
+	 */
+	int (*selftest)(void *private_data, struct gti_selftest_cmd *cmd);
+#endif
 };
 
 /*

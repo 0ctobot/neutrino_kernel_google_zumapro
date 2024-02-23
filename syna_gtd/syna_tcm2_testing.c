@@ -50,6 +50,75 @@ typedef enum{
 }gaptesttype_t;
 
 /*
+ * syna_print_list()
+ *
+ * Print the frame data in log.
+ *
+ * @param
+ *    [ in] tcm: the driver handle
+ *    [ in] data: frame data
+ *    [ in] rows: the number of rows
+ *    [ in] cols: the number of columns
+ *
+ * @return
+ *    on success, 0; otherwise, return error code
+ */
+static void syna_print_list(struct syna_tcm *tcm, unsigned char *data, int rows, int cols)
+{
+	int i;
+	int count = 0;
+	int *data_ptr = NULL;
+	char print_buf[512];
+
+	data_ptr = (int *)&data[0];
+
+	for (i = 0; i < cols; i++) {
+		count += scnprintf(print_buf + count, PAGE_SIZE - count, "%d ",
+				data_ptr[i]);
+	}
+	LOGI("%s\n", &print_buf[0]);
+
+	count = 0;
+	for (i = 0; i < rows; i++) {
+		count += scnprintf(print_buf + count, PAGE_SIZE - count, "%d ",
+				data_ptr[i + cols]);
+	}
+	LOGI("%s\n", &print_buf[0]);
+}
+
+/*
+ * syna_print_frame()
+ *
+ * Print the frame data in log.
+ *
+ * @param
+ *    [ in] tcm: the driver handle
+ *    [ in] data: frame data
+ *    [ in] rows: the number of rows
+ *    [ in] cols: the number of columns
+ *
+ * @return
+ *    on success, 0; otherwise, return error code
+ */
+static void syna_print_frame(struct syna_tcm *tcm, unsigned char *data, int rows, int cols)
+{
+	int i, j;
+	int count = 0;
+	short *data_ptr = NULL;
+	char print_buf[256];
+
+	data_ptr = (short *)&data[0];
+	for (i = 0; i < rows; i++) {
+		for (j = 0; j < cols; j++) {
+			count += scnprintf(print_buf + count, PAGE_SIZE - count, "%d ",
+					data_ptr[i * tcm->tcm_dev->cols + j]);
+		}
+		LOGI("%s\n", &print_buf[0]);
+		count = 0;
+	}
+}
+
+/*
  * syna_parse_test_limit16()
  *
  * Parse the test limit from the device tree.
@@ -219,6 +288,63 @@ end_of_upper_bound_limit:
 	}
 
 end_of_lower_bound_limit:
+	return result;
+}
+
+/*
+ * syna_testing_compare_byte_vector()
+ *
+ * Sample code to compare the test result with limits
+ * by byte vector
+ *
+ * @param
+ *    [ in] data: target test data
+ *    [ in] data_size: size of test data
+ *    [ in] limit: test limit value to be compared with
+ *    [ in] limit_size: size of test limit
+ *
+ * @return
+ *    on success, true; otherwise, return false
+ */
+bool syna_testing_compare_byte_vector(unsigned char *data,
+		unsigned int data_size, const unsigned char *limit,
+		unsigned int limit_size)
+{
+	bool result = false;
+	unsigned char tmp;
+	unsigned char p, l;
+	int i, j;
+
+	if (!data || (data_size == 0)) {
+		LOGE("Invalid test data\n");
+		return false;
+	}
+	if (!limit || (limit_size == 0)) {
+		LOGE("Invalid limits\n");
+		return false;
+	}
+
+	if (limit_size < data_size) {
+		LOGE("Limit size mismatched, data size: %d, limits: %d\n",
+			data_size, limit_size);
+		return false;
+	}
+
+	result = true;
+	for (i = 0; i < data_size; i++) {
+		tmp = data[i];
+
+		for (j = 0; j < 8; j++) {
+			p = GET_BIT(tmp, j);
+			l = GET_BIT(limit[i], j);
+			if (p != l) {
+				LOGE("Fail on TRX-%03d (data:%X, limit:%X)\n",
+					(i*8 + j), p, l);
+				result = false;
+			}
+		}
+	}
+
 	return result;
 }
 
@@ -490,7 +616,7 @@ static int syna_testing_device_id(struct syna_tcm *tcm)
 	struct tcm_identification_info info;
 	char *strptr = NULL;
 
-	LOGI("Start testing\n");
+	LOGI("%s: Start testing\n", __func__);
 
 	retval = syna_tcm_identify(tcm->tcm_dev, &info);
 	if (retval < 0) {
@@ -534,7 +660,7 @@ static int syna_testing_config_id(struct syna_tcm *tcm)
 	struct tcm_application_info info;
 	int idx;
 
-	LOGI("Start testing\n");
+	LOGI("%s: Start testing\n", __func__);
 
 	retval = syna_tcm_get_app_info(tcm->tcm_dev, &info);
 	if (retval < 0) {
@@ -630,7 +756,7 @@ static int syna_testing_pt01(struct syna_tcm *tcm, struct tcm_buffer *test_data)
 	int retval;
 	bool result = false;
 
-	LOGI("Start testing\n");
+	LOGI("%s: Start testing\n", __func__);
 
 	retval = syna_tcm_run_production_test(tcm->tcm_dev,
 			TEST_PID01_TRX_TRX_SHORTS,
@@ -717,7 +843,7 @@ static int syna_testing_pt05(struct syna_tcm *tcm, struct tcm_buffer *test_data)
 	int retval;
 	bool result = false;
 
-	LOGI("Start testing\n");
+	LOGI("%s: Start testing\n", __func__);
 
 	retval = syna_tcm_run_production_test(tcm->tcm_dev,
 			TEST_PID05_FULL_RAW_CAP,
@@ -742,6 +868,7 @@ static int syna_testing_pt05(struct syna_tcm *tcm, struct tcm_buffer *test_data)
 
 exit:
 	LOGI("Result = %s\n", (result)?"pass":"fail");
+	syna_print_frame(tcm, test_data->buf, tcm->tcm_dev->rows, tcm->tcm_dev->cols);
 
 	return ((result) ? 0 : -1);
 }
@@ -769,7 +896,7 @@ static int syna_testing_pt05_gap(struct syna_tcm *tcm, struct tcm_buffer *test_d
 	short *gap_frame_y = NULL;
 	int i, j, idx;
 
-	LOGI("Start testing\n");
+	LOGI("%s: Start testing\n", __func__);
 
 	frame = syna_pal_mem_alloc(rows * cols, sizeof(short));
 	if (!frame) {
@@ -963,7 +1090,7 @@ static int syna_testing_pt0a(struct syna_tcm *tcm, struct tcm_buffer *test_data)
 	int retval;
 	bool result = false;
 
-	LOGI("Start testing\n");
+	LOGI("%s: Start testing\n", __func__);
 
 	retval = syna_tcm_run_production_test(tcm->tcm_dev,
 			TEST_PID10_DELTA_NOISE,
@@ -988,6 +1115,7 @@ static int syna_testing_pt0a(struct syna_tcm *tcm, struct tcm_buffer *test_data)
 
 exit:
 	LOGI("Result = %s\n", (result)?"pass":"fail");
+	syna_print_frame(tcm, test_data->buf, tcm->tcm_dev->rows, tcm->tcm_dev->cols);
 
 	return ((result) ? 0 : -1);
 }
@@ -1064,7 +1192,7 @@ static int syna_testing_pt10(struct syna_tcm *tcm, struct tcm_buffer *test_data)
 	int retval;
 	bool result = false;
 
-	LOGI("Start testing\n");
+	LOGI("%s: Start testing\n", __func__);
 
 	retval = syna_tcm_run_production_test(tcm->tcm_dev,
 			TEST_PID16_SENSOR_SPEED,
@@ -1089,6 +1217,7 @@ static int syna_testing_pt10(struct syna_tcm *tcm, struct tcm_buffer *test_data)
 
 exit:
 	LOGI("Result = %s\n", (result)?"pass":"fail");
+	syna_print_frame(tcm, test_data->buf, tcm->tcm_dev->rows, tcm->tcm_dev->cols);
 
 	return ((result) ? 0 : -1);
 }
@@ -1116,7 +1245,7 @@ static int syna_testing_pt10_gap(struct syna_tcm *tcm, struct tcm_buffer *test_d
 	short *gap_frame_y = NULL;
 	int i, j, idx;
 
-	LOGI("Start testing\n");
+	LOGI("%s: Start testing\n", __func__);
 
 	frame = syna_pal_mem_alloc(rows * cols, sizeof(short));
 	if (!frame) {
@@ -1309,7 +1438,7 @@ static int syna_testing_pt11(struct syna_tcm *tcm, struct tcm_buffer *test_data)
 	int retval;
 	bool result = false;
 
-	LOGI("Start testing\n");
+	LOGI("%s: Start testing\n", __func__);
 
 	retval = syna_tcm_run_production_test(tcm->tcm_dev,
 			TEST_PID17_ADC_RANGE,
@@ -1334,6 +1463,7 @@ static int syna_testing_pt11(struct syna_tcm *tcm, struct tcm_buffer *test_data)
 
 exit:
 	LOGI("Result = %s\n", (result)?"pass":"fail");
+	syna_print_frame(tcm, test_data->buf, tcm->tcm_dev->rows, tcm->tcm_dev->cols);
 
 	return ((result) ? 0 : -1);
 }
@@ -1410,7 +1540,7 @@ static int syna_testing_pt12(struct syna_tcm *tcm, struct tcm_buffer *test_data)
 	int retval;
 	bool result = false;
 
-	LOGI("Start testing\n");
+	LOGI("%s: Start testing\n", __func__);
 
 	retval = syna_tcm_run_production_test(tcm->tcm_dev,
 			TEST_PID18_HYBRID_ABS_RAW,
@@ -1435,6 +1565,7 @@ static int syna_testing_pt12(struct syna_tcm *tcm, struct tcm_buffer *test_data)
 
 exit:
 	LOGI("Result = %s\n", (result)?"pass":"fail");
+	syna_print_list(tcm, test_data->buf, tcm->tcm_dev->rows, tcm->tcm_dev->cols);
 
 	return ((result) ? 0 : -1);
 }
@@ -1514,7 +1645,7 @@ static int syna_testing_pt16(struct syna_tcm *tcm, struct tcm_buffer *test_data)
 	int retval;
 	bool result = false;
 
-	LOGI("Start testing\n");
+	LOGI("%s: Start testing\n", __func__);
 
 	retval = syna_tcm_run_production_test(tcm->tcm_dev,
 			TEST_PID22_TRANS_CAP_RAW,
@@ -1539,6 +1670,7 @@ static int syna_testing_pt16(struct syna_tcm *tcm, struct tcm_buffer *test_data)
 
 exit:
 	LOGI("Result = %s\n", (result)?"pass":"fail");
+	syna_print_frame(tcm, test_data->buf, tcm->tcm_dev->rows, tcm->tcm_dev->cols);
 
 	return ((result) ? 0 : -1);
 }
@@ -1624,7 +1756,7 @@ static int syna_testing_pt_tag_moisture(struct syna_tcm *tcm, struct tcm_buffer 
 	rows = tcm->tcm_dev->rows;
 	cols = tcm->tcm_dev->cols;
 
-	LOGI("Start testing\n");
+	LOGI("%s: Start testing\n", __func__);
 
 	/* do test in polling; disable irq */
 	if (tcm->hw_if->ops_enable_irq)
@@ -1690,6 +1822,7 @@ exit:
 	syna_tcm_set_dynamic_config(tcm->tcm_dev, DC_DISABLE_DOZE, 0, RESP_IN_POLLING);
 
 	LOGI("Result = %s\n", (result)?"pass":"fail");
+	syna_print_frame(tcm, test_data->buf, tcm->tcm_dev->rows, tcm->tcm_dev->cols);
 
 	/* recover the irq */
 	if (tcm->hw_if->ops_enable_irq)
@@ -1777,6 +1910,38 @@ static struct attribute_group attr_testing_group = {
 	.attrs = attrs,
 };
 
+#if IS_ENABLED(CONFIG_GOOG_TOUCH_INTERFACE)
+static int syna_selftest(void *private_data, struct gti_selftest_cmd *cmd)
+{
+	int retval;
+	struct tcm_buffer test_data;
+	struct syna_tcm *tcm = private_data;
+
+	syna_tcm_buf_init(&test_data);
+
+	/* TRX-TRX shorts */
+	retval = syna_testing_pt01(tcm, &test_data);
+	/* Full raw capacitance & Full raw capacitance gap*/
+	retval |= syna_testing_pt05(tcm, &test_data);
+	retval |= syna_testing_pt05_gap(tcm, &test_data);
+	/* Sensor speed test & Sensor speed test gap*/
+	retval |= syna_testing_pt10(tcm, &test_data);
+	retval |= syna_testing_pt10_gap(tcm, &test_data);
+	/* Abs Raw Cap TX/RX */
+	retval |= syna_testing_pt11(tcm, &test_data);
+	msleep(50);
+	/* Tag moisture */
+	retval |= syna_testing_pt_tag_moisture(tcm, &test_data);
+
+	cmd->result = retval ? GTI_SELFTEST_RESULT_FAIL : GTI_SELFTEST_RESULT_PASS;
+	retval = 0;
+
+	syna_tcm_buf_release(&test_data);
+
+	return retval;
+}
+#endif
+
 /*
  * syna_testing_create_dir()
  *
@@ -1811,6 +1976,10 @@ int syna_testing_create_dir(struct syna_tcm *tcm,
 	}
 
 	g_tcm_ptr = tcm;
+
+#if IS_ENABLED(CONFIG_GOOG_TOUCH_INTERFACE)
+	tcm->selftest = syna_selftest;
+#endif
 
 	return 0;
 }

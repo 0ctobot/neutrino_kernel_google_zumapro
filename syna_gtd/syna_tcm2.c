@@ -234,63 +234,6 @@ static int set_reset(void *private_data, struct gti_reset_cmd *cmd)
 	return 0;
 }
 
-/*
- * syna_testing_compare_byte_vector()
- *
- * Sample code to compare the test result with limits
- * by byte vector
- *
- * @param
- *    [ in] data: target test data
- *    [ in] data_size: size of test data
- *    [ in] limit: test limit value to be compared with
- *    [ in] limit_size: size of test limit
- *
- * @return
- *    on success, true; otherwise, return false
- */
-bool syna_testing_compare_byte_vector(unsigned char *data,
-		unsigned int data_size, const unsigned char *limit,
-		unsigned int limit_size)
-{
-	bool result = false;
-	unsigned char tmp;
-	unsigned char p, l;
-	int i, j;
-
-	if (!data || (data_size == 0)) {
-		LOGE("Invalid test data\n");
-		return false;
-	}
-	if (!limit || (limit_size == 0)) {
-		LOGE("Invalid limits\n");
-		return false;
-	}
-
-	if (limit_size < data_size) {
-		LOGE("Limit size mismatched, data size: %d, limits: %d\n",
-			data_size, limit_size);
-		return false;
-	}
-
-	result = true;
-	for (i = 0; i < data_size; i++) {
-		tmp = data[i];
-
-		for (j = 0; j < 8; j++) {
-			p = GET_BIT(tmp, j);
-			l = GET_BIT(limit[i], j);
-			if (p != l) {
-				LOGE("Fail on TRX-%03d (data:%X, limit:%X)\n",
-					(i*8 + j), p, l);
-				result = false;
-			}
-		}
-	}
-
-	return result;
-}
-
 static int syna_calibrate(void *private_data, struct gti_calibrate_cmd *cmd)
 {
 	(void)private_data;
@@ -298,43 +241,6 @@ static int syna_calibrate(void *private_data, struct gti_calibrate_cmd *cmd)
 	/* Return successful calibration since there is nothing to do. */
 	cmd->result = GTI_CALIBRATE_RESULT_DONE;
 	return 0;
-}
-
-static int syna_selftest(void *private_data, struct gti_selftest_cmd *cmd)
-{
-	int retval, i;
-	unsigned int count = 0;
-	struct tcm_buffer test_data;
-	struct syna_tcm *tcm = private_data;
-
-	syna_tcm_buf_init(&test_data);
-
-	retval = syna_tcm_run_production_test(tcm->tcm_dev,
-			TEST_PID01_TRX_TRX_SHORTS,
-			&test_data);
-	if (retval) {
-		LOGE("Failed to run pt01 test, retval:%d", retval);
-		cmd->result = GTI_SELFTEST_RESULT_FAIL;
-		goto exit;
-	}
-
-	/* Return true for testing pass. */
-	retval = syna_testing_compare_byte_vector(test_data.buf,
-			test_data.data_length,
-			pt01_limits,
-			ARRAY_SIZE(pt01_limits));
-	cmd->result = retval ? GTI_SELFTEST_RESULT_PASS : GTI_SELFTEST_RESULT_FAIL;
-	retval = 0;
-
-	for (i = 0; i < test_data.data_length; i++) {
-		count += scnprintf(cmd->buffer + count, PAGE_SIZE - count, "%d ",
-				test_data.buf[i]);
-	}
-
-exit:
-	syna_tcm_buf_release(&test_data);
-
-	return retval;
 }
 
 static int syna_set_coord_filter_enabled(void *private_data, struct gti_coord_filter_cmd *cmd)
@@ -1241,7 +1147,7 @@ static void syna_gti_init(struct syna_tcm *tcm)
 	options->set_irq_mode = set_irq_mode;
 	options->reset = set_reset;
 	options->calibrate = syna_calibrate;
-	options->selftest = syna_selftest;
+	options->selftest = tcm->selftest;
 	options->get_coord_filter_enabled = syna_get_coord_filter_enabled;
 	options->set_coord_filter_enabled = syna_set_coord_filter_enabled;
 	options->set_grip_mode = syna_set_grip_mode;
