@@ -1928,7 +1928,7 @@ static int syna_selftest(void *private_data, struct gti_selftest_cmd *cmd)
 	retval |= syna_testing_pt10(tcm, &test_data);
 	retval |= syna_testing_pt10_gap(tcm, &test_data);
 	/* Abs Raw Cap TX/RX */
-	retval |= syna_testing_pt11(tcm, &test_data);
+	retval |= syna_testing_pt12(tcm, &test_data);
 	msleep(50);
 	/* Tag moisture */
 	retval |= syna_testing_pt_tag_moisture(tcm, &test_data);
