@@ -568,6 +568,26 @@ static void tk4c_update_ffc(struct exynos_panel *ctx, unsigned int hs_clk)
 	DPU_ATRACE_END(__func__);
 }
 
+static void tk4c_set_ssc_en(struct exynos_panel *ctx, bool enabled)
+{
+	const bool ssc_mode_update = ctx->ssc_mode != enabled;
+
+	if (!ssc_mode_update)
+		return;
+
+	ctx->ssc_mode = enabled;
+	EXYNOS_DCS_BUF_ADD_SET(ctx, test_key_enable);
+	EXYNOS_DCS_BUF_ADD_SET(ctx, test_key_fc_enable);
+	EXYNOS_DCS_BUF_ADD(ctx, 0xB0, 0x00, 0x6E, 0xC5); /* global para */
+	if (enabled)
+		EXYNOS_DCS_BUF_ADD(ctx, 0xC5, 0x07, 0x7F, 0x00, 0x00);
+	else
+		EXYNOS_DCS_BUF_ADD(ctx, 0xC5, 0x04, 0x00);
+	EXYNOS_DCS_BUF_ADD_SET(ctx, test_key_fc_disable);
+	EXYNOS_DCS_BUF_ADD_SET_AND_FLUSH(ctx, test_key_disable);
+	dev_info(ctx->dev, "ssc_mode=%d\n", ctx->ssc_mode);
+}
+
 static const struct exynos_display_underrun_param underrun_param = {
 	.te_idle_us = 350,
 	.te_var = 1,
@@ -695,6 +715,7 @@ static const struct exynos_panel_funcs tk4c_exynos_funcs = {
 	.atomic_check = tk4c_atomic_check,
 	.pre_update_ffc = tk4c_pre_update_ffc,
 	.update_ffc = tk4c_update_ffc,
+	.set_ssc_mode = tk4c_set_ssc_en,
 };
 
 const struct exynos_panel_desc google_tk4c = {
