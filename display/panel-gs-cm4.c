@@ -474,7 +474,7 @@ static void cm4_set_panel_feat(struct gs_panel *ctx, const struct gs_panel_mode 
 			dev_dbg(dev, "%s: no changes, skip update\n", __func__);
 			return;
 		}
-		irc_mode_changed = (ctx->sw_status.irc_mode == ctx->hw_status.irc_mode);
+		irc_mode_changed = (ctx->sw_status.irc_mode != ctx->hw_status.irc_mode);
 	}
 
 	dev_dbg(dev, "ns=%d ee=%d hbm=%d irc=%d auto=%d fi=%d fps=%u idle_fps=%u te=%u vrr=%d\n",
@@ -562,6 +562,8 @@ static void cm4_set_panel_feat(struct gs_panel *ctx, const struct gs_panel_mode 
 			else
 				GS_DCS_BUF_ADD_CMD(dev, 0x68, 0x11, 0x1A, 0x13, 0x18, 0x21, 0x18);
 		}
+		ctx->hw_status.irc_mode = ctx->sw_status.irc_mode;
+		dev_info(dev, "%s: irc_mode=%d\n", __func__, ctx->hw_status.irc_mode);
 	}
 
 	/*
@@ -2105,6 +2107,7 @@ static void cm4_panel_init(struct gs_panel *ctx)
 	clear_bit(FEAT_FI_AUTO, ctx->sw_status.feat);
 	clear_bit(FEAT_FRAME_AUTO, ctx->sw_status.feat);
 #endif
+	ctx->hw_status.irc_mode = IRC_FLAT_DEFAULT;
 
 	if (!ctx->thermal) {
 		dev_err(ctx->dev, "%s: error retrieving thermal data\n", __func__);
