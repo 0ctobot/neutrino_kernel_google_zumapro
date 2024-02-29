@@ -508,6 +508,8 @@ static void km4_set_panel_feat_hbm_irc(struct gs_panel *ctx)
 		else
 			GS_DCS_BUF_ADD_CMD(dev, 0x68, 0x11, 0x1A, 0x13, 0x18, 0x21, 0x18);
 	}
+	ctx->hw_status.irc_mode = ctx->sw_status.irc_mode;
+	dev_info(dev, "%s: irc_mode=%d\n", __func__, ctx->hw_status.irc_mode);
 }
 
 
@@ -758,7 +760,7 @@ static void km4_set_panel_feat(struct gs_panel *ctx, const struct gs_panel_mode 
 			dev_dbg(dev, "%s: no changes, skip update\n", __func__);
 			return;
 		}
-		irc_mode_changed = (ctx->sw_status.irc_mode == ctx->hw_status.irc_mode);
+		irc_mode_changed = (ctx->sw_status.irc_mode != ctx->hw_status.irc_mode);
 	}
 
 	dev_dbg(dev, "hbm=%u irc=%u ns=%u vrr=%u fi=%u@a,%u@m ee=%u rr=%u-%u:%u\n",
@@ -1504,6 +1506,7 @@ static int km4_disable(struct drm_panel *panel)
 	ctx->hw_status.acl_mode = 0;
 	spanel->hw_za_enabled = false;
 	ctx->hw_status.dbv = 0;
+	ctx->hw_status.irc_mode = IRC_FLAT_DEFAULT;
 
 	/* set manual and peak before turning off display */
 	km4_enforce_manual_and_peak(ctx);
@@ -2205,6 +2208,7 @@ static void km4_panel_init(struct gs_panel *ctx)
 	spanel->is_mrr_v1 = false;
 	km4_update_refresh_ctrl_feat(ctx);
 #endif
+	ctx->hw_status.irc_mode = IRC_FLAT_DEFAULT;
 
 	ctx->thermal->tz = thermal_zone_get_zone_by_name("disp_therm");
 	if (IS_ERR_OR_NULL(ctx->thermal->tz))
