@@ -133,6 +133,11 @@ static void tpmon_calc_rx_speed(struct cpif_tpmon *tpmon)
 	else
 		spd = LINK_SPEED_GEN1;
 
+	if (spd != tpmon->current_speed) {
+		mif_info("Change link from GEN%d to GEN%d (rx: %ldMbps)\n",
+			tpmon->current_speed, spd, tpmon->rx_total.rx_mbps);
+		tpmon->current_speed = spd;
+	}
 	pcie_change_link_speed(mc->pcie_ch_num, spd);
 }
 
@@ -1009,6 +1014,7 @@ static int tpmon_init_params(struct cpif_tpmon *tpmon)
 	tpmon->q_status_netdev_backlog = 0;
 	tpmon->q_status_dit_src = 0;
 	tpmon->legacy_packet_count = 0;
+	tpmon->current_speed = LINK_SPEED_GEN1;
 
 	tpmon->prev_monitor_time = 0;
 

@@ -84,6 +84,7 @@ struct cpif_tpmon {
 	u32 monitor_interval_msec;
 	u32 monitor_hold_msec;
 	u32 monitor_stop_mbps;
+	u32 current_speed;
 
 	u32 boost_hold_msec;
 
