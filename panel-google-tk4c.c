@@ -293,9 +293,9 @@ static void tk4c_set_hbm_mode(struct exynos_panel *ctx,
 	ctx->hbm_mode = mode;
 
 	EXYNOS_DCS_BUF_ADD_SET(ctx, test_key_enable);
+	/* FGZ mode setting */
+	EXYNOS_DCS_BUF_ADD(ctx, 0xB0, 0x00, 0x61, 0x68);
 	if (ctx->hbm_mode) {
-		/* FGZ mode setting */
-		EXYNOS_DCS_BUF_ADD(ctx, 0xB0, 0x00, 0x61, 0x68);
 		if (IS_HBM_ON_IRC_OFF(ctx->hbm_mode)) {
 			/* FGZ Mode ON */
 			if (ctx->panel_rev < PANEL_REV_DVT1) {

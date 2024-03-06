@@ -284,9 +284,9 @@ static void tk4c_set_hbm_mode(struct gs_panel *ctx, enum gs_hbm_mode mode)
 	ctx->hbm_mode = mode;
 
 	GS_DCS_BUF_ADD_CMDLIST(dev, test_key_enable);
+	/* FGZ mode setting */
+	GS_DCS_BUF_ADD_CMD(dev, 0xB0, 0x00, 0x61, 0x68);
 	if (GS_IS_HBM_ON(ctx->hbm_mode)) {
-		/* FGZ mode setting */
-		GS_DCS_BUF_ADD_CMD(dev, 0xB0, 0x00, 0x61, 0x68);
 		if (GS_IS_HBM_ON_IRC_OFF(ctx->hbm_mode)) {
 			/* FGZ Mode ON */
 			if (ctx->panel_rev < PANEL_REV_DVT1) {
