@@ -1102,6 +1102,7 @@ static int power_on_cp(struct modem_ctl *mc)
 
 	mif_gpio_set_value(&mc->cp_gpio[CP_GPIO_AP2CP_AP_ACTIVE], 1, 0);
 	mif_gpio_set_value(&mc->cp_gpio[CP_GPIO_AP2CP_DUMP_NOTI], 0, 0);
+	mif_gpio_set_value(&mc->cp_gpio[CP_GPIO_AP2CP_PARTIAL_RST_N], 1, 0);
 
 	/* Clear shared memory */
 	init_ctrl_msg(&mld->ap2cp_msg);
@@ -1996,6 +1997,69 @@ status_error:
 	return ret;
 }
 
+
+static int start_dump_boot_partial(struct modem_ctl *mc)
+{
+	struct link_device *ld = get_current_link(mc->bootd);
+	struct mem_link_device *mld = to_mem_link_device(ld);
+	int err = 0;
+
+	mif_err("+++\n");
+
+	/* Change phone state to CRASH_EXIT */
+	mc->phone_state = STATE_CRASH_EXIT;
+
+	/* Prevent AP from suspending during crashdump */
+	if (!cpif_wake_lock_active(mc->ws)) {
+		mif_info("Acquiring wakelock during partial reset, timeout: %dms!\n",
+			CRASH_WAKELOCK_TIMEOUT_MS);
+		cpif_wake_lock_timeout(mc->ws, msecs_to_jiffies(CRASH_WAKELOCK_TIMEOUT_MS));
+	}
+
+	if (!ld->link_start_dump_boot) {
+		mif_err("%s: link_start_dump_boot is null\n", ld->name);
+		err = -EFAULT;
+		goto error;
+	}
+
+	err = ld->link_start_dump_boot(ld, mc->bootd);
+	if (err)
+		goto error;
+
+	mif_gpio_set_value(&mc->cp_gpio[CP_GPIO_AP2CP_AP_ACTIVE], 1, 0);
+
+	/* do not handle cp2ap_wakeup irq during dump process */
+	mif_disable_irq(&mc->cp_gpio_irq[CP_GPIO_IRQ_CP2AP_WAKEUP]);
+
+	if (mld->attrs & LINK_ATTR_XMIT_BTDLR_PCIE) {
+		err = check_cp_status(mc, 200, false);
+		if (err < 0)
+			goto status_error;
+
+		s5100_poweron_pcie(mc, false);
+	} else {
+		mif_err("ERR! LINK_ATTR_XMIT_BTDLR_PCIE is not set\n");
+		err = -EFAULT;
+		goto error;
+	}
+
+status_error:
+	if (err < 0) {
+		mif_err("ERR! check_cp_status fail (err %d)\n", err);
+		if (mld->attrs & LINK_ATTR_XMIT_BTDLR_PCIE)
+			debug_cp_rom_boot_img(mld);
+	}
+
+error:
+	if (cpif_wake_lock_active(mc->ws)) {
+		mif_info("Release wakelock after partial reset!\n");
+		cpif_wake_unlock(mc->ws);
+	}
+
+	mif_err("---\n");
+	return err;
+}
+
 static int s5100_poweroff_pcie(struct modem_ctl *mc, bool force_off)
 {
 	struct link_device *ld = get_current_link(mc->iod);
@@ -2419,6 +2483,7 @@ static void s5100_get_ops(struct modem_ctl *mc)
 	mc->ops.start_normal_boot_bootloader = start_normal_boot_bootloader;
 	mc->ops.start_dump_boot_bl1 = start_dump_boot_bl1;
 	mc->ops.start_dump_boot_bootloader = start_dump_boot_bootloader;
+	mc->ops.start_dump_boot_partial = start_dump_boot_partial;
 
 	mc->ops.start_dump_boot = start_dump_boot;
 	mc->ops.trigger_cp_crash = trigger_cp_crash;
