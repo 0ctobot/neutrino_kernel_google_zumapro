@@ -2639,6 +2639,41 @@ static int link_start_dump_boot(struct link_device *ld, struct io_device *iod)
 	return 0;
 }
 
+static int link_start_partial_boot(struct link_device *ld, struct io_device *iod)
+{
+	struct mem_link_device *mld = to_mem_link_device(ld);
+
+#if IS_ENABLED(CONFIG_LINK_DEVICE_WITH_SBD_ARCH)
+	if (ld->sbd_ipc && mld->attrs & LINK_ATTR_MEM_DUMP)
+		sbd_deactivate(&mld->sbd_link_dev);
+#endif
+
+	sync_net_dev(ld);
+
+	init_legacy_link(&mld->legacy_link_dev);
+	skb_queue_purge(&iod->sk_rx_q);
+
+	if (mld->attrs & LINK_ATTR_BOOT_ALIGNED)
+		ld->aligned = true;
+	else
+		ld->aligned = false;
+
+	if (mld->dpram_magic) {
+		unsigned int magic;
+
+		iowrite32(ld->magic_dump, mld->legacy_link_dev.magic);
+		magic = ioread32(mld->legacy_link_dev.magic);
+		if (magic != ld->magic_dump) {
+			mif_err("%s: ERR! magic 0x%08X != DUMP_MAGIC 0x%08X\n",
+				ld->name, magic, ld->magic_dump);
+			return -EFAULT;
+		}
+		mif_info("%s: magic == 0x%08X\n", ld->name, magic);
+	}
+
+	return 0;
+}
+
 static void shmem_close_tx(struct link_device *ld)
 {
 	struct mem_link_device *mld = to_mem_link_device(ld);
@@ -3745,6 +3780,7 @@ static int set_ld_attr(struct platform_device *pdev,
 			break;
 
 		ld->link_start_normal_boot = link_start_normal_boot;
+		ld->link_start_partial_boot = link_start_partial_boot;
 		if (link_type == LINKDEV_SHMEM)
 			ld->security_req = shmem_security_request;
 

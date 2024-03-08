@@ -1046,6 +1046,15 @@ static void gpio_power_wreset_cp(struct modem_ctl *mc)
 #endif
 }
 
+static void gpio_power_preset_cp(struct modem_ctl *mc)
+{
+	print_mc_state(mc);
+	mif_gpio_set_value(&mc->cp_gpio[CP_GPIO_AP2CP_PARTIAL_RST_N], 0, 50);
+	print_mc_state(mc);
+	mif_gpio_set_value(&mc->cp_gpio[CP_GPIO_AP2CP_PARTIAL_RST_N], 1, 50);
+	print_mc_state(mc);
+}
+
 static void clear_boot_stage(struct modem_ctl *mc)
 {
 	struct link_device *ld = get_current_link(mc->iod);
@@ -1177,6 +1186,47 @@ static int power_shutdown_cp(struct modem_ctl *mc)
 
 exit:
 	mif_err("---\n");
+	return 0;
+}
+
+static int power_reset_partial_cp(struct modem_ctl *mc)
+{
+	struct s51xx_pcie *s51xx_pcie = NULL;
+#if IS_ENABLED(CONFIG_LINK_DEVICE_WITH_SBD_ARCH)
+	struct link_device *ld = get_current_link(mc->iod);
+	struct mem_link_device *mld = to_mem_link_device(ld);
+
+	if (ld->sbd_ipc && hrtimer_active(&mld->sbd_print_timer))
+		hrtimer_cancel(&mld->sbd_print_timer);
+#endif
+	mif_info("%s: +++\n", mc->name);
+
+	mc->phone_state = STATE_CRASH_EXIT;
+	mif_disable_irq(&mc->cp_gpio_irq[CP_GPIO_IRQ_CP2AP_CP_ACTIVE]);
+	mif_disable_irq(&mc->cp_gpio_irq[CP_GPIO_IRQ_CP2AP_WAKEUP]);
+	drain_workqueue(mc->wakeup_wq);
+	pcie_clean_dislink(mc);
+
+	if (mc->s51xx_pdev != NULL)
+		s51xx_pcie = pci_get_drvdata(mc->s51xx_pdev);
+
+	if (s51xx_pcie && s51xx_pcie->link_status == 1) {
+		mif_info("link_satus:%d\n", s51xx_pcie->link_status);
+		s51xx_pcie_save_state(mc->s51xx_pdev);
+		pcie_clean_dislink(mc);
+	}
+
+	mif_info("s5100_cp_reset_required:%d\n", mc->s5100_cp_reset_required);
+	if (mc->s5100_cp_reset_required)
+		gpio_power_offon_cp(mc);
+	else
+		gpio_power_preset_cp(mc);
+
+	mif_gpio_set_value(&mc->cp_gpio[CP_GPIO_AP2CP_AP_ACTIVE], 1, 0);
+	print_mc_state(mc);
+
+	mif_info("---\n");
+
 	return 0;
 }
 
@@ -2006,8 +2056,16 @@ static int start_dump_boot_partial(struct modem_ctl *mc)
 
 	mif_err("+++\n");
 
-	/* Change phone state to CRASH_EXIT */
-	mc->phone_state = STATE_CRASH_EXIT;
+	if (ld->link_prepare_normal_boot)
+		ld->link_prepare_normal_boot(ld, mc->bootd);
+
+	change_modem_state(mc, STATE_BOOTING);
+	mif_info("Disable phone actvie interrupt.\n");
+	mif_disable_irq(&mc->cp_gpio_irq[CP_GPIO_IRQ_CP2AP_CP_ACTIVE]);
+
+	mif_gpio_set_value(&mc->cp_gpio[CP_GPIO_AP2CP_AP_ACTIVE], 1, 0);
+
+	mc->phone_state = STATE_BOOTING;
 
 	/* Prevent AP from suspending during crashdump */
 	if (!cpif_wake_lock_active(mc->ws)) {
@@ -2016,27 +2074,22 @@ static int start_dump_boot_partial(struct modem_ctl *mc)
 		cpif_wake_lock_timeout(mc->ws, msecs_to_jiffies(CRASH_WAKELOCK_TIMEOUT_MS));
 	}
 
-	if (!ld->link_start_dump_boot) {
-		mif_err("%s: link_start_dump_boot is null\n", ld->name);
+	if (!ld->link_start_partial_boot) {
+		mif_err("%s: link_start_partial_boot is null\n", ld->name);
 		err = -EFAULT;
 		goto error;
 	}
 
-	err = ld->link_start_dump_boot(ld, mc->bootd);
+	err = ld->link_start_partial_boot(ld, mc->bootd);
 	if (err)
 		goto error;
-
-	mif_gpio_set_value(&mc->cp_gpio[CP_GPIO_AP2CP_AP_ACTIVE], 1, 0);
-
-	/* do not handle cp2ap_wakeup irq during dump process */
-	mif_disable_irq(&mc->cp_gpio_irq[CP_GPIO_IRQ_CP2AP_WAKEUP]);
 
 	if (mld->attrs & LINK_ATTR_XMIT_BTDLR_PCIE) {
 		err = check_cp_status(mc, 200, false);
 		if (err < 0)
 			goto status_error;
 
-		s5100_poweron_pcie(mc, false);
+		s5100_poweron_pcie(mc, LINK_MODE_MAX_SPEED_BOOTING);
 	} else {
 		mif_err("ERR! LINK_ATTR_XMIT_BTDLR_PCIE is not set\n");
 		err = -EFAULT;
@@ -2476,6 +2529,7 @@ static void s5100_get_ops(struct modem_ctl *mc)
 	mc->ops.power_reset = power_reset_cp;
 	mc->ops.power_reset_dump = power_reset_dump_cp;
 	mc->ops.silent_reset = silent_reset_cp;
+	mc->ops.power_reset_partial = power_reset_partial_cp;
 
 	mc->ops.start_normal_boot = start_normal_boot;
 	mc->ops.complete_normal_boot = complete_normal_boot;
