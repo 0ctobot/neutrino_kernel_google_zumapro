@@ -1,1 +1,0 @@
-../../shusky/display/panel-google-hk3.c
