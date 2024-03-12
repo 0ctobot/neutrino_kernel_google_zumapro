@@ -756,13 +756,14 @@ static void km4_set_panel_feat(struct gs_panel *ctx, const struct gs_panel_mode 
 		irc_mode_changed = true;
 	} else {
 		bitmap_xor(changed_feat, feat, ctx->hw_status.feat, FEAT_MAX);
+		irc_mode_changed = (ctx->sw_status.irc_mode != ctx->hw_status.irc_mode);
 		if (bitmap_empty(changed_feat, FEAT_MAX) && vrefresh == ctx->hw_status.vrefresh &&
 		    idle_vrefresh == ctx->hw_status.idle_vrefresh &&
-		    te_freq == ctx->hw_status.te_freq) {
+		    te_freq == ctx->hw_status.te_freq &&
+		    !irc_mode_changed) {
 			dev_dbg(dev, "%s: no changes, skip update\n", __func__);
 			return;
 		}
-		irc_mode_changed = (ctx->sw_status.irc_mode != ctx->hw_status.irc_mode);
 	}
 
 	dev_dbg(dev, "hbm=%u irc=%u ns=%u vrr=%u fi=%u@a,%u@m ee=%u rr=%u-%u:%u\n",
