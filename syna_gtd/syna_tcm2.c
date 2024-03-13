@@ -922,12 +922,23 @@ static int syna_get_mutual_sensor_data(void *private_data, struct gti_sensor_dat
 		return 0;
 	}
 
-	if (cmd->type == GTI_SENSOR_DATA_TYPE_MS_DIFF)
+	switch (cmd->type) {
+	case GTI_SENSOR_DATA_TYPE_MS_DIFF:
 		report_code = REPORT_DELTA;
-	else if (cmd->type == GTI_SENSOR_DATA_TYPE_MS_RAW)
+		cmd->is_unsigned = false;
+		break;
+	case GTI_SENSOR_DATA_TYPE_MS_RAW:
 		report_code = REPORT_RAW;
-	else if (cmd->type == GTI_SENSOR_DATA_TYPE_MS_BASELINE)
+		cmd->is_unsigned = true;
+		break;
+	case GTI_SENSOR_DATA_TYPE_MS_BASELINE:
 		report_code = REPORT_BASELINE;
+		cmd->is_unsigned = true;
+		break;
+	default:
+		LOGE("Unsupported report type %u", cmd->type);
+		return -EINVAL;
+	}
 
 	reinit_completion(&tcm->raw_data_completion);
 
@@ -975,12 +986,23 @@ static int syna_get_self_sensor_data(void *private_data, struct gti_sensor_data_
 		return 0;
 	}
 
-	if (cmd->type == GTI_SENSOR_DATA_TYPE_SS_DIFF)
+	switch (cmd->type) {
+	case GTI_SENSOR_DATA_TYPE_SS_DIFF:
 		report_code = REPORT_DELTA;
-	else if (cmd->type == GTI_SENSOR_DATA_TYPE_SS_RAW)
+		cmd->is_unsigned = false;
+		break;
+	case GTI_SENSOR_DATA_TYPE_SS_RAW:
 		report_code = REPORT_RAW;
-	else if (cmd->type == GTI_SENSOR_DATA_TYPE_SS_BASELINE)
+		cmd->is_unsigned = true;
+		break;
+	case GTI_SENSOR_DATA_TYPE_SS_BASELINE:
 		report_code = REPORT_BASELINE;
+		cmd->is_unsigned = true;
+		break;
+	default:
+		LOGE("Unsupported report type %u", cmd->type);
+		return -EINVAL;
+	}
 
 	reinit_completion(&tcm->raw_data_completion);
 
