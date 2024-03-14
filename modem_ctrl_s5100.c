@@ -1554,6 +1554,9 @@ static int check_boot_status(struct modem_ctl *mc, unsigned int count, bool chec
 	}
 
 	mif_info("boot_stage == 0x%X (cnt %d)\n", val, cnt);
+
+	val = (int)ioread32(mld->msi_reg_base + offsetof(struct msi_reg_type, otp_version));
+	mif_info("otp_version == 0x%X\n", val);
 	if (cnt == 0)
 		msleep(10);
 
