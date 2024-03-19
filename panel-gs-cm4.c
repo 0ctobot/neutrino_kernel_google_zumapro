@@ -996,10 +996,7 @@ static void cm4_refresh_ctrl(struct gs_panel *ctx)
 	if (cm4_update_refresh_ctrl_feat(ctx))
 		cm4_change_frequency(ctx, ctx->current_mode);
 
-	if (ctrl & GS_PANEL_REFRESH_CTRL_FI_REFRESH_RATE_MASK) {
-		/* TODO(b/323251635): support setting frame insertion rate */
-		dev_warn(dev, "%s: setting frame insertion rate unsupported\n", __func__);
-	} else {
+	if (ctrl & GS_PANEL_REFRESH_CTRL_FI_FRAME_COUNT_MASK) {
 		/* TODO(b/323251635): parse frame count for inserting multiple frames */
 
 		dev_dbg(dev, "%s: manually inserting frame\n", __func__);
