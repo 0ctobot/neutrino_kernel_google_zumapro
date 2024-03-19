@@ -779,11 +779,6 @@ static int syna_spi_parse_dt(struct syna_hw_interface *hw_if,
 		}
 
 		hw_if->grip_delta_threshold = value;
-	} else {
-		/*
-		 * Set default as 50.
-		 */
-		hw_if->grip_delta_threshold = 50;
 	}
 
 	prop = of_find_property(np, "synaptics,grip-border-threshold", NULL);
@@ -796,11 +791,6 @@ static int syna_spi_parse_dt(struct syna_hw_interface *hw_if,
 		}
 
 		hw_if->grip_border_threshold = value;
-	} else {
-		/*
-		 * Set default as 50.
-		 */
-		hw_if->grip_border_threshold = 50;
 	}
 
 	return 0;

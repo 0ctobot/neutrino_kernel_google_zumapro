@@ -1292,15 +1292,19 @@ static void syna_dev_restore_feature_setting(struct syna_tcm *tcm, unsigned int 
 			tcm->hw_if->compression_threhsold,
 			delay_ms_resp);
 
-	syna_tcm_set_dynamic_config(tcm->tcm_dev,
-			DC_GRIP_DELTA_THRESHOLD,
-			tcm->hw_if->grip_delta_threshold,
-			delay_ms_resp);
+	if (tcm->hw_if->grip_delta_threshold != 0) {
+		syna_tcm_set_dynamic_config(tcm->tcm_dev,
+				DC_GRIP_DELTA_THRESHOLD,
+				tcm->hw_if->grip_delta_threshold,
+				delay_ms_resp);
+	}
 
-	syna_tcm_set_dynamic_config(tcm->tcm_dev,
-			DC_GRIP_BORDER_THRESHOLD,
-			tcm->hw_if->grip_border_threshold,
-			delay_ms_resp);
+	if (tcm->hw_if->grip_border_threshold != 0) {
+		syna_tcm_set_dynamic_config(tcm->tcm_dev,
+				DC_GRIP_BORDER_THRESHOLD,
+				tcm->hw_if->grip_border_threshold,
+				delay_ms_resp);
+	}
 }
 
 #if defined(ENABLE_HELPER)
