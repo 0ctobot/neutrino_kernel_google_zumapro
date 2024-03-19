@@ -191,6 +191,22 @@ static int get_fw_version(void *private_data, struct gti_fw_version_cmd *cmd)
 {
 	struct syna_tcm *tcm = private_data;
 	int cmd_buffer_size = sizeof(cmd->buffer);
+	int retval = 0;
+
+	if (!tcm || !tcm->tcm_dev)
+		return -ENODEV;
+
+	retval = syna_tcm_identify(tcm->tcm_dev, &tcm->tcm_dev->id_info);
+	if (retval < 0) {
+		LOGE("Fail to get identification\n");
+		return retval;
+	}
+
+	retval = syna_tcm_get_app_info(tcm->tcm_dev, &tcm->tcm_dev->app_info);
+	if (retval < 0) {
+		LOGE("Fail to get application info\n");
+		return retval;
+	}
 
 	syna_get_fw_info(tcm, cmd->buffer, cmd_buffer_size);
 	return 0;

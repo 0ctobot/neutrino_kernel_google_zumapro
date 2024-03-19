@@ -263,6 +263,7 @@ exit:
 static ssize_t syna_sysfs_info_show(struct kobject *kobj,
 		struct kobj_attribute *attr, char *buf)
 {
+	int retval = 0;
 	struct device *p_dev;
 	struct kobject *p_kobj;
 	struct syna_tcm *tcm;
@@ -270,6 +271,22 @@ static ssize_t syna_sysfs_info_show(struct kobject *kobj,
 	p_kobj = g_sysfs_dir->parent;
 	p_dev = container_of(p_kobj, struct device, kobj);
 	tcm = dev_get_drvdata(p_dev);
+
+	if (!tcm || !tcm->tcm_dev)
+		return -ENODEV;
+
+	retval = syna_tcm_identify(tcm->tcm_dev, &tcm->tcm_dev->id_info);
+	if (retval < 0) {
+		LOGE("Fail to get identification\n");
+		return retval;
+	}
+
+	/* collect app info containing most of sensor information */
+	retval = syna_tcm_get_app_info(tcm->tcm_dev, &tcm->tcm_dev->app_info);
+	if (retval < 0) {
+		LOGE("Fail to get application info\n");
+		return retval;
+	}
 
 	return syna_get_fw_info(tcm, buf, PAGE_SIZE);
 }
