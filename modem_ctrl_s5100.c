@@ -2506,6 +2506,12 @@ static int suspend_cp(struct modem_ctl *mc)
 			mif_info("abort suspend\n");
 			return -EBUSY;
 		}
+
+		if (mc->phone_state == STATE_OFFLINE) {
+			mif_info("CP is already in OFFLINE state\n");
+			break;
+		}
+
 		if (mc->phone_state != STATE_ONLINE) {
 			mif_info("Abort suspend since CP state (%s) is not ONLINE\n",
 					cp_state_str(mc->phone_state));
