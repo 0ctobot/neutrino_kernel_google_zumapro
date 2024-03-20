@@ -70,6 +70,11 @@ static void syna_print_list(struct syna_tcm *tcm, unsigned char *data, int rows,
 	int *data_ptr = NULL;
 	char print_buf[512];
 
+	if (data == NULL) {
+		LOGE("data is null.");
+		return;
+	}
+
 	data_ptr = (int *)&data[0];
 
 	for (i = 0; i < cols; i++) {
@@ -106,6 +111,11 @@ static void syna_print_frame(struct syna_tcm *tcm, unsigned char *data, int rows
 	int count = 0;
 	short *data_ptr = NULL;
 	char print_buf[256];
+
+	if (data == NULL) {
+		LOGE("data is null.");
+		return;
+	}
 
 	data_ptr = (short *)&data[0];
 	for (i = 0; i < rows; i++) {
@@ -866,9 +876,11 @@ static int syna_testing_pt05(struct syna_tcm *tcm, struct tcm_buffer *test_data)
 			(const short *)&pt05_hi_limits[0],
 			(const short *)&pt05_lo_limits[0]);
 
+	if (test_data->buf != NULL)
+		syna_print_frame(tcm, test_data->buf, tcm->tcm_dev->rows, tcm->tcm_dev->cols);
+
 exit:
 	LOGI("Result = %s\n", (result)?"pass":"fail");
-	syna_print_frame(tcm, test_data->buf, tcm->tcm_dev->rows, tcm->tcm_dev->cols);
 
 	return ((result) ? 0 : -1);
 }
@@ -1113,9 +1125,11 @@ static int syna_testing_pt0a(struct syna_tcm *tcm, struct tcm_buffer *test_data)
 			(const short *)&pt0a_hi_limits[0],
 			(const short *)&pt0a_lo_limits[0]);
 
+	if (test_data->buf != NULL)
+		syna_print_frame(tcm, test_data->buf, tcm->tcm_dev->rows, tcm->tcm_dev->cols);
+
 exit:
 	LOGI("Result = %s\n", (result)?"pass":"fail");
-	syna_print_frame(tcm, test_data->buf, tcm->tcm_dev->rows, tcm->tcm_dev->cols);
 
 	return ((result) ? 0 : -1);
 }
@@ -1215,9 +1229,11 @@ static int syna_testing_pt10(struct syna_tcm *tcm, struct tcm_buffer *test_data)
 			(const short *)&pt10_hi_limits[0],
 			(const short *)&pt10_lo_limits[0]);
 
+	if (test_data->buf != NULL)
+		syna_print_frame(tcm, test_data->buf, tcm->tcm_dev->rows, tcm->tcm_dev->cols);
+
 exit:
 	LOGI("Result = %s\n", (result)?"pass":"fail");
-	syna_print_frame(tcm, test_data->buf, tcm->tcm_dev->rows, tcm->tcm_dev->cols);
 
 	return ((result) ? 0 : -1);
 }
@@ -1461,9 +1477,11 @@ static int syna_testing_pt11(struct syna_tcm *tcm, struct tcm_buffer *test_data)
 			(const short *)&pt11_hi_limits[0],
 			(const short *)&pt11_lo_limits[0]);
 
+	if (test_data->buf != NULL)
+		syna_print_frame(tcm, test_data->buf, tcm->tcm_dev->rows, tcm->tcm_dev->cols);
+
 exit:
 	LOGI("Result = %s\n", (result)?"pass":"fail");
-	syna_print_frame(tcm, test_data->buf, tcm->tcm_dev->rows, tcm->tcm_dev->cols);
 
 	return ((result) ? 0 : -1);
 }
@@ -1563,9 +1581,11 @@ static int syna_testing_pt12(struct syna_tcm *tcm, struct tcm_buffer *test_data)
 			(const int *)&pt12_hi_limits[0],
 			(const int *)&pt12_lo_limits[0]);
 
+	if (test_data->buf != NULL)
+		syna_print_list(tcm, test_data->buf, tcm->tcm_dev->rows, tcm->tcm_dev->cols);
+
 exit:
 	LOGI("Result = %s\n", (result)?"pass":"fail");
-	syna_print_list(tcm, test_data->buf, tcm->tcm_dev->rows, tcm->tcm_dev->cols);
 
 	return ((result) ? 0 : -1);
 }
@@ -1668,9 +1688,11 @@ static int syna_testing_pt16(struct syna_tcm *tcm, struct tcm_buffer *test_data)
 			(const short *)&pt16_hi_limits[0],
 			(const short *)&pt16_lo_limits[0]);
 
+	if (test_data->buf != NULL)
+		syna_print_frame(tcm, test_data->buf, tcm->tcm_dev->rows, tcm->tcm_dev->cols);
+
 exit:
 	LOGI("Result = %s\n", (result)?"pass":"fail");
-	syna_print_frame(tcm, test_data->buf, tcm->tcm_dev->rows, tcm->tcm_dev->cols);
 
 	return ((result) ? 0 : -1);
 }
@@ -1818,11 +1840,13 @@ static int syna_testing_pt_tag_moisture(struct syna_tcm *tcm, struct tcm_buffer 
 		}
 	}
 
+	if (test_data->buf != NULL)
+		syna_print_frame(tcm, test_data->buf, tcm->tcm_dev->rows, tcm->tcm_dev->cols);
+
 exit:
 	syna_tcm_set_dynamic_config(tcm->tcm_dev, DC_DISABLE_DOZE, 0, RESP_IN_POLLING);
 
 	LOGI("Result = %s\n", (result)?"pass":"fail");
-	syna_print_frame(tcm, test_data->buf, tcm->tcm_dev->rows, tcm->tcm_dev->cols);
 
 	/* recover the irq */
 	if (tcm->hw_if->ops_enable_irq)
