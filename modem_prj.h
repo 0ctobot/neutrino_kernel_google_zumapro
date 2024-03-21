@@ -635,6 +635,9 @@ struct modem_ctl {
 	struct modem_data *mdm_data;
 	struct modem_shared *msd;
 	struct device *s5910_dev;
+#if IS_ENABLED(CONFIG_CP_PMIC)
+	struct device *pmic_dev;
+#endif
 
 	enum modem_state phone_state;
 

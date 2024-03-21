@@ -51,6 +51,10 @@
 #include "cpif_qos_info.h"
 #endif
 
+#if IS_ENABLED(CONFIG_CP_PMIC)
+#include "cp_pmic.h"
+#endif
+
 #define FMT_WAKE_TIME   (msecs_to_jiffies(300))
 #define RAW_WAKE_TIME   (HZ*6)
 #define NET_WAKE_TIME	(HZ/2)
@@ -810,6 +814,21 @@ static int cpif_probe(struct platform_device *pdev)
 							pdata->name);
 			}
 		}
+
+#if IS_ENABLED(CONFIG_CP_PMIC)
+		modemctl->pmic_dev = NULL;
+
+		np = of_parse_phandle(dev->of_node, "google,cp-pmic-spmi", 0);
+		if (np) {
+			dp = pmic_get_device(np);
+			if (dp) {
+				modemctl->pmic_dev = dp;
+				link = device_link_add(dev, dp, 0);
+				if (link)
+					mif_info("%s: cp pmic device linked\n", pdata->name);
+			}
+		}
+#endif
 	}
 
 	if (toe_dev_create(pdev)) {
