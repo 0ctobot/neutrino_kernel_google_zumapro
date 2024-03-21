@@ -49,3 +49,6 @@ cpif-$(CONFIG_CPIF_TP_MONITOR) += cpif_tp_monitor.o
 cpif-$(CONFIG_MODEM_IF_LEGACY_QOS) += cpif_qos_info.o
 
 obj-$(CONFIG_CP_THERMAL) += cp_thermal_zone.o
+
+obj-$(CONFIG_CP_PMIC) += cp_pmic.o
+

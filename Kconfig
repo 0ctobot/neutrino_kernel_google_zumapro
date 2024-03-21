@@ -223,5 +223,11 @@ config CP_THERMAL
 	  Enables support for reporting CP temperature sensor data to
 	  kernel thermal framework.
 
+config CP_PMIC
+	tristate "Enable CP PMIC"
+	default n
+	help
+	  Enable CP PMIC module
+
 endmenu
 endif

@@ -23,6 +23,7 @@ kernel_module(
         "//private/google-modules/soc/gs:gs_soc_headers",
     ],
     outs = [
+        "cp_pmic.ko",
         "cp_thermal_zone.ko",
         "cpif.ko",
         "cpif_page.ko",
