@@ -32,8 +32,6 @@ struct km4_panel {
 	bool force_changeable_te2;
 	/** @force_za_off: force to turn off zonal attenuation */
 	bool force_za_off;
-	/** @hw_za_enabled: whether zonal attenuation is enabled in hw */
-	bool hw_za_enabled;
 	/**
 	 * @is_pixel_off: pixel-off command is sent to panel. Only sending normal-on or resetting
 	 *		  panel can recover to normal mode after entering pixel-off state.
@@ -1147,7 +1145,7 @@ static void km4_update_za(struct gs_panel *ctx)
 	if ((ctx->hw_status.acl_mode > ACL_OFF) && !spanel->force_za_off)
 		enable_za = true;
 
-	if (spanel->hw_za_enabled != enable_za) {
+	if (test_bit(FEAT_ZA, ctx->hw_status.feat) != enable_za) {
 		/* LP setting - 0x21 or 0x11: 7.5%, 0x00: off */
 		u8 val = 0;
 
@@ -1158,7 +1156,7 @@ static void km4_update_za(struct gs_panel *ctx)
 		GS_DCS_BUF_ADD_CMD(dev, 0x92, val);
 		GS_DCS_BUF_ADD_CMDLIST_AND_FLUSH(dev, lock_cmd_f0);
 
-		spanel->hw_za_enabled = enable_za;
+		assign_bit(FEAT_ZA, ctx->hw_status.feat, enable_za);
 		dev_info(dev, "%s: %s\n", __func__, enable_za ? "on" : "off");
 	}
 }
@@ -1483,7 +1481,6 @@ static int km4_enable(struct drm_panel *panel)
 static int km4_disable(struct drm_panel *panel)
 {
 	struct gs_panel *ctx = container_of(panel, struct gs_panel, base);
-	struct km4_panel *spanel = to_spanel(ctx);
 	struct device *dev = ctx->dev;
 	int ret;
 
@@ -1507,7 +1504,6 @@ static int km4_disable(struct drm_panel *panel)
 	ctx->hw_status.te_freq = 60;
 	ctx->hw_status.idle_vrefresh = 0;
 	ctx->hw_status.acl_mode = 0;
-	spanel->hw_za_enabled = false;
 	ctx->hw_status.dbv = 0;
 	ctx->hw_status.irc_mode = IRC_FLAT_DEFAULT;
 
@@ -2266,7 +2262,6 @@ static int km4_panel_probe(struct mipi_dsi_device *dsi)
 	ctx->hw_status.vrefresh = 60;
 	ctx->hw_status.te_freq = 60;
 	ctx->hw_status.acl_mode = ACL_OFF;
-	spanel->hw_za_enabled = false;
 	ctx->hw_status.dbv = 0;
 	ctx->thermal = &km4_thermal_data;
 	spanel->is_pixel_off = false;
