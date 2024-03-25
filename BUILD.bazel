@@ -1,39 +1,72 @@
 # SPDX-License-Identifier: GPL-2.0-or-later
 
-load("//build/kernel/kleaf:kernel.bzl", "kernel_module")
+load("//build/kernel/kleaf:kernel.bzl", "ddk_module")
 
-kernel_module(
-    name = "drm_panel.google",
-    srcs = glob([
-        "**/*.c",
-        "**/*.h",
-    ]) + [
-        "Kbuild",
-    ] + [
-        "//private/google-modules/display/common:headers",
-        "//private/google-modules/display/samsung:headers",
-        "//private/google-modules/display/samsung/include:headers",
-        "//private/google-modules/soc/gs:gs_soc_headers",
+# Convenience variables (to reduce repetition)
+
+panel_deps = [
+    "//aosp:all_headers_aarch64",
+    "//private/google-modules/display/common:ddk_headers",
+    "//private/google-modules/display/common/gs_panel",
+]
+
+panel_visibility = [
+    "//private/devices/google:__subpackages__",
+]
+
+# Note: please add additional drivers as separate ddk modules
+
+ddk_module(
+    name = "panel-gs-km4",
+    srcs = [
+        "panel-gs-km4.c",
     ],
-    outs = [
-        # keep sorted
-        "panel-google-bigsurf.ko",
-        "panel-google-hk3.ko",
-        "panel-google-shoreline.ko",
-        "panel-google-tk4a.ko",
-        "panel-google-tk4b.ko",
-        "panel-google-tk4c.ko",
-        "panel-gs-cm4.ko",
-        "panel-gs-km4.ko",
-    ],
+    out = "panel-gs-km4.ko",
     kernel_build = "//private/google-modules/soc/gs:gs_kernel_build",
-    visibility = [
-        "//private/devices/google:__subpackages__",
-        "//private/google-modules/soc/gs:__pkg__",
+    visibility = panel_visibility,
+    deps = panel_deps,
+)
+
+ddk_module(
+    name = "panel-gs-cm4",
+    srcs = [
+        "panel-gs-cm4.c",
     ],
-    deps = [
-        "//private/google-modules/display/common/gs_panel",
-        "//private/google-modules/display/samsung:display.samsung",
-        "//private/google-modules/soc/gs:gs_soc_module",
+    out = "panel-gs-cm4.ko",
+    kernel_build = "//private/google-modules/soc/gs:gs_kernel_build",
+    visibility = panel_visibility,
+    deps = panel_deps,
+)
+
+ddk_module(
+    name = "panel-gs-tk4a",
+    srcs = [
+        "panel-gs-tk4a.c",
     ],
+    out = "panel-gs-tk4a.ko",
+    kernel_build = "//private/google-modules/soc/gs:gs_kernel_build",
+    visibility = panel_visibility,
+    deps = panel_deps,
+)
+
+ddk_module(
+    name = "panel-gs-tk4b",
+    srcs = [
+        "panel-gs-tk4b.c",
+    ],
+    out = "panel-gs-tk4b.ko",
+    kernel_build = "//private/google-modules/soc/gs:gs_kernel_build",
+    visibility = panel_visibility,
+    deps = panel_deps,
+)
+
+ddk_module(
+    name = "panel-gs-tk4c",
+    srcs = [
+        "panel-gs-tk4c.c",
+    ],
+    out = "panel-gs-tk4c.ko",
+    kernel_build = "//private/google-modules/soc/gs:gs_kernel_build",
+    visibility = panel_visibility,
+    deps = panel_deps,
 )
