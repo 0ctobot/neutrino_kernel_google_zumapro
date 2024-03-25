@@ -340,6 +340,8 @@ static int pktproc_get_info_ul(struct pktproc_adaptor_ul *ppa_ul,
 		panic("Need to enable UL single queue config for single UL queue.\n");
 		return -EINVAL;
 	}
+	if (ppa_ul->num_queue > PKTPROC_UL_QUEUE_MAX)
+		ppa_ul->num_queue = PKTPROC_UL_QUEUE_MAX;
 	mif_dt_read_u32(np, "pktproc_ul_max_packet_size", ppa_ul->default_max_packet_size);
 	mif_dt_read_u32_noerr(np, "pktproc_ul_hiprio_ack_only", ppa_ul->hiprio_ack_only);
 	mif_dt_read_u32(np, "pktproc_ul_use_hw_iocc", ppa_ul->use_hw_iocc);
@@ -521,10 +523,8 @@ int pktproc_create_ul(struct platform_device *pdev, struct mem_link_device *mld,
 
 		mif_info("Queue %d\n", i);
 
-		ppa_ul->q[i] = kzalloc(sizeof(struct pktproc_queue_ul),
-				GFP_ATOMIC);
+		ppa_ul->q[i] = kzalloc(sizeof(*ppa_ul->q[i]), GFP_ATOMIC);
 		if (ppa_ul->q[i] == NULL) {
-			mif_err_limited("kzalloc() error %d\n", i);
 			ret = -ENOMEM;
 			goto create_error;
 		}

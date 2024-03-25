@@ -471,7 +471,7 @@ static void tpmon_set_rps(struct tpmon_data *data)
 #endif
 	struct io_device *iod;
 	unsigned int num_queue = 1;
-	unsigned int i;
+	unsigned int i, len;
 	u32 val, *rxq_mask;
 
 	if (!data->enable)
@@ -501,9 +501,11 @@ static void tpmon_set_rps(struct tpmon_data *data)
 			continue;
 
 		for (i = 0; i < num_queue; i++) {
-			snprintf(mask, MAX_RPS_STRING, "%x", rxq_mask[i]);
+			len = scnprintf(mask, MAX_RPS_STRING, "%x",
+					rxq_mask[i]);
 
-			ret = (int)tpmon_store_rps_map(&iod->ndev->_rx[i], mask, strlen(mask));
+			ret = (int)tpmon_store_rps_map(&iod->ndev->_rx[i],
+					mask, len);
 			if (ret < 0) {
 				mif_err("tpmon_store_rps_map() error:%d\n", ret);
 				goto out;
@@ -519,9 +521,9 @@ static void tpmon_set_rps(struct tpmon_data *data)
 		dev_hold(iod->clat_ndev);
 		spin_unlock_irqrestore(&iod->clat_lock, flags);
 
-		snprintf(mask, MAX_RPS_STRING, "%x", val);
+		len = scnprintf(mask, MAX_RPS_STRING, "%x", val);
 		ret = (int)tpmon_store_rps_map(&(iod->clat_ndev->_rx[0]),
-			mask, strlen(mask));
+			mask, len);
 		dev_put(iod->clat_ndev);
 
 		if (ret < 0) {
@@ -738,7 +740,7 @@ static void tpmon_set_cpu_freq(struct tpmon_data *data)
 static int tpmon_cpufreq_nb(struct notifier_block *nb,
 		unsigned long event, void *arg)
 {
-	struct cpufreq_policy *policy = (struct cpufreq_policy *)arg;
+	struct cpufreq_policy *policy = arg;
 	struct cpif_tpmon *tpmon = &_tpmon;
 	struct tpmon_data *data;
 
@@ -1294,8 +1296,7 @@ static ssize_t use_user_level_show(struct device *dev,
 {
 	struct cpif_tpmon *tpmon = &_tpmon;
 
-	return scnprintf(buf, PAGE_SIZE, "use_user_level:%d\n",
-		tpmon->use_user_level);
+	return sysfs_emit(buf, "use_user_level:%d\n", tpmon->use_user_level);
 }
 
 static ssize_t use_user_level_store(struct device *dev,
@@ -1330,8 +1331,7 @@ static ssize_t debug_print_show(struct device *dev,
 {
 	struct cpif_tpmon *tpmon = &_tpmon;
 
-	return scnprintf(buf, PAGE_SIZE,
-		"debug pring enable:%d\n", tpmon->debug_print);
+	return sysfs_emit(buf, "debug pring enable:%d\n", tpmon->debug_print);
 }
 
 static ssize_t debug_print_store(struct device *dev,

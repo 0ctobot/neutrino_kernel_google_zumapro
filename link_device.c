@@ -2871,7 +2871,7 @@ static int shmem_ioctl(struct link_device *ld, struct io_device *iod,
 
 irqreturn_t shmem_tx_state_handler(int irq, void *data)
 {
-	struct mem_link_device *mld = (struct mem_link_device *)data;
+	struct mem_link_device *mld = data;
 	struct link_device *ld = &mld->link_dev;
 	struct modem_ctl *mc = ld->mc;
 	u16 int2ap_status;
@@ -2940,7 +2940,7 @@ static int shmem_enqueue_snapshot(struct mem_link_device *mld)
 
 irqreturn_t shmem_irq_handler(int irq, void *data)
 {
-	struct mem_link_device *mld = (struct mem_link_device *)data;
+	struct mem_link_device *mld = data;
 
 	mld->rx_int_count++;
 	if (napi_schedule_prep(&mld->mld_napi)) {
@@ -2956,7 +2956,7 @@ irqreturn_t shmem_irq_handler(int irq, void *data)
 #if IS_ENABLED(CONFIG_MCU_IPC)
 static irqreturn_t shmem_cp2ap_wakelock_handler(int irq, void *data)
 {
-	struct mem_link_device *mld = (struct mem_link_device *)data;
+	struct mem_link_device *mld = data;
 	unsigned int req;
 
 	mif_info("%s\n", __func__);
@@ -2989,7 +2989,7 @@ static irqreturn_t shmem_cp2ap_wakelock_handler(int irq, void *data)
 #if IS_ENABLED(CONFIG_MCU_IPC) && IS_ENABLED(CONFIG_LINK_DEVICE_PCIE)
 static irqreturn_t shmem_cp2ap_rat_mode_handler(int irq, void *data)
 {
-	struct mem_link_device *mld = (struct mem_link_device *)data;
+	struct mem_link_device *mld = data;
 	unsigned int req;
 
 	req = extract_ctrl_msg(&mld->cp2ap_united_status, mld->sbi_cp_rat_mode_mask,
@@ -3084,7 +3084,7 @@ EXPORT_SYMBOL(shmem_ap2cp_write_clatinfo);
 
 static irqreturn_t shmem_cp2ap_clatinfo_ack(int irq, void *data)
 {
-	struct mem_link_device *mld = (struct mem_link_device *)data;
+	struct mem_link_device *mld = data;
 	struct link_device *ld = &mld->link_dev;
 	struct modem_ctl *mc = ld->mc;
 
@@ -3228,7 +3228,8 @@ static ssize_t tx_period_ms_show(struct device *dev,
 	struct modem_data *modem;
 
 	modem = (struct modem_data *)dev->platform_data;
-	return scnprintf(buf, PAGE_SIZE, "%ld\n", modem->mld->tx_period_ns / NSEC_PER_MSEC);
+	return sysfs_emit(buf, "%ld\n",
+			modem->mld->tx_period_ns / NSEC_PER_MSEC);
 }
 
 static ssize_t tx_period_ms_store(struct device *dev,
@@ -3361,7 +3362,7 @@ static ssize_t rx_int_enable_show(struct device *dev,
 	struct modem_data *modem;
 
 	modem = (struct modem_data *)dev->platform_data;
-	return scnprintf(buf, PAGE_SIZE, "%d\n", modem->mld->rx_int_enable);
+	return sysfs_emit(buf, "%d\n", modem->mld->rx_int_enable);
 }
 
 static ssize_t rx_int_count_show(struct device *dev,
@@ -3370,7 +3371,7 @@ static ssize_t rx_int_count_show(struct device *dev,
 	struct modem_data *modem;
 
 	modem = (struct modem_data *)dev->platform_data;
-	return scnprintf(buf, PAGE_SIZE, "%d\n", modem->mld->rx_int_count);
+	return sysfs_emit(buf, "%d\n", modem->mld->rx_int_count);
 }
 
 static ssize_t rx_int_count_store(struct device *dev,
@@ -3400,8 +3401,8 @@ static ssize_t rx_poll_count_show(struct device *dev,
 	modem = (struct modem_data *)dev->platform_data;
 	mld = modem->mld;
 
-	return scnprintf(buf, PAGE_SIZE, "%s: %d\n", netdev_name(&mld->dummy_net),
-		mld->rx_poll_count);
+	return sysfs_emit(buf, "%s: %d\n",
+			netdev_name(&mld->dummy_net), mld->rx_poll_count);
 }
 
 static ssize_t rx_poll_count_store(struct device *dev,
@@ -3424,7 +3425,7 @@ static ssize_t rx_int_disabled_time_show(struct device *dev,
 	struct modem_data *modem;
 
 	modem = (struct modem_data *)dev->platform_data;
-	return scnprintf(buf, PAGE_SIZE, "%lld\n", modem->mld->rx_int_disabled_time);
+	return sysfs_emit(buf, "%lld\n", modem->mld->rx_int_disabled_time);
 }
 
 static ssize_t rx_int_disabled_time_store(struct device *dev,
@@ -3561,7 +3562,7 @@ static ssize_t debug_disable_hw_clat_show(struct device *dev,
 	modem = (struct modem_data *)dev->platform_data;
 	mld = modem->mld;
 
-	return scnprintf(buf, PAGE_SIZE, "disable_hw_clat: %d\n", mld->disable_hw_clat);
+	return sysfs_emit(buf, "disable_hw_clat: %d\n", mld->disable_hw_clat);
 }
 
 static DEVICE_ATTR_WO(debug_hw_clat_test);
@@ -3644,7 +3645,7 @@ static enum hrtimer_restart sbd_print(struct hrtimer *timer)
 			spin_lock(&rb[TX]->iod->msd->active_list_lock);
 			list_for_each_entry(iod, &rb[TX]->iod->msd->activated_ndev_list,
 					node_ndev) {
-				len += snprintf(buf + len, BUFF_SIZE - len, "%s: %lu/%lu ",
+				len += scnprintf(buf + len, BUFF_SIZE - len, "%s: %lu/%lu ",
 						iod->name, iod->ndev->stats.tx_packets,
 						iod->ndev->stats.rx_packets);
 			}

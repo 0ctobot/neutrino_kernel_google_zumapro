@@ -543,10 +543,10 @@ static int parse_dt_iodevs_pdata(struct device *dev, struct device_node *np,
 			}
 
 			if (ch_count < iod->ch_count) {
-				snprintf(iod->name, sizeof(iod->name), "%s%d", name, ch_count);
+				scnprintf(iod->name, sizeof(iod->name), "%s%d", name, ch_count);
 				iod->ch = p_iod->ch + ch_count;
 			} else {
-				snprintf(iod->name, sizeof(iod->name), "%s", name);
+				scnprintf(iod->name, sizeof(iod->name), "%s", name);
 			}
 
 			pdata->iodevs[pdata->num_iodevs] = iod;
@@ -705,7 +705,7 @@ static ssize_t modem_state_show(struct device *dev,
 {
 	struct modem_ctl *mc = dev_get_drvdata(dev);
 
-	return scnprintf(buf, PAGE_SIZE, "%s\n", cp_state_str(mc->phone_state));
+	return sysfs_emit(buf, "%s\n", cp_state_str(mc->phone_state));
 }
 
 static DEVICE_ATTR_WO(do_cp_crash);
