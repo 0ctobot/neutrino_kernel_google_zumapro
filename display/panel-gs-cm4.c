@@ -291,7 +291,7 @@ static u8 cm4_get_te2_option(struct gs_panel *ctx)
 		return CM4_TE2_CHANGEABLE;
 
 	if (ctx->current_mode->gs_mode.is_lp_mode ||
-	    (test_bit(FEAT_EARLY_EXIT, ctx->sw_status.feat) && ctx->throttled_min_vrefresh < 30))
+	    (test_bit(FEAT_EARLY_EXIT, ctx->sw_status.feat) && ctx->sw_status.idle_vrefresh < 30))
 		return CM4_TE2_FIXED;
 
 	return CM4_TE2_CHANGEABLE;
@@ -842,7 +842,7 @@ static void cm4_set_panel_feat(struct gs_panel *ctx, const struct gs_panel_mode 
 static void cm4_update_panel_feat(struct gs_panel *ctx, bool enforce)
 {
 	const struct gs_panel_mode *pmode = ctx->current_mode;
-	u32 idle_vrefresh = ctx->throttled_min_vrefresh;
+	u32 idle_vrefresh = ctx->sw_status.idle_vrefresh;
 
 	cm4_set_panel_feat(ctx, pmode, idle_vrefresh, enforce);
 }
@@ -880,7 +880,7 @@ static void cm4_update_refresh_mode(struct gs_panel *ctx, const struct gs_panel_
 		else
 			clear_bit(FEAT_EARLY_EXIT, ctx->sw_status.feat);
 	}
-	ctx->throttled_min_vrefresh = idle_vrefresh;
+	ctx->sw_status.idle_vrefresh = idle_vrefresh;
 	/*
 	 * Note: when mode is explicitly set, panel performs early exit to get out
 	 * of idle at next vsync, and will not back to idle until not seeing new
@@ -1041,7 +1041,7 @@ static bool cm4_set_self_refresh(struct gs_panel *ctx, bool enable)
 		 * or switch to manual mode if idle should be disabled (idle_vrefresh=0)
 		 */
 		if ((cm4_get_idle_mode(ctx, pmode) == GIDLE_MODE_ON_INACTIVITY) &&
-		    (ctx->throttled_min_vrefresh != idle_vrefresh)) {
+		    (ctx->sw_status.idle_vrefresh != idle_vrefresh)) {
 			cm4_update_refresh_mode(ctx, pmode, idle_vrefresh);
 			return true;
 		}
@@ -1094,7 +1094,7 @@ static int cm4_atomic_check(struct gs_panel *ctx, struct drm_atomic_state *state
 	if (!old_crtc_state || !new_crtc_state || !new_crtc_state->active)
 		return 0;
 
-	if ((ctx->throttled_min_vrefresh && old_crtc_state->self_refresh_active) ||
+	if ((ctx->sw_status.idle_vrefresh && old_crtc_state->self_refresh_active) ||
 	    !drm_atomic_crtc_effectively_active(old_crtc_state)) {
 		struct drm_display_mode *mode = &new_crtc_state->adjusted_mode;
 
@@ -1358,7 +1358,7 @@ static void cm4_set_lp_mode(struct gs_panel *ctx, const struct gs_panel_mode *pm
 static void cm4_set_nolp_mode(struct gs_panel *ctx, const struct gs_panel_mode *pmode)
 {
 	struct device *dev = ctx->dev;
-	u32 idle_vrefresh = ctx->throttled_min_vrefresh;
+	u32 idle_vrefresh = ctx->sw_status.idle_vrefresh;
 
 	dev_dbg(dev, "%s\n", __func__);
 
