@@ -649,6 +649,10 @@ static int tk4b_set_brightness(struct gs_panel *ctx, u16 br)
 		return gs_dcs_set_brightness(ctx, 0);
 	}
 
+	if (GS_IS_HBM_ON_IRC_OFF(ctx->hbm_mode)
+				 && br == ctx->desc->brightness_desc->brt_capability->hbm.level.max)
+		br = 0xfff;
+
 	brightness = swab16(br);
 
 	if (ctx->timestamps.idle_exit_dimming_delay_ts &&
@@ -689,13 +693,6 @@ static void tk4b_mode_set(struct gs_panel *ctx,
 			     const struct gs_panel_mode *pmode)
 {
 	tk4b_change_frequency(ctx, pmode);
-}
-
-static bool tk4b_is_mode_seamless(const struct gs_panel *ctx,
-				     const struct gs_panel_mode *pmode)
-{
-	/* seamless mode set can happen if active region resolution is same */
-	return drm_mode_equal_no_clocks(&ctx->current_mode->mode, &pmode->mode);
 }
 
 static void tk4b_get_panel_rev(struct gs_panel *ctx, u32 id)
@@ -897,7 +894,7 @@ static const struct gs_panel_funcs tk4b_gs_funcs = {
 	.set_binned_lp = gs_panel_set_binned_lp_helper,
 	.set_hbm_mode = tk4b_set_hbm_mode,
 	.set_dimming = tk4b_set_dimming,
-	.is_mode_seamless = tk4b_is_mode_seamless,
+	.is_mode_seamless = gs_panel_is_mode_seamless_helper,
 	.mode_set = tk4b_mode_set,
 	.panel_init = tk4b_panel_init,
 	.panel_config = tk4b_panel_config,
