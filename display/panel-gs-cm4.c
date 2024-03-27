@@ -30,14 +30,14 @@
  *
  * This struct maintains cm4 panel specific info. The variables with the prefix hw_ keep
  * track of the features that were actually committed to hardware, and should be modified
- * after sending cmds to panel, i.e. updating hw state.
+ * after sending cmds to panel, i.e., updating hw state.
  */
 struct cm4_panel {
 	/** @base: base panel struct */
 	struct gs_panel base;
 	/** @force_changeable_te: force changeable TE (instead of fixed) during early exit */
 	bool force_changeable_te;
-	/** @force_changeable_te2: force changeable TE for monitoring refresh rate */
+	/** @force_changeable_te2: force changeable TE2 for monitoring refresh rate */
 	bool force_changeable_te2;
 	/** @force_za_off: force to turn off zonal attenuation */
 	bool force_za_off;
@@ -47,7 +47,7 @@ struct cm4_panel {
 	 */
 	bool is_pixel_off;
 	/**
-	 * @is_mrr_v1: indicates panel is running in mrr mode
+	 * @is_mrr_v1: indicates panel is running in mrr v1 mode
 	 */
 	bool is_mrr_v1;
 };
@@ -244,7 +244,7 @@ static const struct gs_binned_lp cm4_binned_lp[] = {
 
 static inline bool is_in_comp_range(int temp)
 {
-	return (temp >= 10 && temp <= 49);
+	return temp >= 10 && temp <= 49;
 }
 
 /* Read temperature and apply appropriate gain into DDIC for burn-in compensation if needed */
@@ -273,6 +273,8 @@ static void cm4_update_disp_therm(struct gs_panel *ctx)
 	if (temp == ctx->thermal->hw_temp || !is_in_comp_range(temp))
 		return;
 
+	dev_dbg(dev, "%s: apply gain into ddic at %ddeg c\n", __func__, temp);
+
 	DPU_ATRACE_BEGIN(__func__);
 	GS_DCS_BUF_ADD_CMDLIST(dev, unlock_cmd_f0);
 	GS_DCS_BUF_ADD_CMD(dev, 0xB0, 0x00, 0x03, 0x67);
@@ -286,12 +288,13 @@ static void cm4_update_disp_therm(struct gs_panel *ctx)
 static u8 cm4_get_te2_option(struct gs_panel *ctx)
 {
 	struct cm4_panel *spanel = to_spanel(ctx);
+	struct gs_panel_status *sw_status = &ctx->sw_status;
 
-	if (!ctx->current_mode || spanel->force_changeable_te2)
+	if (!ctx || !ctx->current_mode || spanel->force_changeable_te2)
 		return CM4_TE2_CHANGEABLE;
 
 	if (ctx->current_mode->gs_mode.is_lp_mode ||
-	    (test_bit(FEAT_EARLY_EXIT, ctx->sw_status.feat) && ctx->sw_status.idle_vrefresh < 30))
+	    (test_bit(FEAT_EARLY_EXIT, sw_status->feat) && sw_status->idle_vrefresh < 30))
 		return CM4_TE2_FIXED;
 
 	return CM4_TE2_CHANGEABLE;
@@ -304,9 +307,14 @@ static void cm4_update_te2_internal(struct gs_panel *ctx, bool lock)
 		.falling_edge = CM4_TE2_FALLING_EDGE_OFFSET,
 	};
 	u32 rising, falling;
-	struct device *dev = ctx->dev;
+	struct device *dev;
 	u8 option = cm4_get_te2_option(ctx);
 	u8 idx;
+
+	if (!ctx)
+		return;
+
+	dev = ctx->dev;
 
 	/* skip TE2 update if going through RRS */
 	if (ctx->mode_in_progress == MODE_RES_IN_PROGRESS ||
@@ -332,9 +340,9 @@ static void cm4_update_te2_internal(struct gs_panel *ctx, bool lock)
 	if (lock)
 		GS_DCS_BUF_ADD_CMDLIST(dev, unlock_cmd_f0);
 	GS_DCS_BUF_ADD_CMD(dev, 0xB0, 0x00, 0x42, 0xF2);
-	GS_DCS_BUF_ADD_CMD(dev, 0xF2, 0x0D); // TE2 ON
+	GS_DCS_BUF_ADD_CMD(dev, 0xF2, 0x0D); /* TE2 ON */
 	GS_DCS_BUF_ADD_CMD(dev, 0xB0, 0x00, 0x01, 0xB9);
-	GS_DCS_BUF_ADD_CMD(dev, 0xB9, option); // TE2 type setting
+	GS_DCS_BUF_ADD_CMD(dev, 0xB9, option); /* TE2 type setting */
 	idx = option == CM4_TE2_FIXED ? 0x22 : 0x1E;
 	GS_DCS_BUF_ADD_CMD(dev, 0xB0, 0x00, idx, 0xB9);
 	if (option == CM4_TE2_FIXED) {
@@ -436,7 +444,6 @@ static void cm4_set_panel_feat_te(struct gs_panel *ctx, unsigned long *feat,
 	struct device *dev = ctx->dev;
 	bool is_vrr = gs_is_vrr_mode(pmode);
 	u32 te_freq = gs_drm_mode_te_freq(&pmode->mode);
-	u8 val;
 
 	if (test_bit(FEAT_EARLY_EXIT, feat) && !spanel->force_changeable_te) {
 		if (is_vrr && te_freq == 240) {
@@ -464,10 +471,12 @@ static void cm4_set_panel_feat_te(struct gs_panel *ctx, unsigned long *feat,
 				GS_DCS_BUF_ADD_CMD(dev, 0xB9, 0x0B, 0x0E, 0x00, 0x1F, 0x0B, 0x0E,
 							0x00, 0x1F);
 #ifndef PANEL_FACTORY_BUILD
-			val = (drm_mode_vrefresh(&pmode->mode) == 120) ||
-					test_bit(FEAT_OP_NS, feat) ? 0x00 : 0x01;
+			/* TE Freq */
 			GS_DCS_BUF_ADD_CMD(dev, 0xB0, 0x00, 0x02, 0xB9);
-			GS_DCS_BUF_ADD_CMD(dev, 0xB9, val);
+			if ((drm_mode_vrefresh(&pmode->mode) == 120) || test_bit(FEAT_OP_NS, feat))
+				GS_DCS_BUF_ADD_CMD(dev, 0xB9, 0x00);
+			else
+				GS_DCS_BUF_ADD_CMD(dev, 0xB9, 0x01);
 #endif
 		}
 		ctx->te_opt = TEX_OPT_FIXED;
@@ -487,28 +496,36 @@ static void cm4_set_panel_feat_te(struct gs_panel *ctx, unsigned long *feat,
 static void cm4_set_panel_feat_hbm_irc(struct gs_panel *ctx)
 {
 	struct device *dev = ctx->dev;
+	struct gs_panel_status *sw_status = &ctx->sw_status;
+
+	/*
+	 * "Flat mode" is used to replace IRC on for normal mode and HDR video,
+	 * and "Flat Z mode" is used to replace IRC off for sunlight
+	 * environment.
+	 */
 
 	GS_DCS_BUF_ADD_CMD(dev, 0xB0, 0x01, 0x9B, 0x92);
-	if (unlikely(ctx->sw_status.irc_mode == IRC_OFF))
+	if (unlikely(sw_status->irc_mode == IRC_OFF))
 		GS_DCS_BUF_ADD_CMD(dev, 0x92, 0x07);
 	else /* IRC_FLAT_DEFAULT or IRC_FLAT_Z */
 		GS_DCS_BUF_ADD_CMD(dev, 0x92, 0x27);
 	GS_DCS_BUF_ADD_CMD(dev, 0xB0, 0x02, 0x00, 0x92);
-	if (ctx->sw_status.irc_mode == IRC_FLAT_Z)
+	if (sw_status->irc_mode == IRC_FLAT_Z)
 		GS_DCS_BUF_ADD_CMD(dev, 0x92, 0x70, 0x26, 0xFF, 0xDC);
-	else /* IRC_OFF or IRC_FLAT_DEFAULT */
+	else /* IRC_FLAT_DEFAULT or IRC_OFF */
 		GS_DCS_BUF_ADD_CMD(dev, 0x92, 0x00, 0x00, 0xFF, 0xD0);
 	/* SP settings (burn-in compensation) */
 	if (ctx->panel_rev >= PANEL_REV_DVT1) {
 		GS_DCS_BUF_ADD_CMD(dev, 0xB0, 0x02, 0xF3, 0x68);
-		if (ctx->sw_status.irc_mode == IRC_FLAT_Z)
+		if (sw_status->irc_mode == IRC_FLAT_Z)
 			GS_DCS_BUF_ADD_CMD(dev, 0x68, 0x77, 0x77, 0x86, 0xE1, 0xE1, 0xF0);
 		else
 			GS_DCS_BUF_ADD_CMD(dev, 0x68, 0x11, 0x1A, 0x13, 0x18, 0x21, 0x18);
 	}
-	ctx->hw_status.irc_mode = ctx->sw_status.irc_mode;
+	ctx->hw_status.irc_mode = sw_status->irc_mode;
 	dev_info(dev, "%s: irc_mode=%d\n", __func__, ctx->hw_status.irc_mode);
 }
+
 
 static void cm4_set_panel_feat_early_exit(struct gs_panel *ctx, unsigned long *feat, u32 vrefresh)
 {
@@ -544,13 +561,15 @@ static void cm4_set_panel_feat_frequency(struct gs_panel *ctx, unsigned long *fe
 {
 	struct device *dev = ctx->dev;
 	u8 val;
+	const bool is_ns_mode = test_bit(FEAT_OP_NS, feat);
+	const bool is_hbm = test_bit(FEAT_HBM, feat);
 
 	/*
 	 * Description: this sequence possibly overrides some configs early-exit
 	 * and operation set, depending on FI mode.
 	 */
 	if (test_bit(FEAT_FRAME_AUTO, feat)) {
-		if (test_bit(FEAT_OP_NS, feat)) {
+		if (is_ns_mode) {
 			/* threshold setting */
 			GS_DCS_BUF_ADD_CMD(dev, 0xB0, 0x00, 0x0C, 0xBD);
 			GS_DCS_BUF_ADD_CMD(dev, 0xBD, 0x00, 0x00);
@@ -558,7 +577,7 @@ static void cm4_set_panel_feat_frequency(struct gs_panel *ctx, unsigned long *fe
 			/* initial frequency */
 			GS_DCS_BUF_ADD_CMD(dev, 0xB0, 0x00, 0x92, 0xBD);
 			if (vrefresh == 60) {
-				val = test_bit(FEAT_HBM, feat) ? 0x01 : 0x02;
+				val = is_hbm ? 0x01 : 0x02;
 			} else {
 				if (vrefresh != 120)
 					dev_warn(dev, "%s: unsupported init freq %d (hs)\n",
@@ -570,48 +589,48 @@ static void cm4_set_panel_feat_frequency(struct gs_panel *ctx, unsigned long *fe
 		}
 		/* target frequency */
 		GS_DCS_BUF_ADD_CMD(dev, 0xB0, 0x00, 0x12, 0xBD);
-		if (test_bit(FEAT_OP_NS, feat)) {
+		if (is_ns_mode) {
 			if (idle_vrefresh == 30) {
-				val = test_bit(FEAT_HBM, feat) ? 0x02 : 0x04;
+				val = is_hbm ? 0x02 : 0x04;
 			} else if (idle_vrefresh == 10) {
-				val = test_bit(FEAT_HBM, feat) ? 0x0A : 0x14;
+				val = is_hbm ? 0x0A : 0x14;
 			} else {
 				if (idle_vrefresh != 1)
 					dev_warn(dev, "%s: unsupported target freq %d (ns)\n",
 						 __func__, idle_vrefresh);
 				/* 1Hz */
-				val = test_bit(FEAT_HBM, feat) ? 0x76 : 0xEC;
+				val = is_hbm ? 0x76 : 0xEC;
 			}
 			GS_DCS_BUF_ADD_CMD(dev, 0xBD, 0x00, 0x00, val);
 		} else {
 			if (idle_vrefresh == 30) {
-				val = test_bit(FEAT_HBM, feat) ? 0x03 : 0x06;
+				val = is_hbm ? 0x03 : 0x06;
 			} else if (idle_vrefresh == 10) {
-				val = test_bit(FEAT_HBM, feat) ? 0x0B : 0x16;
+				val = is_hbm ? 0x0B : 0x16;
 			} else {
 				if (idle_vrefresh != 1)
 					dev_warn(dev, "%s: unsupported target freq %d (hs)\n",
 						 __func__, idle_vrefresh);
 				/* 1Hz */
-				val = test_bit(FEAT_HBM, feat) ? 0x77 : 0xEE;
+				val = is_hbm ? 0x77 : 0xEE;
 			}
 			GS_DCS_BUF_ADD_CMD(dev, 0xBD, 0x00, 0x00, val);
 		}
 		/* step setting */
 		GS_DCS_BUF_ADD_CMD(dev, 0xB0, 0x00, 0x9E, 0xBD);
-		if (test_bit(FEAT_OP_NS, feat)) {
-			if (test_bit(FEAT_HBM, feat))
+		if (is_ns_mode) {
+			if (is_hbm)
 				GS_DCS_BUF_ADD_CMD(dev, 0xBD, 0x00, 0x02, 0x00, 0x0A, 0x00, 0x00);
 			else
 				GS_DCS_BUF_ADD_CMD(dev, 0xBD, 0x00, 0x04, 0x00, 0x14, 0x00, 0x00);
 		} else {
-			if (test_bit(FEAT_HBM, feat))
+			if (is_hbm)
 				GS_DCS_BUF_ADD_CMD(dev, 0xBD, 0x00, 0x01, 0x00, 0x03, 0x00, 0x0B);
 			else
 				GS_DCS_BUF_ADD_CMD(dev, 0xBD, 0x00, 0x02, 0x00, 0x06, 0x00, 0x16);
 		}
 		GS_DCS_BUF_ADD_CMD(dev, 0xB0, 0x00, 0xAE, 0xBD);
-		if (test_bit(FEAT_OP_NS, feat)) {
+		if (is_ns_mode) {
 			if (idle_vrefresh == 30) {
 				/* 60Hz -> 30Hz idle */
 				GS_DCS_BUF_ADD_CMD(dev, 0xBD, 0x00, 0x00, 0x00);
@@ -668,7 +687,7 @@ static void cm4_set_panel_feat_frequency(struct gs_panel *ctx, unsigned long *fe
 		} else {
 			GS_DCS_BUF_ADD_CMD(dev, 0xBD, 0x21);
 		}
-		if (test_bit(FEAT_OP_NS, feat)) {
+		if (is_ns_mode) {
 			if (vrefresh == 1) {
 				val = 0x1F;
 			} else if (vrefresh == 10) {
@@ -717,11 +736,14 @@ static void cm4_set_panel_feat_frequency(struct gs_panel *ctx, unsigned long *fe
  * Configure panel features based on the context.
  */
 static void cm4_set_panel_feat(struct gs_panel *ctx, const struct gs_panel_mode *pmode,
-			       u32 idle_vrefresh, bool enforce)
+			       bool enforce)
 {
 	struct device *dev = ctx->dev;
 	struct cm4_panel *spanel = to_spanel(ctx);
-	unsigned long *feat = ctx->sw_status.feat;
+	struct gs_panel_status *sw_status = &ctx->sw_status;
+	struct gs_panel_status *hw_status = &ctx->hw_status;
+	unsigned long *feat = sw_status->feat;
+	u32 idle_vrefresh = sw_status->idle_vrefresh;
 	u32 vrefresh = drm_mode_vrefresh(&pmode->mode);
 	u32 te_freq = gs_drm_mode_te_freq(&pmode->mode);
 	bool is_vrr = !spanel->is_mrr_v1 && gs_is_vrr_mode(pmode);
@@ -729,6 +751,7 @@ static void cm4_set_panel_feat(struct gs_panel *ctx, const struct gs_panel_mode 
 	u8 val;
 	DECLARE_BITMAP(changed_feat, FEAT_MAX);
 
+	/* override settings if mrr v2 or vrr */
 	if (!spanel->is_mrr_v1) {
 		vrefresh = 1;
 		idle_vrefresh = 0;
@@ -747,11 +770,11 @@ static void cm4_set_panel_feat(struct gs_panel *ctx, const struct gs_panel_mode 
 		bitmap_fill(changed_feat, FEAT_MAX);
 		irc_mode_changed = true;
 	} else {
-		bitmap_xor(changed_feat, feat, ctx->hw_status.feat, FEAT_MAX);
-		irc_mode_changed = (ctx->sw_status.irc_mode != ctx->hw_status.irc_mode);
-		if (bitmap_empty(changed_feat, FEAT_MAX) && vrefresh == ctx->hw_status.vrefresh &&
-		    idle_vrefresh == ctx->hw_status.idle_vrefresh &&
-		    te_freq == ctx->hw_status.te_freq &&
+		bitmap_xor(changed_feat, feat, hw_status->feat, FEAT_MAX);
+		irc_mode_changed = (sw_status->irc_mode != hw_status->irc_mode);
+		if (bitmap_empty(changed_feat, FEAT_MAX) && vrefresh == hw_status->vrefresh &&
+		    idle_vrefresh == hw_status->idle_vrefresh &&
+		    te_freq == hw_status->te_freq &&
 		    !irc_mode_changed) {
 			dev_dbg(dev, "%s: no changes, skip update\n", __func__);
 			return;
@@ -759,7 +782,7 @@ static void cm4_set_panel_feat(struct gs_panel *ctx, const struct gs_panel_mode 
 	}
 
 	dev_dbg(dev, "hbm=%u irc=%u ns=%u vrr=%u fi=%u@a,%u@m ee=%u rr=%u-%u:%u\n",
-		test_bit(FEAT_HBM, feat), ctx->sw_status.irc_mode, test_bit(FEAT_OP_NS, feat),
+		test_bit(FEAT_HBM, feat), sw_status->irc_mode, test_bit(FEAT_OP_NS, feat),
 		is_vrr, test_bit(FEAT_FRAME_AUTO, feat), test_bit(FEAT_FI_AUTO, feat),
 		test_bit(FEAT_EARLY_EXIT, feat), idle_vrefresh ?: vrefresh, vrefresh, te_freq);
 
@@ -768,9 +791,8 @@ static void cm4_set_panel_feat(struct gs_panel *ctx, const struct gs_panel_mode 
 
 	/* TE setting */
 	if (test_bit(FEAT_EARLY_EXIT, changed_feat) || test_bit(FEAT_OP_NS, changed_feat) ||
-	    ctx->hw_status.te_freq != te_freq) {
+	    hw_status->te_freq != te_freq)
 		cm4_set_panel_feat_te(ctx, feat, pmode);
-	}
 
 	/* TE2 setting */
 	if (test_bit(FEAT_OP_NS, changed_feat))
@@ -778,14 +800,9 @@ static void cm4_set_panel_feat(struct gs_panel *ctx, const struct gs_panel_mode 
 
 	/*
 	 * HBM IRC setting
-	 *
-	 * "Flat mode" is used to replace IRC on for normal mode and HDR video,
-	 * and "Flat Z mode" is used to replace IRC off for sunlight
-	 * environment.
 	 */
-	if (irc_mode_changed) {
+	if (irc_mode_changed)
 		cm4_set_panel_feat_hbm_irc(ctx);
-	}
 
 	/*
 	 * Operating Mode: NS or HS
@@ -817,18 +834,17 @@ static void cm4_set_panel_feat(struct gs_panel *ctx, const struct gs_panel_mode 
 
 	/*
 	 * Frequency setting: FI, frequency, idle frequency
-	 *
 	 */
 	cm4_set_panel_feat_frequency(ctx, feat, vrefresh, idle_vrefresh, is_vrr);
 
 	/* Lock */
 	GS_DCS_BUF_ADD_CMDLIST_AND_FLUSH(dev, lock_cmd_f0);
 
-	ctx->hw_status.vrefresh = vrefresh;
-	ctx->hw_status.idle_vrefresh = idle_vrefresh;
-	ctx->hw_status.te_freq = te_freq;
+	hw_status->vrefresh = vrefresh;
+	hw_status->idle_vrefresh = idle_vrefresh;
+	hw_status->te_freq = te_freq;
 	ctx->te_freq = te_freq;
-	bitmap_copy(ctx->hw_status.feat, feat, FEAT_MAX);
+	bitmap_copy(hw_status->feat, feat, FEAT_MAX);
 }
 
 /**
@@ -842,15 +858,15 @@ static void cm4_set_panel_feat(struct gs_panel *ctx, const struct gs_panel_mode 
 static void cm4_update_panel_feat(struct gs_panel *ctx, bool enforce)
 {
 	const struct gs_panel_mode *pmode = ctx->current_mode;
-	u32 idle_vrefresh = ctx->sw_status.idle_vrefresh;
 
-	cm4_set_panel_feat(ctx, pmode, idle_vrefresh, enforce);
+	cm4_set_panel_feat(ctx, pmode, enforce);
 }
 
 static void cm4_update_refresh_mode(struct gs_panel *ctx, const struct gs_panel_mode *pmode,
 				    const u32 idle_vrefresh)
 {
 	struct cm4_panel *spanel = to_spanel(ctx);
+	struct gs_panel_status *sw_status = &ctx->sw_status;
 
 	/* TODO: b/308978878 - move refresh control logic to HWC */
 
@@ -872,15 +888,15 @@ static void cm4_update_refresh_mode(struct gs_panel *ctx, const struct gs_panel_
 	if (spanel->is_mrr_v1) {
 		u32 vrefresh = drm_mode_vrefresh(&pmode->mode);
 		if (idle_vrefresh)
-			set_bit(FEAT_FRAME_AUTO, ctx->sw_status.feat);
+			set_bit(FEAT_FRAME_AUTO, sw_status->feat);
 		else
-			clear_bit(FEAT_FRAME_AUTO, ctx->sw_status.feat);
+			clear_bit(FEAT_FRAME_AUTO, sw_status->feat);
 		if (vrefresh == 120 || idle_vrefresh)
-			set_bit(FEAT_EARLY_EXIT, ctx->sw_status.feat);
+			set_bit(FEAT_EARLY_EXIT, sw_status->feat);
 		else
-			clear_bit(FEAT_EARLY_EXIT, ctx->sw_status.feat);
+			clear_bit(FEAT_EARLY_EXIT, sw_status->feat);
 	}
-	ctx->sw_status.idle_vrefresh = idle_vrefresh;
+	sw_status->idle_vrefresh = idle_vrefresh;
 	/*
 	 * Note: when mode is explicitly set, panel performs early exit to get out
 	 * of idle at next vsync, and will not back to idle until not seeing new
@@ -889,7 +905,7 @@ static void cm4_update_refresh_mode(struct gs_panel *ctx, const struct gs_panel_
 	 * new frame commit will correct it if the guess is wrong.
 	 */
 	ctx->idle_data.panel_idle_vrefresh = idle_vrefresh;
-	cm4_set_panel_feat(ctx, pmode, idle_vrefresh, false);
+	cm4_set_panel_feat(ctx, pmode, false);
 	notify_panel_mode_changed(ctx);
 
 	dev_dbg(ctx->dev, "%s: display state is notified\n", __func__);
@@ -917,7 +933,6 @@ static void cm4_change_frequency(struct gs_panel *ctx, const struct gs_panel_mod
 	dev_dbg(ctx->dev, "change to %u hz\n", vrefresh);
 }
 
-// todo: understand how idle works
 static void cm4_panel_idle_notification(struct gs_panel *ctx, u32 display_id, u32 vrefresh,
 					u32 idle_te_vrefresh)
 {
@@ -926,10 +941,10 @@ static void cm4_panel_idle_notification(struct gs_panel *ctx, u32 display_id, u3
 	struct drm_device *dev = ctx->bridge.dev;
 
 	if (!dev) {
-		dev_dbg(ctx->dev, "%s: drm_device is null\n", __func__);
+		dev_warn(ctx->dev, "%s: drm_device is null\n", __func__);
 	} else {
-		snprintf(event_string, sizeof(event_string), "PANEL_IDLE_ENTER=%u,%u,%u",
-			 display_id, vrefresh, idle_te_vrefresh);
+		scnprintf(event_string, sizeof(event_string), "PANEL_IDLE_ENTER=%u,%u,%u",
+			  display_id, vrefresh, idle_te_vrefresh);
 		kobject_uevent_env(&dev->primary->kdev->kobj, KOBJ_CHANGE, envp);
 	}
 }
@@ -956,58 +971,6 @@ static void cm4_wait_one_vblank(struct gs_panel *ctx)
 	}
 	DPU_ATRACE_END(__func__);
 }
-
-#ifndef PANEL_FACTORY_BUILD
-static bool cm4_update_refresh_ctrl_feat(struct gs_panel *ctx)
-{
-	const u32 ctrl = ctx->refresh_ctrl;
-	struct cm4_panel *spanel = to_spanel(ctx);
-	bool mrr_changed = false;
-
-	if (ctrl & GS_PANEL_REFRESH_CTRL_FI_AUTO)
-		set_bit(FEAT_FI_AUTO, ctx->sw_status.feat);
-	else
-		clear_bit(FEAT_FI_AUTO, ctx->sw_status.feat);
-
-	if (ctrl & (GS_PANEL_REFRESH_CTRL_IDLE_ENABLED |
-		    GS_PANEL_REFRESH_CTRL_TE_TYPE_CHANGEABLE)) {
-		if (gs_is_vrr_mode(ctx->current_mode)) {
-			dev_err(ctx->dev, "%s: using vrr display mode for mrr\n", __func__);
-		} else if (!spanel->is_mrr_v1) {
-			mrr_changed = true;
-			spanel->is_mrr_v1 = true;
-			ctx->gs_connector->ignore_op_rate = true;
-		}
-	} else if (spanel->is_mrr_v1) {
-		mrr_changed = true;
-		spanel->is_mrr_v1 = false;
-		ctx->gs_connector->ignore_op_rate = false;
-	}
-	return mrr_changed;
-}
-
-static void cm4_refresh_ctrl(struct gs_panel *ctx)
-{
-	struct device *dev = ctx->dev;
-	const u32 ctrl = ctx->refresh_ctrl;
-
-	DPU_ATRACE_BEGIN(__func__);
-
-	if (cm4_update_refresh_ctrl_feat(ctx))
-		cm4_change_frequency(ctx, ctx->current_mode);
-
-	if (ctrl & GS_PANEL_REFRESH_CTRL_FI_FRAME_COUNT_MASK) {
-		/* TODO(b/323251635): parse frame count for inserting multiple frames */
-
-		dev_dbg(dev, "%s: manually inserting frame\n", __func__);
-		GS_DCS_BUF_ADD_CMDLIST(dev, unlock_cmd_f0);
-		GS_DCS_BUF_ADD_CMD(dev, 0xF7, 0x02);
-		GS_DCS_BUF_ADD_CMDLIST_AND_FLUSH(dev, lock_cmd_f0);
-	}
-
-	DPU_ATRACE_END(__func__);
-}
-#endif
 
 static bool cm4_set_self_refresh(struct gs_panel *ctx, bool enable)
 {
@@ -1075,6 +1038,58 @@ static bool cm4_set_self_refresh(struct gs_panel *ctx, bool enable)
 	return true;
 }
 
+#ifndef PANEL_FACTORY_BUILD
+static bool cm4_update_refresh_ctrl_feat(struct gs_panel *ctx)
+{
+	const u32 ctrl = ctx->refresh_ctrl;
+	struct cm4_panel *spanel = to_spanel(ctx);
+	bool mrr_changed = false;
+
+	if (ctrl & GS_PANEL_REFRESH_CTRL_FI_AUTO)
+		set_bit(FEAT_FI_AUTO, ctx->sw_status.feat);
+	else
+		clear_bit(FEAT_FI_AUTO, ctx->sw_status.feat);
+
+	if (ctrl & (GS_PANEL_REFRESH_CTRL_IDLE_ENABLED |
+		    GS_PANEL_REFRESH_CTRL_TE_TYPE_CHANGEABLE)) {
+		if (gs_is_vrr_mode(ctx->current_mode)) {
+			dev_err(ctx->dev, "%s: using vrr display mode for mrr\n", __func__);
+		} else if (!spanel->is_mrr_v1) {
+			mrr_changed = true;
+			spanel->is_mrr_v1 = true;
+			ctx->gs_connector->ignore_op_rate = true;
+		}
+	} else if (spanel->is_mrr_v1) {
+		mrr_changed = true;
+		spanel->is_mrr_v1 = false;
+		ctx->gs_connector->ignore_op_rate = false;
+	}
+	return mrr_changed;
+}
+
+static void cm4_refresh_ctrl(struct gs_panel *ctx)
+{
+	struct device *dev = ctx->dev;
+	const u32 ctrl = ctx->refresh_ctrl;
+
+	DPU_ATRACE_BEGIN(__func__);
+
+	if (cm4_update_refresh_ctrl_feat(ctx))
+		cm4_change_frequency(ctx, ctx->current_mode);
+
+	if (ctrl & GS_PANEL_REFRESH_CTRL_FI_FRAME_COUNT_MASK) {
+		/* TODO(b/323251635): parse frame count for inserting multiple frames */
+
+		dev_dbg(dev, "%s: manually inserting frame\n", __func__);
+		GS_DCS_BUF_ADD_CMDLIST(dev, unlock_cmd_f0);
+		GS_DCS_BUF_ADD_CMD(dev, 0xF7, 0x02);
+		GS_DCS_BUF_ADD_CMDLIST_AND_FLUSH(dev, lock_cmd_f0);
+	}
+
+	DPU_ATRACE_END(__func__);
+}
+#endif
+
 static int cm4_atomic_check(struct gs_panel *ctx, struct drm_atomic_state *state)
 {
 	struct drm_connector *conn = &ctx->gs_connector->base;
@@ -1127,8 +1142,8 @@ static void cm4_write_display_mode(struct gs_panel *ctx, const struct drm_displa
 	if (ctx->dimming_on)
 		val |= CM4_WRCTRLD_DIMMING_BIT;
 
-	dev_dbg(dev, "%s(wrctrld:%#x, hbm: %d, dimming: %d)\n", __func__, val,
-		GS_IS_HBM_ON(ctx->hbm_mode), ctx->dimming_on);
+	dev_dbg(dev, "%s(wrctrld:0x%x, hbm: %s, dimming: %s)\n", __func__, val,
+		GS_IS_HBM_ON(ctx->hbm_mode) ? "on" : "off", ctx->dimming_on ? "on" : "off");
 
 	GS_DCS_BUF_ADD_CMD_AND_FLUSH(dev, MIPI_DCS_WRITE_CONTROL_DISPLAY, val);
 }
@@ -1153,11 +1168,8 @@ static void cm4_update_za(struct gs_panel *ctx)
 		GS_DCS_BUF_ADD_CMD(dev, 0x92, val);
 		GS_DCS_BUF_ADD_CMDLIST_AND_FLUSH(dev, lock_cmd_f0);
 
-		if (enable_za)
-			set_bit(FEAT_ZA, ctx->hw_status.feat);
-		else
-			clear_bit(FEAT_ZA, ctx->hw_status.feat);
-		dev_dbg(dev, "%s: %d\n", __func__, enable_za);
+		assign_bit(FEAT_ZA, ctx->hw_status.feat, enable_za);
+		dev_info(dev, "%s: %s\n", __func__, enable_za ? "on" : "off");
 	}
 }
 
@@ -1197,18 +1209,20 @@ static void cm4_set_acl_mode(struct gs_panel *ctx, enum gs_acl_mode mode)
 {
 	struct device *dev = ctx->dev;
 	u16 dbv_th = CM4_ACL_ENHANCED_THRESHOLD_DBV;
-	bool can_enable_acl = (ctx->hw_status.dbv >= dbv_th && GS_IS_HBM_ON(ctx->hbm_mode));
+	struct gs_panel_status *sw_status = &ctx->sw_status;
+	struct gs_panel_status *hw_status = &ctx->hw_status;
+	bool can_enable_acl = (hw_status->dbv >= dbv_th && GS_IS_HBM_ON(ctx->hbm_mode));
 
 	if (can_enable_acl && mode != ACL_OFF)
-		ctx->sw_status.acl_mode = mode;
+		sw_status->acl_mode = mode;
 	else
-		ctx->sw_status.acl_mode = ACL_OFF;
+		sw_status->acl_mode = ACL_OFF;
 
-	if (ctx->sw_status.acl_mode != ctx->hw_status.acl_mode) {
-		u8 setting = get_acl_mode_setting(ctx->sw_status.acl_mode, ctx->panel_rev);
+	if (sw_status->acl_mode != hw_status->acl_mode) {
+		u8 setting = get_acl_mode_setting(sw_status->acl_mode, ctx->panel_rev);
 
 		GS_DCS_WRITE_CMD(dev, 0x55, setting);
-		ctx->hw_status.acl_mode = ctx->sw_status.acl_mode;
+		hw_status->acl_mode = sw_status->acl_mode;
 		dev_dbg(dev, "%s: %d\n", __func__, setting);
 	}
 }
@@ -1221,14 +1235,17 @@ static int cm4_set_brightness(struct gs_panel *ctx, u16 br)
 	struct device *dev = ctx->dev;
 
 	if (ctx->current_mode->gs_mode.is_lp_mode) {
+		const struct gs_panel_funcs *funcs;
+
 		/* don't stay at pixel-off state in AOD, or black screen is possibly seen */
 		if (spanel->is_pixel_off) {
 			GS_DCS_WRITE_CMD(dev, MIPI_DCS_ENTER_NORMAL_MODE);
 			spanel->is_pixel_off = false;
 		}
 
-		if (gs_panel_has_func(ctx, set_binned_lp))
-			ctx->desc->gs_panel_func->set_binned_lp(ctx, br);
+		funcs = ctx->desc->gs_panel_func;
+		if (funcs && funcs->set_binned_lp)
+			funcs->set_binned_lp(ctx, br);
 		return 0;
 	}
 
@@ -1240,13 +1257,12 @@ static int cm4_set_brightness(struct gs_panel *ctx, u16 br)
 			dev_dbg(dev, "%s: pixel off instead of dbv 0\n", __func__);
 		}
 		return 0;
-	}
-	if (spanel->is_pixel_off) {
+	} else if (br && spanel->is_pixel_off) {
 		GS_DCS_WRITE_CMD(dev, MIPI_DCS_ENTER_NORMAL_MODE);
 		spanel->is_pixel_off = false;
 	}
 
-	brightness = swab16(br);
+	brightness = (br & 0xff) << 8 | br >> 8;
 	ret = gs_dcs_set_brightness(ctx, brightness);
 	if (!ret) {
 		ctx->hw_status.dbv = br;
@@ -1261,15 +1277,16 @@ static unsigned int cm4_get_te_usec(struct gs_panel *ctx, const struct gs_panel_
 	struct cm4_panel *spanel = to_spanel(ctx);
 	const int vrefresh = drm_mode_vrefresh(&pmode->mode);
 
-	if (vrefresh != 60 || gs_is_vrr_mode(pmode))
+	if (vrefresh != 60 || gs_is_vrr_mode(pmode)) {
 		return pmode->gs_mode.te_usec;
-
-	if (spanel->is_mrr_v1) {
-		return (test_bit(FEAT_OP_NS, ctx->sw_status.feat) ? CM4_TE_USEC_60HZ_NS :
-							    CM4_TE_USEC_60HZ_HS);
 	} else {
-		return (test_bit(FEAT_OP_NS, ctx->sw_status.feat) ? CM4_TE_USEC_VRR_NS :
-							    CM4_TE_USEC_VRR_HS);
+		if (spanel->is_mrr_v1) {
+			return(test_bit(FEAT_OP_NS, ctx->sw_status.feat) ? CM4_TE_USEC_60HZ_NS :
+									    CM4_TE_USEC_60HZ_HS);
+		} else {
+			return(test_bit(FEAT_OP_NS, ctx->sw_status.feat) ? CM4_TE_USEC_VRR_NS :
+									    CM4_TE_USEC_VRR_HS);
+		}
 	}
 }
 
@@ -1313,7 +1330,6 @@ static void cm4_set_lp_mode(struct gs_panel *ctx, const struct gs_panel_mode *pm
 	dev_dbg(dev, "%s\n", __func__);
 
 	DPU_ATRACE_BEGIN(__func__);
-
 	/* enforce manual and peak to have a smooth transition */
 	cm4_enforce_manual_and_peak(ctx);
 
@@ -1355,7 +1371,6 @@ static void cm4_set_lp_mode(struct gs_panel *ctx, const struct gs_panel_mode *pm
 static void cm4_set_nolp_mode(struct gs_panel *ctx, const struct gs_panel_mode *pmode)
 {
 	struct device *dev = ctx->dev;
-	u32 idle_vrefresh = ctx->sw_status.idle_vrefresh;
 
 	dev_dbg(dev, "%s\n", __func__);
 
@@ -1371,7 +1386,7 @@ static void cm4_set_nolp_mode(struct gs_panel *ctx, const struct gs_panel_mode *
 	GS_DCS_BUF_ADD_CMDLIST_AND_FLUSH(dev, lock_cmd_f0);
 
 	cm4_wait_for_vsync_done(ctx, pmode);
-	cm4_set_panel_feat(ctx, pmode, idle_vrefresh, true);
+	cm4_set_panel_feat(ctx, pmode, true);
 	/* backlight control and dimming */
 	cm4_write_display_mode(ctx, &pmode->mode);
 	cm4_change_frequency(ctx, pmode);
@@ -1420,13 +1435,13 @@ static int cm4_enable(struct drm_panel *panel)
 	bool is_fhd;
 
 	if (!pmode) {
-		dev_err(ctx->dev, "no current mode set\n");
+		dev_err(dev, "no current mode set\n");
 		return -EINVAL;
 	}
 	mode = &pmode->mode;
 	is_fhd = mode->hdisplay == 960;
 
-	dev_info(dev, "%s fhd=%d\n", __func__, is_fhd);
+	dev_info(dev, "%s (%s)\n", __func__, is_fhd ? "fhd" : "wqhd");
 
 	DPU_ATRACE_BEGIN(__func__);
 
@@ -1438,12 +1453,9 @@ static int cm4_enable(struct drm_panel *panel)
 	    ctx->mode_in_progress == MODE_RES_AND_RR_IN_PROGRESS)
 		cm4_wait_for_vsync_done(ctx, pmode);
 
-	/* 8bit config for QHD/FHD */
-	GS_DCS_WRITE_CMD(dev, 0xF2, 0x01, 0x01);
 	/* DSC related configuration */
-	gs_dcs_write_dsc_config(dev, is_fhd ? &fhd_pps_config : &wqhd_pps_config);
-	/* compression enable */
 	GS_DCS_WRITE_CMD(dev, 0x9D, 0x01);
+	gs_dcs_write_dsc_config(dev, is_fhd ? &fhd_pps_config : &wqhd_pps_config);
 
 	if (needs_reset) {
 		struct cm4_panel *spanel = to_spanel(ctx);
@@ -1464,7 +1476,6 @@ static int cm4_enable(struct drm_panel *panel)
 #ifndef PANEL_FACTORY_BUILD
 	cm4_update_refresh_ctrl_feat(ctx);
 #endif
-
 	cm4_update_panel_feat(ctx, true);
 	cm4_write_display_mode(ctx, mode); /* dimming and HBM */
 	cm4_change_frequency(ctx, pmode);
@@ -1594,6 +1605,7 @@ static void cm4_commit_done(struct gs_panel *ctx)
 static void cm4_set_hbm_mode(struct gs_panel *ctx, enum gs_hbm_mode mode)
 {
 	const struct gs_panel_mode *pmode = ctx->current_mode;
+	struct gs_panel_status *sw_status = &ctx->sw_status;
 
 	if (mode == ctx->hbm_mode)
 		return;
@@ -1604,19 +1616,19 @@ static void cm4_set_hbm_mode(struct gs_panel *ctx, enum gs_hbm_mode mode)
 	ctx->hbm_mode = mode;
 
 	if (GS_IS_HBM_ON(mode)) {
-		set_bit(FEAT_HBM, ctx->sw_status.feat);
+		set_bit(FEAT_HBM, sw_status->feat);
 		/* enforce IRC on for factory builds */
 #ifndef PANEL_FACTORY_BUILD
 		if (mode == GS_HBM_ON_IRC_ON)
-			ctx->sw_status.irc_mode = IRC_FLAT_DEFAULT;
+			sw_status->irc_mode = IRC_FLAT_DEFAULT;
 		else
-			ctx->sw_status.irc_mode = IRC_FLAT_Z;
+			sw_status->irc_mode = IRC_FLAT_Z;
 #endif
 		cm4_update_panel_feat(ctx, false);
 		cm4_write_display_mode(ctx, &pmode->mode);
 	} else {
-		clear_bit(FEAT_HBM, ctx->sw_status.feat);
-		ctx->sw_status.irc_mode = IRC_FLAT_DEFAULT;
+		clear_bit(FEAT_HBM, sw_status->feat);
+		sw_status->irc_mode = IRC_FLAT_DEFAULT;
 		cm4_write_display_mode(ctx, &pmode->mode);
 		cm4_update_panel_feat(ctx, false);
 	}
@@ -1648,7 +1660,6 @@ static bool cm4_is_mode_seamless(const struct gs_panel *ctx, const struct gs_pan
 	return (c->vdisplay == n->vdisplay) && (c->hdisplay == n->hdisplay);
 }
 
-//todo: understand this better (I think this is just NS and HS changing)
 static int cm4_set_op_hz(struct gs_panel *ctx, unsigned int hz)
 {
 	u32 vrefresh = drm_mode_vrefresh(&ctx->current_mode->mode);
@@ -2163,6 +2174,12 @@ static const struct gs_panel_mode_array cm4_lp_modes = {
 	}, /* .modes */
 }; /* cm4_lp_modes */
 
+static struct gs_thermal_data cm4_thermal_data = {
+	/* ddic default temp */
+	.hw_temp = 25,
+	.pending_temp_update = false,
+};
+
 static void cm4_debugfs_init(struct drm_panel *panel, struct dentry *root)
 {
 #if IS_ENABLED(CONFIG_DEBUG_FS)
@@ -2222,7 +2239,8 @@ static void cm4_panel_init(struct gs_panel *ctx)
 	/* re-init panel to decouple bootloader settings */
 	if (pmode) {
 		dev_info(ctx->dev, "%s: set mode: %s\n", __func__, pmode->mode.name);
-		cm4_set_panel_feat(ctx, pmode, 0, true);
+		ctx->sw_status.idle_vrefresh = 0;
+		cm4_set_panel_feat(ctx, pmode, true);
 		cm4_change_frequency(ctx, pmode);
 	}
 }
@@ -2242,17 +2260,16 @@ static int cm4_panel_probe(struct mipi_dsi_device *dsi)
 		return -ENOMEM;
 	}
 
-	spanel->base.op_hz = 120;
+	ctx->op_hz = 120;
 	ctx->hw_status.vrefresh = 60;
+	ctx->hw_status.te_freq = 60;
 	ctx->hw_status.acl_mode = ACL_OFF;
-	clear_bit(FEAT_ZA, ctx->hw_status.feat);
 	ctx->hw_status.dbv = 0;
-	/* ddic default temp */
-	ctx->thermal->hw_temp = 25;
-	ctx->thermal->pending_temp_update = false;
+	ctx->thermal = &cm4_thermal_data;
+	clear_bit(FEAT_ZA, ctx->hw_status.feat);
 	spanel->is_pixel_off = false;
 
-	return gs_dsi_panel_common_init(dsi, &spanel->base);
+	return gs_dsi_panel_common_init(dsi, ctx);
 }
 
 static int cm4_panel_config(struct gs_panel *ctx);
@@ -2283,10 +2300,10 @@ static const struct gs_panel_funcs cm4_gs_funcs = {
 	.update_te2 = cm4_update_te2,
 	.commit_done = cm4_commit_done,
 	.atomic_check = cm4_atomic_check,
+	.set_self_refresh = cm4_set_self_refresh,
 #ifndef PANEL_FACTORY_BUILD
 	.refresh_ctrl = cm4_refresh_ctrl,
 #endif
-	.set_self_refresh = cm4_set_self_refresh,
 	.set_op_hz = cm4_set_op_hz,
 	.read_id = cm4_read_id,
 	.get_te_usec = cm4_get_te_usec,
@@ -2424,12 +2441,13 @@ static struct gs_panel_reg_ctrl_desc cm4_reg_ctrl_desc = {
 	},
 };
 
-static struct gs_panel_desc google_cm4 = {
+static struct gs_panel_desc gs_cm4 = {
 	.data_lane_cnt = 4,
 	.dbv_extra_frame = true,
+	.brightness_desc = &cm4_brightness_desc,
+	.reg_ctrl_desc = &cm4_reg_ctrl_desc,
 	/* supported HDR format bitmask : 1(DOLBY_VISION), 2(HDR10), 3(HLG) */
 	.hdr_formats = BIT(2) | BIT(3),
-	.brightness_desc = &cm4_brightness_desc,
 	.bl_range = cm4_bl_range,
 	.bl_num_ranges = ARRAY_SIZE(cm4_bl_range),
 	.modes = &cm4_modes,
@@ -2442,7 +2460,6 @@ static struct gs_panel_desc google_cm4 = {
 	.gs_panel_func = &cm4_gs_funcs,
 	.default_dsi_hs_clk_mbps = MIPI_DSI_FREQ_MBPS_DEFAULT,
 	.reset_timing_ms = { 1, 1, 5 },
-	.reg_ctrl_desc = &cm4_reg_ctrl_desc,
 };
 
 static int cm4_panel_config(struct gs_panel *ctx)
@@ -2454,7 +2471,7 @@ static int cm4_panel_config(struct gs_panel *ctx)
 }
 
 static const struct of_device_id gs_panel_of_match[] = {
-	{ .compatible = "google,gs-cm4", .data = &google_cm4 },
+	{ .compatible = "google,gs-cm4", .data = &gs_cm4 },
 	{ }
 };
 MODULE_DEVICE_TABLE(of, gs_panel_of_match);

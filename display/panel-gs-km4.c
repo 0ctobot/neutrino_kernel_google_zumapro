@@ -245,7 +245,7 @@ static void km4_update_disp_therm(struct gs_panel *ctx)
 	int temp, ret;
 	struct device *dev = ctx->dev;
 
-	if (IS_ERR_OR_NULL(ctx->thermal->tz))
+	if (!ctx->thermal || IS_ERR_OR_NULL(ctx->thermal->tz))
 		return;
 
 	if (ctx->panel_state != GPANEL_STATE_NORMAL)
@@ -1042,7 +1042,7 @@ static bool km4_set_self_refresh(struct gs_panel *ctx, bool enable)
 		return false;
 	}
 
-	if (ctx->thermal->pending_temp_update && enable)
+	if (ctx->thermal && ctx->thermal->pending_temp_update && enable)
 		km4_update_disp_therm(ctx);
 
 	idle_vrefresh = km4_get_min_idle_vrefresh(ctx, pmode);
@@ -1690,7 +1690,7 @@ static void km4_commit_done(struct gs_panel *ctx)
 
 	km4_update_za(ctx);
 
-	if (ctx->thermal->pending_temp_update)
+	if (ctx->thermal && ctx->thermal->pending_temp_update)
 		km4_update_disp_therm(ctx);
 }
 
@@ -1806,7 +1806,8 @@ static void km4_normal_mode_work(struct gs_panel *ctx)
 	if (ctx->idle_data.self_refresh_active) {
 		km4_update_disp_therm(ctx);
 	} else {
-		ctx->thermal->pending_temp_update = true;
+		if (ctx->thermal)
+			ctx->thermal->pending_temp_update = true;
 	}
 }
 
@@ -2344,6 +2345,11 @@ static void km4_panel_init(struct gs_panel *ctx)
 	ctx->te2.option = TEX_OPT_FIXED;
 	ctx->te2.rate_hz = 120;
 
+	if (!ctx->thermal) {
+		dev_err(ctx->dev, "%s: error retrieving thermal data\n", __func__);
+		return;
+	}
+
 	ctx->thermal->tz = thermal_zone_get_zone_by_name("disp_therm");
 	if (IS_ERR_OR_NULL(ctx->thermal->tz))
 		dev_err(ctx->dev, "%s: failed to get thermal zone disp_therm\n", __func__);
@@ -2374,6 +2380,7 @@ static int km4_panel_probe(struct mipi_dsi_device *dsi)
 	ctx->hw_status.acl_mode = ACL_OFF;
 	ctx->hw_status.dbv = 0;
 	ctx->thermal = &km4_thermal_data;
+	clear_bit(FEAT_ZA, ctx->hw_status.feat);
 	spanel->is_pixel_off = false;
 
 	return gs_dsi_panel_common_init(dsi, ctx);
