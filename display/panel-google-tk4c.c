@@ -158,15 +158,15 @@ static const struct exynos_dsi_cmd tk4c_init_cmds[] = {
 	EXYNOS_DSI_CMD0(test_key_disable),
 	EXYNOS_DSI_CMD0(test_key_fc_disable),
 
-	/* VDDD LDO Setting */
-	EXYNOS_DSI_CMD0(test_key_fc_enable),
-	EXYNOS_DSI_CMD_SEQ(0xB0, 0x00, 0x58, 0xD7),
-	EXYNOS_DSI_CMD_SEQ(0xD7, 0x0A),
-	EXYNOS_DSI_CMD_SEQ(0xB0, 0x00, 0x5B, 0xD7),
-	EXYNOS_DSI_CMD_SEQ(0xD7, 0x0A),
-	EXYNOS_DSI_CMD_SEQ(0xFE, 0x80),
-	EXYNOS_DSI_CMD_SEQ(0xFE, 0x00),
-	EXYNOS_DSI_CMD0(test_key_fc_disable),
+	/* VDDD LDO Setting, before PVT */
+	EXYNOS_DSI_CMD0_REV(test_key_fc_enable, PANEL_REV_LT(PANEL_REV_PVT)),
+	EXYNOS_DSI_CMD_SEQ_REV(PANEL_REV_LT(PANEL_REV_PVT), 0xB0, 0x00, 0x58, 0xD7),
+	EXYNOS_DSI_CMD_SEQ_REV(PANEL_REV_LT(PANEL_REV_PVT), 0xD7, 0x0A),
+	EXYNOS_DSI_CMD_SEQ_REV(PANEL_REV_LT(PANEL_REV_PVT), 0xB0, 0x00, 0x5B, 0xD7),
+	EXYNOS_DSI_CMD_SEQ_REV(PANEL_REV_LT(PANEL_REV_PVT), 0xD7, 0x0A),
+	EXYNOS_DSI_CMD_SEQ_REV(PANEL_REV_LT(PANEL_REV_PVT), 0xFE, 0x80),
+	EXYNOS_DSI_CMD_SEQ_REV(PANEL_REV_LT(PANEL_REV_PVT), 0xFE, 0x00),
+	EXYNOS_DSI_CMD0_REV(test_key_fc_disable, PANEL_REV_LT(PANEL_REV_PVT)),
 
 	/* TSP HSYNC setting, MTP'ed from DVT */
 	EXYNOS_DSI_CMD0_REV(test_key_enable, PANEL_REV_LT(PANEL_REV_DVT1)),
@@ -304,9 +304,12 @@ static void tk4c_set_hbm_mode(struct exynos_panel *ctx,
 			if (ctx->panel_rev < PANEL_REV_DVT1) {
 				EXYNOS_DCS_BUF_ADD(ctx, 0x68, 0xB0, 0x2C, 0x6A, 0x80, 0x00, 0x00, 0xF5,
 					0xC4);
-			} else {
+			} else if (ctx->panel_rev == PANEL_REV_DVT1) {
 				EXYNOS_DCS_BUF_ADD(ctx, 0x68, 0xB0, 0x2C, 0x6A, 0x80, 0x00, 0x00, 0xE4,
 					0xB6);
+			} else { /* PVT/MP */
+				EXYNOS_DCS_BUF_ADD(ctx, 0x68, 0xB4, 0x2C, 0x6A, 0x80, 0x00, 0x00, 0x00,
+					0xCD);
 			}
 		} else {
 			/* FGZ Mode OFF */
@@ -326,7 +329,7 @@ static void tk4c_set_hbm_mode(struct exynos_panel *ctx,
 	EXYNOS_DCS_BUF_ADD_SET_AND_FLUSH(ctx, test_key_disable);
 
 	dev_info(ctx->dev, "hbm_on=%d hbm_ircoff=%d.\n", IS_HBM_ON(ctx->hbm_mode),
-		 IS_HBM_ON_IRC_OFF(ctx->hbm_mode));
+		IS_HBM_ON_IRC_OFF(ctx->hbm_mode));
 }
 
 static void tk4c_set_dimming_on(struct exynos_panel *exynos_panel,

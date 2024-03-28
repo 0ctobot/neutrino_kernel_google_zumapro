@@ -150,15 +150,15 @@ static const struct gs_dsi_cmd tk4c_init_cmds[] = {
 	GS_DSI_CMDLIST(test_key_disable),
 	GS_DSI_CMDLIST(test_key_fc_disable),
 
-	/* VDDD LDO Setting */
-	GS_DSI_CMDLIST(test_key_fc_enable),
-	GS_DSI_CMD(0xB0, 0x00, 0x58, 0xD7),
-	GS_DSI_CMD(0xD7, 0x0A),
-	GS_DSI_CMD(0xB0, 0x00, 0x5B, 0xD7),
-	GS_DSI_CMD(0xD7, 0x0A),
-	GS_DSI_CMD(0xFE, 0x80),
-	GS_DSI_CMD(0xFE, 0x00),
-	GS_DSI_CMDLIST(test_key_fc_disable),
+	/* VDDD LDO Setting, before PVT */
+	GS_DSI_REV_CMDLIST(PANEL_REV_LT(PANEL_REV_PVT), test_key_fc_enable),
+	GS_DSI_REV_CMD(PANEL_REV_LT(PANEL_REV_PVT), 0xB0, 0x00, 0x58, 0xD7),
+	GS_DSI_REV_CMD(PANEL_REV_LT(PANEL_REV_PVT), 0xD7, 0x0A),
+	GS_DSI_REV_CMD(PANEL_REV_LT(PANEL_REV_PVT), 0xB0, 0x00, 0x5B, 0xD7),
+	GS_DSI_REV_CMD(PANEL_REV_LT(PANEL_REV_PVT), 0xD7, 0x0A),
+	GS_DSI_REV_CMD(PANEL_REV_LT(PANEL_REV_PVT), 0xFE, 0x80),
+	GS_DSI_REV_CMD(PANEL_REV_LT(PANEL_REV_PVT), 0xFE, 0x00),
+	GS_DSI_REV_CMDLIST(PANEL_REV_LT(PANEL_REV_PVT), test_key_fc_disable),
 
 	/* TSP HSYNC setting, MTP'ed from DVT */
 	GS_DSI_REV_CMDLIST(PANEL_REV_LT(PANEL_REV_DVT1), test_key_enable),
@@ -295,9 +295,12 @@ static void tk4c_set_hbm_mode(struct gs_panel *ctx, enum gs_hbm_mode mode)
 			if (ctx->panel_rev < PANEL_REV_DVT1) {
 				GS_DCS_BUF_ADD_CMD(dev, 0x68, 0xB0, 0x2C, 0x6A, 0x80, 0x00, 0x00, 0xF5,
 					0xC4);
-			} else {
+			} else if (ctx->panel_rev == PANEL_REV_DVT1) {
 				GS_DCS_BUF_ADD_CMD(dev, 0x68, 0xB0, 0x2C, 0x6A, 0x80, 0x00, 0x00, 0xE4,
 					0xB6);
+			} else { /* PVT/MP */
+				GS_DCS_BUF_ADD_CMD(dev, 0x68, 0xB4, 0x2C, 0x6A, 0x80, 0x00, 0x00, 0x00,
+					0xCD);
 			}
 		} else {
 			/* FGZ Mode OFF */
