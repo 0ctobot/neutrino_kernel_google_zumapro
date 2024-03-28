@@ -1252,83 +1252,121 @@ static void cm4_write_display_mode(struct gs_panel *ctx, const struct drm_displa
 	GS_DCS_BUF_ADD_CMD_AND_FLUSH(dev, MIPI_DCS_WRITE_CONTROL_DISPLAY, val);
 }
 
-static void cm4_update_za(struct gs_panel *ctx)
+#define CM4_OPR_VAL_LEN 2
+#define CM4_MAX_OPR_VAL 0x3FF
+/* Get OPR (on pixel ratio), the unit is percent */
+static int cm4_get_opr(struct gs_panel *ctx, u8 *opr)
 {
-	struct cm4_panel *spanel = to_spanel(ctx);
+	struct mipi_dsi_device *dsi = to_mipi_dsi_device(ctx->dev);
 	struct device *dev = ctx->dev;
-	bool enable_za = false;
+	u8 buf[CM4_OPR_VAL_LEN] = { 0 };
+	u16 val;
+	int ret;
 
-	if ((ctx->hw_status.acl_mode > ACL_OFF) && !spanel->force_za_off)
-		enable_za = true;
+	/*TODO(tknelms)DPU_ATRACE_BEGIN(__func__);*/
+	GS_DCS_BUF_ADD_CMDLIST(dev, unlock_cmd_f0);
+	GS_DCS_BUF_ADD_CMD_AND_FLUSH(dev, 0xB0, 0x00, 0xE7, 0x91);
+	ret = mipi_dsi_dcs_read(dsi, 0x91, buf, CM4_OPR_VAL_LEN);
+	GS_DCS_WRITE_CMDLIST(dev, lock_cmd_f0);
 
-	if (test_bit(FEAT_ZA, ctx->hw_status.feat) != enable_za) {
-		/* LP setting - 0x21 or 0x11: 7.5%, 0x00: off */
-		u8 val = 0;
+	/*TODO(tknelms)DPU_ATRACE_END(__func__);*/
 
-		GS_DCS_BUF_ADD_CMDLIST(dev, unlock_cmd_f0);
-		GS_DCS_BUF_ADD_CMD(dev, 0xB0, 0x01, 0x6C, 0x92);
-		if (enable_za)
-			val = 0x11;
-		GS_DCS_BUF_ADD_CMD(dev, 0x92, val);
-		GS_DCS_BUF_ADD_CMDLIST_AND_FLUSH(dev, lock_cmd_f0);
+	if (ret != CM4_OPR_VAL_LEN) {
+		dev_warn(dev, "Failed to read OPR (%d)\n", ret);
+		return ret;
+	}
 
-		assign_bit(FEAT_ZA, ctx->hw_status.feat, enable_za);
-		dev_info(dev, "%s: %s\n", __func__, enable_za ? "on" : "off");
+	val = (buf[0] << 8) | buf[1];
+	*opr = DIV_ROUND_CLOSEST(val * 100, CM4_MAX_OPR_VAL);
+
+	return 0;
+}
+
+static void cm4_disable_acl_mode(struct gs_panel *ctx)
+{
+	struct device *dev = ctx->dev;
+	struct gs_panel_status *hw_status = &ctx->hw_status;
+
+	if (hw_status->acl_mode != ACL_OFF) {
+		GS_DCS_WRITE_CMD(dev, 0x55, 0x00);
+		hw_status->acl_mode = ACL_OFF;
+		dev_info(dev, "%s : set acl_mode off\n", __func__);
 	}
 }
 
-#define CM4_ACL_ENHANCED_THRESHOLD_DBV 3726
-
-static u8 get_acl_mode_setting(enum gs_acl_mode acl_mode, u32 panel_rev)
+static u8 get_acl_mode_setting(enum gs_acl_mode acl_mode)
 {
 	/*
 	 * CM4 ACL mode and setting:
 	 *
-	 * ENHANCED is default mode
-	 *
-	 * Till EVT1_1
-	 *    ENHANCED   - 12%   (0x03)
-	 * DVT1
-	 *    NORMAL     - 12.5% (0x02)
-	 * LATER
-	 *    NORMAL     - 15%   (0x02)
+	 * DVT1 and Later
+	 *    NORMAL     - 10%   (0x01)
+	 *    ENHANCED   - 15%   (0x02)
 	 */
-
-	if (acl_mode != ACL_OFF && panel_rev >= PANEL_REV_DVT1) {
-		acl_mode = ACL_NORMAL;
-	}
 
 	switch (acl_mode) {
 	case ACL_OFF:
 		return 0x00;
 	case ACL_NORMAL:
-		return 0x02;
+		return 0x01;
 	case ACL_ENHANCED:
-		return 0x03;
+		return 0x02;
+	}
+}
+
+#define CM4_ZA_THRESHOLD_OPR 85
+#define CM4_ACL_ENHANCED_THRESHOLD_DBV 3726
+/* Manage the ACL settings to DDIC that consider the dbv and opr value */
+static void cm4_acl_modes_manager(struct gs_panel *ctx)
+{	struct device *dev = ctx->dev;
+	struct gs_panel_status *sw_status = &ctx->sw_status;
+	struct gs_panel_status *hw_status = &ctx->hw_status;
+
+	// Check if ACL can be enabled based on conditions
+	bool can_enable_acl = hw_status->dbv >= CM4_ACL_ENHANCED_THRESHOLD_DBV;
+	u8 opr;
+	u8 target_acl_state;
+	bool update_acl_settings;
+
+	if (!can_enable_acl) {
+		cm4_disable_acl_mode(ctx);
+		return;
+	}
+
+	// Check if ACL settings can be wrote based on conditions
+	if (!cm4_get_opr(ctx, &opr)) {
+		update_acl_settings = (opr > CM4_ZA_THRESHOLD_OPR);
+	} else {
+		dev_warn(ctx->dev, "Unable to update acl mode\n");
+		return;
+	}
+
+	if (update_acl_settings) {
+		if (sw_status->acl_mode == hw_status->acl_mode) {
+			dev_dbg(dev, "%s : skip to update acl_mode\n", __func__);
+			return;
+		}
+		target_acl_state = get_acl_mode_setting(sw_status->acl_mode);
+		GS_DCS_WRITE_CMD(dev, 0x55, target_acl_state);
+		hw_status->acl_mode = sw_status->acl_mode;
+		dev_info(dev, "%s: set acl : %d, opr : %hhu\n", __func__, target_acl_state, opr);
+	} else {
+		cm4_disable_acl_mode(ctx);
 	}
 }
 
 /* updated za when acl mode changed */
 static void cm4_set_acl_mode(struct gs_panel *ctx, enum gs_acl_mode mode)
 {
-	struct device *dev = ctx->dev;
-	u16 dbv_th = CM4_ACL_ENHANCED_THRESHOLD_DBV;
-	struct gs_panel_status *sw_status = &ctx->sw_status;
-	struct gs_panel_status *hw_status = &ctx->hw_status;
-	bool can_enable_acl = (hw_status->dbv >= dbv_th && GS_IS_HBM_ON(ctx->hbm_mode));
+	bool can_enable_acl = ctx->hw_status.dbv >= CM4_ACL_ENHANCED_THRESHOLD_DBV;
 
-	if (can_enable_acl && mode != ACL_OFF)
-		sw_status->acl_mode = mode;
-	else
-		sw_status->acl_mode = ACL_OFF;
+	ctx->sw_status.acl_mode = mode;
 
-	if (sw_status->acl_mode != hw_status->acl_mode) {
-		u8 setting = get_acl_mode_setting(sw_status->acl_mode, ctx->panel_rev);
-
-		GS_DCS_WRITE_CMD(dev, 0x55, setting);
-		hw_status->acl_mode = sw_status->acl_mode;
-		dev_dbg(dev, "%s: %d\n", __func__, setting);
-	}
+	if (can_enable_acl) {
+		if (ctx->sw_status.acl_mode != ctx->hw_status.acl_mode)
+			cm4_acl_modes_manager(ctx);
+	} else
+		cm4_disable_acl_mode(ctx);
 }
 
 static int cm4_set_brightness(struct gs_panel *ctx, u16 br)
@@ -1705,7 +1743,7 @@ static void cm4_commit_done(struct gs_panel *ctx)
 
 	cm4_update_idle_state(ctx);
 
-	cm4_update_za(ctx);
+	cm4_acl_modes_manager(ctx);
 
 	if (ctx->thermal && ctx->thermal->pending_temp_update)
 		cm4_update_disp_therm(ctx);
