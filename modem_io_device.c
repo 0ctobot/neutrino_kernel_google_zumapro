@@ -35,7 +35,7 @@ static ssize_t waketime_show(struct device *dev,
 
 	msec = jiffies_to_msecs(iod->waketime);
 
-	return scnprintf(buf, PAGE_SIZE, "raw waketime : %ums\n", msec);
+	return sysfs_emit(buf, "raw waketime : %ums\n", msec);
 }
 
 static ssize_t waketime_store(struct device *dev,
@@ -95,7 +95,7 @@ static ssize_t loopback_show(struct device *dev,
 	struct modem_shared *msd = iod->msd;
 	unsigned char *ip = (unsigned char *)&msd->loopback_ipaddr;
 
-	return scnprintf(buf, PAGE_SIZE, "%u.%u.%u.%u\n", ip[0], ip[1], ip[2], ip[3]);
+	return sysfs_emit(buf, "%u.%u.%u.%u\n", ip[0], ip[1], ip[2], ip[3]);
 }
 
 static ssize_t loopback_store(struct device *dev,
@@ -114,7 +114,7 @@ static struct device_attribute attr_loopback =
 
 static void iodev_showtxlink(struct io_device *iod, void *args)
 {
-	char **p = (char **)args;
+	char **p = args;
 	struct link_device *ld = get_current_link(iod);
 	ssize_t count = 0;
 
@@ -159,7 +159,7 @@ static enum gro_opt gro_support = GRO_TCP_UDP;
 static ssize_t gro_option_show(struct device *dev,
 		struct device_attribute *attr, char *buf)
 {
-	return scnprintf(buf, PAGE_SIZE, "%u\n", gro_support);
+	return sysfs_emit(buf, "%u\n", gro_support);
 }
 
 static ssize_t gro_option_store(struct device *dev,

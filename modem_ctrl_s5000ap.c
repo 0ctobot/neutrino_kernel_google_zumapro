@@ -196,7 +196,7 @@ MODULE_PARM_DESC(ds_detect, "Dual SIM detect");
 static ssize_t ds_detect_show(struct device *dev,
 		struct device_attribute *attr, char *buf)
 {
-	return scnprintf(buf, PAGE_SIZE, "%d\n", ds_detect);
+	return sysfs_emit(buf, "%d\n", ds_detect);
 }
 
 static ssize_t ds_detect_store(struct device *dev,
