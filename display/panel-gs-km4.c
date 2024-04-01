@@ -362,15 +362,15 @@ static bool km4_set_te2_rate(struct gs_panel *ctx, u32 rate_hz)
 		ctx->te2.rate_hz = rate_hz;
 		km4_update_te2_option(ctx, (rate_hz == 240) ? KM4_TE2_FIXED_240HZ :
 							      KM4_TE2_FIXED_120HZ);
-		return true;
-	} if (ctx->te2.option == TEX_OPT_CHANGEABLE) {
+	} else if (ctx->te2.option == TEX_OPT_CHANGEABLE) {
 		dev_dbg(dev, "set changeable TE2 rate %uhz\n", rate_hz);
 		ctx->te2.rate_hz = rate_hz;
-		return true;
 	} else {
 		dev_warn(dev, "TE2 option is unsupported (%u)\n", ctx->te2.option);
 		return false;
 	}
+
+	return true;
 }
 
 static u32 km4_get_te2_rate(struct gs_panel *ctx)

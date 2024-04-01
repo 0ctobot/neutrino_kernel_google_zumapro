@@ -189,8 +189,8 @@ static const struct drm_dsc_config fhd_pps_config = {
 #define CM4_WRCTRLD_HBM_BIT 0xC0
 
 #define CM4_TE2_CHANGEABLE 0x04
-#define CM4_TE2_FIXED 0x51
-
+#define CM4_TE2_FIXED_120HZ 0x51
+#define CM4_TE2_FIXED_240HZ 0x41
 #define CM4_TE2_RISING_EDGE_OFFSET 0x20
 #define CM4_TE2_FALLING_EDGE_OFFSET 0x57
 
@@ -285,81 +285,144 @@ static void cm4_update_disp_therm(struct gs_panel *ctx)
 	ctx->thermal->hw_temp = temp;
 }
 
-static u8 cm4_get_te2_option(struct gs_panel *ctx)
+static void cm4_update_te2_option(struct gs_panel *ctx, u8 val)
 {
-	struct cm4_panel *spanel = to_spanel(ctx);
-	struct gs_panel_status *sw_status = &ctx->sw_status;
+	struct device *dev = ctx->dev;
 
-	if (!ctx || !ctx->current_mode || spanel->force_changeable_te2)
-		return CM4_TE2_CHANGEABLE;
-
-	if (ctx->current_mode->gs_mode.is_lp_mode ||
-	    (test_bit(FEAT_EARLY_EXIT, sw_status->feat) && sw_status->idle_vrefresh < 30))
-		return CM4_TE2_FIXED;
-
-	return CM4_TE2_CHANGEABLE;
-}
-
-static void cm4_update_te2_internal(struct gs_panel *ctx, bool lock)
-{
-	struct gs_panel_te2_timing timing = {
-		.rising_edge = CM4_TE2_RISING_EDGE_OFFSET,
-		.falling_edge = CM4_TE2_FALLING_EDGE_OFFSET,
-	};
-	u32 rising, falling;
-	struct device *dev;
-	u8 option = cm4_get_te2_option(ctx);
-	u8 idx;
-
-	if (!ctx)
-		return;
-
-	dev = ctx->dev;
-
-	/* skip TE2 update if going through RRS */
-	if (ctx->mode_in_progress == MODE_RES_IN_PROGRESS ||
-	    ctx->mode_in_progress == MODE_RES_AND_RR_IN_PROGRESS) {
-		dev_dbg(dev, "%s: RRS in progress, skip\n", __func__);
-		return;
-	}
-
-	if (gs_panel_get_current_mode_te2(ctx, &timing)) {
-		dev_dbg(dev, "failed to get TE2 timng\n");
-		return;
-	}
-	rising = timing.rising_edge;
-	falling = timing.falling_edge;
-
-	ctx->te2.option = (option == CM4_TE2_FIXED) ? TEX_OPT_FIXED : TEX_OPT_CHANGEABLE;
-
-	dev_dbg(dev, "TE2 updated: %s mode, option %s, idle %s, rising=0x%X falling=0x%X\n",
-		test_bit(FEAT_OP_NS, ctx->sw_status.feat) ? "NS" : "HS",
-		(option == CM4_TE2_CHANGEABLE) ? "changeable" : "fixed",
-		ctx->idle_data.panel_idle_vrefresh ? "active" : "inactive", rising, falling);
-
-	if (lock)
-		GS_DCS_BUF_ADD_CMDLIST(dev, unlock_cmd_f0);
-	GS_DCS_BUF_ADD_CMD(dev, 0xB0, 0x00, 0x42, 0xF2);
-	GS_DCS_BUF_ADD_CMD(dev, 0xF2, 0x0D); /* TE2 ON */
+	GS_DCS_BUF_ADD_CMDLIST(dev, unlock_cmd_f0);
 	GS_DCS_BUF_ADD_CMD(dev, 0xB0, 0x00, 0x01, 0xB9);
-	GS_DCS_BUF_ADD_CMD(dev, 0xB9, option); /* TE2 type setting */
-	idx = option == CM4_TE2_FIXED ? 0x22 : 0x1E;
-	GS_DCS_BUF_ADD_CMD(dev, 0xB0, 0x00, idx, 0xB9);
-	if (option == CM4_TE2_FIXED) {
-		GS_DCS_BUF_ADD_CMD(dev, 0xB9, (rising >> 8) & 0xF, rising & 0xFF,
-				   (falling >> 8) & 0xF, falling & 0xFF, (rising >> 8) & 0xF,
-				   rising & 0xFF, (falling >> 8) & 0xF, falling & 0xFF);
-	} else {
-		GS_DCS_BUF_ADD_CMD(dev, 0xB9, (rising >> 8) & 0xF, rising & 0xFF,
-				   (falling >> 8) & 0xF, falling & 0xFF);
-	}
-	if (lock)
-		GS_DCS_BUF_ADD_CMDLIST_AND_FLUSH(dev, lock_cmd_f0);
+	GS_DCS_BUF_ADD_CMD(dev, 0xB9, val);
+	GS_DCS_BUF_ADD_CMDLIST_AND_FLUSH(dev, lock_cmd_f0);
+
+	notify_panel_te2_option_changed(ctx);
+	dev_dbg(dev, "te2 option is updated to %s\n",
+		(val == CM4_TE2_CHANGEABLE) ? "changeable" :
+		 ((val == CM4_TE2_FIXED_240HZ) ? "fixed:240" : "fixed:120"));
 }
 
 static void cm4_update_te2(struct gs_panel *ctx)
 {
-	cm4_update_te2_internal(ctx, true);
+	struct cm4_panel *spanel = to_spanel(ctx);
+
+	if (spanel->force_changeable_te2 && ctx->te2.option == TEX_OPT_FIXED) {
+		dev_dbg(ctx->dev, "force to changeable TE2\n");
+		ctx->te2.option = TEX_OPT_CHANGEABLE;
+		cm4_update_te2_option(ctx, CM4_TE2_CHANGEABLE);
+	}
+}
+
+static void cm4_te2_setting(struct gs_panel *ctx)
+{
+	struct cm4_panel *spanel = to_spanel(ctx);
+	struct device *dev = ctx->dev;
+	u32 rising = CM4_TE2_RISING_EDGE_OFFSET;
+	u32 falling = CM4_TE2_FALLING_EDGE_OFFSET;
+	u8 option;
+
+	if (ctx->te2.option == TEX_OPT_FIXED && !spanel->force_changeable_te2)
+		option = (ctx->te2.rate_hz == 240) ? CM4_TE2_FIXED_240HZ :
+						     CM4_TE2_FIXED_120HZ;
+	else
+		option = CM4_TE2_CHANGEABLE;
+
+	GS_DCS_BUF_ADD_CMDLIST(dev, unlock_cmd_f0);
+	/* TE2 on */
+	GS_DCS_BUF_ADD_CMD(dev, 0xB0, 0x00, 0x42, 0xF2);
+	GS_DCS_BUF_ADD_CMD(dev, 0xF2, 0x0D);
+	/* changeable or 240/120Hz fixed TE2 */
+	GS_DCS_BUF_ADD_CMD(dev, 0xB0, 0x00, 0x01, 0xB9);
+	GS_DCS_BUF_ADD_CMD(dev, 0xB9, option);
+	/* changeable TE2 */
+	GS_DCS_BUF_ADD_CMD(dev, 0xB0, 0x00, 0x1E, 0xB9);
+	GS_DCS_BUF_ADD_CMD(dev, 0xB9, (rising >> 8) & 0xF, rising & 0xFF,
+				      (falling >> 8) & 0xF, falling & 0xFF);
+	/* 120Hz fixed TE2 */
+	GS_DCS_BUF_ADD_CMD(dev, 0xB0, 0x00, 0x22, 0xB9);
+	GS_DCS_BUF_ADD_CMD(dev, 0xB9, (rising >> 8) & 0xF, rising & 0xFF,
+				      (falling >> 8) & 0xF, falling & 0xFF,
+				      (rising >> 8) & 0xF, rising & 0xFF,
+				      (falling >> 8) & 0xF, falling & 0xFF);
+	/* 240Hz fixed TE2: set the same width as 120Hz */
+	GS_DCS_BUF_ADD_CMD(dev, 0xB0, 0x00, 0x2E, 0xB9);
+	GS_DCS_BUF_ADD_CMD(dev, 0xB9, 0x00, 0x21, 0x00, 0x35, 0x05, 0x7B);
+	GS_DCS_BUF_ADD_CMDLIST_AND_FLUSH(dev, lock_cmd_f0);
+
+	notify_panel_te2_rate_changed(ctx);
+	notify_panel_te2_option_changed(ctx);
+	dev_dbg(dev, "TE2 setting: option %s, rising=0x%X falling=0x%X\n",
+		(option == TEX_OPT_CHANGEABLE) ? "changeable" :
+		 ((ctx->te2.rate_hz == 240) ? "fixed:240" : "fixed:120"),
+		rising, falling);
+}
+
+static bool cm4_set_te2_rate(struct gs_panel *ctx, u32 rate_hz)
+{
+	struct device *dev = ctx->dev;
+
+	if (ctx->te2.rate_hz == rate_hz)
+		return false;
+
+	if (ctx->te2.option == TEX_OPT_FIXED) {
+		if (rate_hz != 120 && rate_hz != 240) {
+			dev_warn(dev, "unsupported fixed TE2 rate (%u)\n", rate_hz);
+			return false;
+		}
+
+		ctx->te2.rate_hz = rate_hz;
+		cm4_update_te2_option(ctx, (rate_hz == 240) ? CM4_TE2_FIXED_240HZ :
+							      CM4_TE2_FIXED_120HZ);
+	} else if (ctx->te2.option == TEX_OPT_CHANGEABLE) {
+		dev_dbg(dev, "set changeable TE2 rate %uhz\n", rate_hz);
+		ctx->te2.rate_hz = rate_hz;
+	} else {
+		dev_warn(dev, "TE2 option is unsupported (%u)\n", ctx->te2.option);
+		return false;
+	}
+
+	return true;
+}
+
+static u32 cm4_get_te2_rate(struct gs_panel *ctx)
+{
+	/**
+	 * After entering AOD mode, it should use the previous TE2 setting. But TE2 setting
+	 * in AOD mode doesn't affect ALSP, so we just return 30Hz for AOD no matter the
+	 * display state is active or idle.
+	 */
+	return (ctx->current_mode->gs_mode.is_lp_mode ? 30 : ctx->te2.rate_hz);
+}
+
+static bool cm4_set_te2_option(struct gs_panel *ctx, u32 option)
+{
+	struct cm4_panel *spanel = to_spanel(ctx);
+	struct device *dev = ctx->dev;
+	u8 val;
+
+	if (option == ctx->te2.option)
+		return false;
+
+	if (option == TEX_OPT_FIXED) {
+		if (spanel->force_changeable_te2) {
+			dev_dbg(dev, "force changeable TE2 is set\n");
+			return false;
+		}
+		val = (ctx->te2.rate_hz == 240) ? CM4_TE2_FIXED_240HZ : CM4_TE2_FIXED_120HZ;
+	} else if (option == TEX_OPT_CHANGEABLE) {
+		val = CM4_TE2_CHANGEABLE;
+	} else {
+		dev_warn(dev, "unsupported TE2 option (%u)\n", option);
+		return false;
+	}
+
+	cm4_update_te2_option(ctx, val);
+	ctx->te2.option = option;
+
+	return true;
+}
+
+static enum gs_panel_tex_opt cm4_get_te2_option(struct gs_panel *ctx)
+{
+	return ctx->te2.option;
 }
 
 static inline bool is_auto_mode_allowed(struct gs_panel *ctx)
@@ -793,10 +856,6 @@ static void cm4_set_panel_feat(struct gs_panel *ctx, const struct gs_panel_mode 
 	if (test_bit(FEAT_EARLY_EXIT, changed_feat) || test_bit(FEAT_OP_NS, changed_feat) ||
 	    hw_status->te_freq != te_freq)
 		cm4_set_panel_feat_te(ctx, feat, pmode);
-
-	/* TE2 setting */
-	if (test_bit(FEAT_OP_NS, changed_feat))
-		cm4_update_te2_internal(ctx, false);
 
 	/*
 	 * HBM IRC setting
@@ -1462,6 +1521,7 @@ static int cm4_enable(struct drm_panel *panel)
 
 		GS_DCS_WRITE_DELAY_CMD(dev, 120, MIPI_DCS_EXIT_SLEEP_MODE);
 		gs_panel_send_cmdset(ctx, &cm4_init_cmdset);
+		cm4_te2_setting(ctx);
 		spanel->is_pixel_off = false;
 		ctx->dsi_hs_clk_mbps = MIPI_DSI_FREQ_MBPS_DEFAULT;
 	}
@@ -2227,6 +2287,9 @@ static void cm4_panel_init(struct gs_panel *ctx)
 	cm4_update_refresh_ctrl_feat(ctx);
 #endif
 	ctx->hw_status.irc_mode = IRC_FLAT_DEFAULT;
+	/* default fixed TE2 120Hz */
+	ctx->te2.option = TEX_OPT_FIXED;
+	ctx->te2.rate_hz = 120;
 
 	if (!ctx->thermal) {
 		dev_err(ctx->dev, "%s: error retrieving thermal data\n", __func__);
@@ -2242,6 +2305,7 @@ static void cm4_panel_init(struct gs_panel *ctx)
 		ctx->sw_status.idle_vrefresh = 0;
 		cm4_set_panel_feat(ctx, pmode, true);
 		cm4_change_frequency(ctx, pmode);
+		cm4_te2_setting(ctx);
 	}
 }
 
@@ -2311,6 +2375,10 @@ static const struct gs_panel_funcs cm4_gs_funcs = {
 	.run_normal_mode_work = cm4_normal_mode_work,
 	.pre_update_ffc = cm4_pre_update_ffc,
 	.update_ffc = cm4_update_ffc,
+	.set_te2_rate = cm4_set_te2_rate,
+	.get_te2_rate = cm4_get_te2_rate,
+	.set_te2_option = cm4_set_te2_option,
+	.get_te2_option = cm4_get_te2_option,
 };
 
 static const struct gs_brightness_configuration cm4_btr_configs[] = {
