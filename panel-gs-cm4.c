@@ -2571,6 +2571,7 @@ static struct gs_panel_desc gs_cm4 = {
 	.lp_modes = &cm4_lp_modes,
 	.binned_lp = cm4_binned_lp,
 	.num_binned_lp = ARRAY_SIZE(cm4_binned_lp),
+	.rr_switch_duration = 1,
 	.has_off_binned_lp_entry = false,
 	.is_idle_supported = true,
 	.panel_func = &cm4_drm_funcs,
