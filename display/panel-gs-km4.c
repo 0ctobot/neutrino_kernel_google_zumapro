@@ -2573,6 +2573,7 @@ static struct gs_panel_desc gs_km4 = {
 	.lp_modes = &km4_lp_modes,
 	.binned_lp = km4_binned_lp,
 	.num_binned_lp = ARRAY_SIZE(km4_binned_lp),
+	.rr_switch_duration = 1,
 	.has_off_binned_lp_entry = false,
 	.is_idle_supported = true,
 	.panel_func = &km4_drm_funcs,
