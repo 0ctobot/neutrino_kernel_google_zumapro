@@ -1060,8 +1060,9 @@ static void gpio_power_wreset_cp(struct modem_ctl *mc)
 		mif_err("cp2ap_cp_wrst level is low before warm reset\n");
 
 	mif_gpio_set_value(&mc->cp_gpio[CP_GPIO_AP2CP_PM_WRST_N], 1, 5);
-	mif_gpio_set_value(&mc->cp_gpio[CP_GPIO_AP2CP_CP_WRST_N], 0,
-		val ? 0 : 1);
+	mif_gpio_set_value(&mc->cp_gpio[CP_GPIO_AP2CP_CP_WRST_N], 0, 0);
+	if (!val)
+		udelay(1000);
 
 	while (i++ < 20) {
 		if (!mif_gpio_get_value(&mc->cp_gpio[CP_GPIO_CP2AP_CP_WRST_N],
