@@ -417,6 +417,8 @@ static irqreturn_t cp_active_handler(int irq, void *data)
 		goto irq_done;
 	}
 
+	print_mc_state(mc);
+
 	cp_active = mif_gpio_get_value(&mc->cp_gpio[CP_GPIO_CP2AP_CP_ACTIVE], true);
 	mif_err("[PHONE_ACTIVE Handler] state:%s cp_active:%d\n",
 			cp_state_str(mc->phone_state), cp_active);
