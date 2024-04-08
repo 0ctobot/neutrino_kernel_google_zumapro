@@ -19,6 +19,7 @@ struct msi_reg_type {
 	u32 img_addr_lo;
 	u32 img_addr_hi;
 	u32 img_size;
+	u32 otp_version;
 };
 
 enum boot_stage_bit_s5400 {
