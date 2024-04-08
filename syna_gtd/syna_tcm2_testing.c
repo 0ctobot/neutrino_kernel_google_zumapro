@@ -823,12 +823,16 @@ static ssize_t syna_testing_pt01_show(struct kobject *kobj,
 	count += scnprintf(buf, PAGE_SIZE,
 			"TEST PT$01: %s\n", (retval < 0) ? "fail" : "pass");
 
+	if (test_data.buf == NULL)
+		goto free_tcm_buffer;
+
 	for (i = 0; i < test_data.data_length; i++) {
 		count += scnprintf(buf + count, PAGE_SIZE - count, "%d ",
 				test_data.buf[i]);
 	}
 	count += scnprintf(buf + count, PAGE_SIZE - count, "\n");
 
+free_tcm_buffer:
 	syna_tcm_buf_release(&test_data);
 exit:
 	return count;
@@ -909,6 +913,12 @@ static int syna_testing_pt05_gap(struct syna_tcm *tcm, struct tcm_buffer *test_d
 	int i, j, idx;
 
 	LOGI("%s: Start testing\n", __func__);
+
+	if (test_data->buf == NULL) {
+		LOGE("Test data is NULL\n");
+		result = false;
+		goto exit;
+	}
 
 	frame = syna_pal_mem_alloc(rows * cols, sizeof(short));
 	if (!frame) {
@@ -1066,6 +1076,9 @@ static ssize_t syna_testing_pt05_show(struct kobject *kobj,
 			"TEST PT$05: %s\n",
 			(retval < 0) || (retval_gap < 0) ? "fail" : "pass");
 
+	if (test_data.buf == NULL)
+		goto free_tcm_buffer;
+
 	count += scnprintf(buf + count, PAGE_SIZE - count, "%d %d\n",
 			tcm->tcm_dev->cols, tcm->tcm_dev->rows);
 
@@ -1078,6 +1091,7 @@ static ssize_t syna_testing_pt05_show(struct kobject *kobj,
 		count += scnprintf(buf + count, PAGE_SIZE - count, "\n");
 	}
 
+free_tcm_buffer:
 	syna_tcm_buf_release(&test_data);
 exit:
 	return count;
@@ -1170,6 +1184,9 @@ static ssize_t syna_testing_pt0a_show(struct kobject *kobj,
 	count += scnprintf(buf, PAGE_SIZE,
 			"TEST PT$0A: %s\n", (retval < 0) ? "fail" : "pass");
 
+	if (test_data.buf == NULL)
+		goto free_tcm_buffer;
+
 	count += scnprintf(buf + count, PAGE_SIZE - count, "%d %d\n",
 			tcm->tcm_dev->cols, tcm->tcm_dev->rows);
 
@@ -1182,6 +1199,7 @@ static ssize_t syna_testing_pt0a_show(struct kobject *kobj,
 		count += scnprintf(buf + count, PAGE_SIZE - count, "\n");
 	}
 
+free_tcm_buffer:
 	syna_tcm_buf_release(&test_data);
 exit:
 	return count;
@@ -1262,6 +1280,12 @@ static int syna_testing_pt10_gap(struct syna_tcm *tcm, struct tcm_buffer *test_d
 	int i, j, idx;
 
 	LOGI("%s: Start testing\n", __func__);
+
+	if (test_data->buf == NULL) {
+		LOGE("Test data is NULL\n");
+		result = false;
+		goto exit;
+	}
 
 	frame = syna_pal_mem_alloc(rows * cols, sizeof(short));
 	if (!frame) {
@@ -1418,6 +1442,9 @@ static ssize_t syna_testing_pt10_show(struct kobject *kobj,
 			"TEST PT$10: %s\n",
 			(retval < 0) || (retval_gap < 0) ? "fail" : "pass");
 
+	if (test_data.buf == NULL)
+		goto free_tcm_buffer;
+
 	count += scnprintf(buf + count, PAGE_SIZE - count, "%d %d\n",
 			tcm->tcm_dev->cols, tcm->tcm_dev->rows);
 
@@ -1430,6 +1457,7 @@ static ssize_t syna_testing_pt10_show(struct kobject *kobj,
 		count += scnprintf(buf + count, PAGE_SIZE - count, "\n");
 	}
 
+free_tcm_buffer:
 	syna_tcm_buf_release(&test_data);
 exit:
 	return count;
@@ -1522,6 +1550,9 @@ static ssize_t syna_testing_pt11_show(struct kobject *kobj,
 	count += scnprintf(buf, PAGE_SIZE,
 			"TEST PT$11: %s\n", (retval < 0) ? "fail" : "pass");
 
+	if (test_data.buf == NULL)
+		goto free_tcm_buffer;
+
 	count += scnprintf(buf + count, PAGE_SIZE - count, "%d %d\n",
 			tcm->tcm_dev->cols, tcm->tcm_dev->rows);
 
@@ -1534,6 +1565,7 @@ static ssize_t syna_testing_pt11_show(struct kobject *kobj,
 		count += scnprintf(buf + count, PAGE_SIZE - count, "\n");
 	}
 
+free_tcm_buffer:
 	syna_tcm_buf_release(&test_data);
 exit:
 	return count;
@@ -1626,6 +1658,9 @@ static ssize_t syna_testing_pt12_show(struct kobject *kobj,
 	count = snprintf(buf, PAGE_SIZE,
 			"TEST PT$12: %s\n", (retval < 0) ? "fail" : "pass");
 
+	if (test_data.buf == NULL)
+		goto free_tcm_buffer;
+
 	count += scnprintf(buf + count, PAGE_SIZE - count, "%d %d\n",
 			tcm->tcm_dev->cols, tcm->tcm_dev->rows);
 
@@ -1641,6 +1676,7 @@ static ssize_t syna_testing_pt12_show(struct kobject *kobj,
 	}
 	count += scnprintf(buf + count, PAGE_SIZE - count, "\n");
 
+free_tcm_buffer:
 	syna_tcm_buf_release(&test_data);
 exit:
 	return count;
@@ -1733,6 +1769,9 @@ static ssize_t syna_testing_pt16_show(struct kobject *kobj,
 	count = snprintf(buf, PAGE_SIZE,
 			"TEST PT$16: %s\n", (retval < 0) ? "fail" : "pass");
 
+	if (test_data.buf == NULL)
+		goto free_tcm_buffer;
+
 	count += scnprintf(buf + count, PAGE_SIZE - count, "%d %d\n",
 			tcm->tcm_dev->cols, tcm->tcm_dev->rows);
 
@@ -1745,6 +1784,7 @@ static ssize_t syna_testing_pt16_show(struct kobject *kobj,
 		count += scnprintf(buf + count, PAGE_SIZE - count, "\n");
 	}
 
+free_tcm_buffer:
 	syna_tcm_buf_release(&test_data);
 exit:
 	return count;
@@ -1892,6 +1932,9 @@ static ssize_t syna_testing_pt_moisture_show(struct kobject *kobj,
 			"TEST Tags Moisture: %s\n",
 			(retval < 0) ? "fail" : "pass");
 
+	if (test_data.buf == NULL)
+		goto free_tcm_buffer;
+
 	count += scnprintf(buf + count, PAGE_SIZE - count, "%d %d\n",
 			tcm->tcm_dev->cols, tcm->tcm_dev->rows);
 
@@ -1906,6 +1949,7 @@ static ssize_t syna_testing_pt_moisture_show(struct kobject *kobj,
 		}
 	}
 
+free_tcm_buffer:
 	syna_tcm_buf_release(&test_data);
 exit:
 	return count;
