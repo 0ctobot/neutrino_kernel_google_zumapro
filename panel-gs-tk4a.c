@@ -1,9 +1,18 @@
-/* SPDX-License-Identifier: MIT */
+// SPDX-License-Identifier: GPL-2.0-only
+/*
+ * MIPI-DSI based tk4a AMOLED LCD panel driver.
+ *
+ * Copyright (c) 2023 Google LLC
+ *
+ * This program is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License version 2 as
+ * published by the Free Software Foundation.
+ */
 
 #include <drm/display/drm_dsc_helper.h>
 #include <linux/debugfs.h>
-#include <linux/delay.h>
 #include <linux/module.h>
+#include <linux/delay.h>
 #include <video/mipi_display.h>
 
 #include "trace/panel_trace.h"
@@ -12,14 +21,13 @@
 #include "gs_panel/gs_panel.h"
 #include "gs_panel/gs_panel_funcs_defaults.h"
 
-/* PPS Setting DSC 1.2a */
 static const struct drm_dsc_config pps_config = {
 	.line_buf_depth = 9,
 	.bits_per_component = 8,
 	.convert_rgb = true,
-	.slice_width = 540,
-	.slice_height = 101,
-	.slice_count = 2,
+	.slice_width = 1080,
+	.slice_count = 1,
+	.slice_height = 24,
 	.simple_422 = false,
 	.pic_width = 1080,
 	.pic_height = 2424,
@@ -30,7 +38,7 @@ static const struct drm_dsc_config pps_config = {
 	.rc_quant_incr_limit1 = 11,
 	.rc_quant_incr_limit0 = 11,
 	.initial_xmit_delay = 512,
-	.initial_dec_delay = 526,
+	.initial_dec_delay = 796,
 	.block_pred_enable = true,
 	.first_line_bpg_offset = 12,
 	.initial_offset = 6144,
@@ -53,7 +61,7 @@ static const struct drm_dsc_config pps_config = {
 		{.range_min_qp = 3, .range_max_qp = 10, .range_bpg_offset = 54},
 		{.range_min_qp = 5, .range_max_qp = 11, .range_bpg_offset = 54},
 		{.range_min_qp = 5, .range_max_qp = 12, .range_bpg_offset = 52},
-		{.range_min_qp = 5, .range_max_qp = 13, .range_bpg_offset = 52},
+		{.range_min_qp = 5, .range_max_qp = 15, .range_bpg_offset = 52},
 		{.range_min_qp = 7, .range_max_qp = 13, .range_bpg_offset = 52},
 		{.range_min_qp = 13, .range_max_qp = 15, .range_bpg_offset = 52}
 	},
@@ -61,14 +69,14 @@ static const struct drm_dsc_config pps_config = {
 	.flatness_min_qp = 3,
 	.flatness_max_qp = 12,
 	.initial_scale_value = 32,
-	.scale_decrement_interval = 7,
-	.scale_increment_interval = 2517,
-	.nfl_bpg_offset = 246,
-	.slice_bpg_offset = 258,
+	.scale_decrement_interval = 15,
+	.scale_increment_interval = 786,
+	.nfl_bpg_offset = 1069,
+	.slice_bpg_offset = 543,
 	.final_offset = 4336,
 	.vbr_enable = false,
-	.slice_chunk_size = 540,
-	.dsc_version_minor = 2,
+	.slice_chunk_size = 1080,
+	.dsc_version_minor = 1,
 	.dsc_version_major = 1,
 	.native_422 = false,
 	.native_420 = false,
@@ -77,62 +85,63 @@ static const struct drm_dsc_config pps_config = {
 	.second_line_offset_adj = 0,
 };
 
-#define TK4C_WRCTRLD_DIMMING_BIT 0x08
-#define TK4C_WRCTRLD_BCTRL_BIT 0x20
-
-#define MIPI_DSI_FREQ_DEFAULT 756
-#define MIPI_DSI_FREQ_ALTERNATIVE 776
+#define TK4A_WRCTRLD_DIMMING_BIT    0x08
+#define TK4A_WRCTRLD_BCTRL_BIT      0x20
 
 static const u8 test_key_enable[] = { 0xF0, 0x5A, 0x5A };
 static const u8 test_key_disable[] = { 0xF0, 0xA5, 0xA5 };
-static const u8 test_key_fc_enable[] = { 0xFC, 0x5A, 0x5A };
-static const u8 test_key_fc_disable[] = { 0xFC, 0xA5, 0xA5 };
-static const u8 ltps_update[] = { 0xF7, 0x2F };
+static const u8 ltps_update[] = { 0xF7, 0x0F };
 static const u8 pixel_off[] = { 0x22 };
 
-static const struct gs_dsi_cmd tk4c_off_cmds[] = {
+static const struct gs_dsi_cmd tk4a_off_cmds[] = {
 	GS_DSI_DELAY_CMD(MIPI_DCS_SET_DISPLAY_OFF),
 	GS_DSI_DELAY_CMD(120, MIPI_DCS_ENTER_SLEEP_MODE),
 };
-static DEFINE_GS_CMDSET(tk4c_off);
+static DEFINE_GS_CMDSET(tk4a_off);
 
-static const struct gs_dsi_cmd tk4c_lp_cmds[] = {
-	/* AOD Power Setting */
-	GS_DSI_CMDLIST(test_key_enable),
-	GS_DSI_CMD(0xB0, 0x00, 0x04, 0xF6),
-	GS_DSI_CMD(0xF6, 0x25), /* Default */
-	GS_DSI_CMDLIST(test_key_disable),
-
-	/* AOD Mode On Setting */
+static const struct gs_dsi_cmd tk4a_lp_cmds[] = {
 	GS_DSI_CMD(MIPI_DCS_WRITE_CONTROL_DISPLAY, 0x24),
 };
-static DEFINE_GS_CMDSET(tk4c_lp);
+static DEFINE_GS_CMDSET(tk4a_lp);
 
-static const struct gs_dsi_cmd tk4c_lp_night_cmd[] = {
+static const struct gs_dsi_cmd tk4a_lp_night_cmd[] = {
 	GS_DSI_CMD(0x51, 0x00, 0xB8),
 };
 
-static const struct gs_dsi_cmd tk4c_lp_low_cmd[] = {
+static const struct gs_dsi_cmd tk4a_lp_low_cmd[] = {
 	GS_DSI_CMD(0x51, 0x01, 0x7E),
 };
-static const struct gs_dsi_cmd tk4c_lp_high_cmd[] = {
+static const struct gs_dsi_cmd tk4a_lp_high_cmd[] = {
 	GS_DSI_CMD(0x51, 0x03, 0x1A),
 };
 
-static const struct gs_binned_lp tk4c_binned_lp[] = {
+static const struct gs_binned_lp tk4a_binned_lp[] = {
 	/* night threshold 4 nits */
-	BINNED_LP_MODE_TIMING("night", 252, tk4c_lp_night_cmd, 12, 12 + 50),
+	BINNED_LP_MODE_TIMING("night", 252, tk4a_lp_night_cmd, 12, 12 + 50),
 	/* low threshold 40 nits */
-	BINNED_LP_MODE_TIMING("low", 716, tk4c_lp_low_cmd, 12, 12 + 50),
-	BINNED_LP_MODE_TIMING("high", 4095, tk4c_lp_high_cmd, 12, 12 + 50),
+	BINNED_LP_MODE_TIMING("low", 716, tk4a_lp_low_cmd, 12, 12 + 50),
+	BINNED_LP_MODE_TIMING("high", 4095, tk4a_lp_high_cmd, 12, 12 + 50),
 };
 
-static const struct gs_dsi_cmd tk4c_init_cmds[] = {
+static const struct gs_dsi_cmd tk4a_init_cmds[] = {
 	/* TE on */
 	GS_DSI_CMD(MIPI_DCS_SET_TEAR_ON),
 
-	/* TE width setting (MTP'ed) */
-	/* TE2 width setting (MTP'ed) */
+	/* TE width setting */
+	GS_DSI_CMDLIST(test_key_enable),
+	GS_DSI_CMD(0xB9, 0x01), /* 120HS, 60HS, AOD */
+	GS_DSI_CMDLIST(test_key_disable),
+
+	/* TE2 setting */
+	GS_DSI_CMDLIST(test_key_enable),
+	GS_DSI_CMD(0xB0, 0x00, 0x69, 0xCB),
+	GS_DSI_CMD(0xCB, 0x10, 0x00, 0x2D), /* 60HS TE2 ON */
+	GS_DSI_CMD(0xB0, 0x00, 0xE9, 0xCB),
+	GS_DSI_CMD(0xCB, 0x10, 0x00, 0x2D), /* 120HS & 90HS TE2 ON */
+	GS_DSI_CMD(0xB0, 0x01, 0x69, 0xCB),
+	GS_DSI_CMD(0xCB, 0x10, 0x00, 0x2D), /* AOD TE2 ON */
+	GS_DSI_CMDLIST(ltps_update),
+	GS_DSI_CMDLIST(test_key_disable),
 
 	/* CASET: 1080 */
 	GS_DSI_CMD(MIPI_DCS_SET_COLUMN_ADDRESS, 0x00, 0x00, 0x04, 0x37),
@@ -140,50 +149,32 @@ static const struct gs_dsi_cmd tk4c_init_cmds[] = {
 	/* PASET: 2424 */
 	GS_DSI_CMD(MIPI_DCS_SET_PAGE_ADDRESS, 0x00, 0x00, 0x09, 0x77),
 
-	/* FFC Off (756Mpbs) Setting */
+	/* FFC 756Mbps @ fosc 180Mhz */
 	GS_DSI_CMDLIST(test_key_enable),
-	GS_DSI_CMDLIST(test_key_fc_enable),
-	GS_DSI_CMD(0xB0, 0x00, 0x3A, 0xC5),
-	GS_DSI_CMD(0xC5, 0x6C, 0x5C),
-	GS_DSI_CMD(0xB0, 0x00, 0x36, 0xC5),
-	GS_DSI_CMD(0xC5, 0x10),
+	GS_DSI_CMD(0xFC, 0x5A, 0x5A),
+	GS_DSI_CMD(0xB0, 0x00, 0x2A, 0xC5),
+	GS_DSI_CMD(0xC5, 0x0D, 0x10, 0x80, 0x05),
+	GS_DSI_CMD(0xB0, 0x00, 0x2E, 0xC5),
+	GS_DSI_CMD(0xC5, 0x79, 0xE8),
+	GS_DSI_CMD(0xFC, 0xA5, 0xA5),
 	GS_DSI_CMDLIST(test_key_disable),
-	GS_DSI_CMDLIST(test_key_fc_disable),
 
-	/* VDDD LDO Setting, before PVT */
-	GS_DSI_REV_CMDLIST(PANEL_REV_LT(PANEL_REV_PVT), test_key_fc_enable),
-	GS_DSI_REV_CMD(PANEL_REV_LT(PANEL_REV_PVT), 0xB0, 0x00, 0x58, 0xD7),
-	GS_DSI_REV_CMD(PANEL_REV_LT(PANEL_REV_PVT), 0xD7, 0x0A),
-	GS_DSI_REV_CMD(PANEL_REV_LT(PANEL_REV_PVT), 0xB0, 0x00, 0x5B, 0xD7),
-	GS_DSI_REV_CMD(PANEL_REV_LT(PANEL_REV_PVT), 0xD7, 0x0A),
-	GS_DSI_REV_CMD(PANEL_REV_LT(PANEL_REV_PVT), 0xFE, 0x80),
-	GS_DSI_REV_CMD(PANEL_REV_LT(PANEL_REV_PVT), 0xFE, 0x00),
-	GS_DSI_REV_CMDLIST(PANEL_REV_LT(PANEL_REV_PVT), test_key_fc_disable),
-
-	/* TSP HSYNC setting, MTP'ed from DVT */
-	GS_DSI_REV_CMDLIST(PANEL_REV_LT(PANEL_REV_DVT1), test_key_enable),
-	GS_DSI_REV_CMD(PANEL_REV_LT(PANEL_REV_DVT1), 0xB0, 0x00, 0x42, 0xB9),
-	GS_DSI_REV_CMD(PANEL_REV_LT(PANEL_REV_DVT1), 0xB9, 0x19),
-	GS_DSI_REV_CMD(PANEL_REV_LT(PANEL_REV_DVT1), 0xB0, 0x00, 0x46, 0xB9),
-	GS_DSI_REV_CMD(PANEL_REV_LT(PANEL_REV_DVT1), 0xB9, 0xB0),
-
-	/* FGZ common settings, MTP'ed from DVT */
-	GS_DSI_REV_CMD(PANEL_REV_LT(PANEL_REV_DVT1), 0xB0, 0x00, 0x30, 0x68),
-	GS_DSI_REV_CMD(PANEL_REV_LT(PANEL_REV_DVT1), 0x68, 0x32, 0xFF, 0x04,
-		0x08, 0x10, 0x15, 0x29, 0x67, 0xA5),
-	GS_DSI_REV_CMD(PANEL_REV_LT(PANEL_REV_DVT1), 0xB0, 0x00, 0x1C, 0x62),
-	GS_DSI_REV_CMD(PANEL_REV_LT(PANEL_REV_DVT1), 0x62, 0x1D, 0x5F),
-	GS_DSI_REV_CMDLIST(PANEL_REV_LT(PANEL_REV_DVT1), test_key_disable),
+	/* FREQ CON Set */
+	GS_DSI_CMDLIST(test_key_enable),
+	GS_DSI_CMD(0xB0, 0x00, 0x27, 0xF2),
+	GS_DSI_CMD(0xF2, 0x02),
+	GS_DSI_CMDLIST(ltps_update),
+	GS_DSI_CMDLIST(test_key_disable),
 };
-static DEFINE_GS_CMDSET(tk4c_init);
+static DEFINE_GS_CMDSET(tk4a_init);
 
 /**
- * struct tk4c_panel - panel specific runtime info
+ * struct tk4a_panel - panel specific runtime info
  *
- * This struct maintains tk4c panel specific runtime info, any fixed details about panel
+ * This struct maintains tk4a panel specific runtime info, any fixed details about panel
  * should most likely go into struct gs_panel_desc
  */
-struct tk4c_panel {
+struct tk4a_panel {
 	/** @base: base panel struct */
 	struct gs_panel base;
 	/**
@@ -192,24 +183,24 @@ struct tk4c_panel {
 	 */
 	bool is_pixel_off;
 };
-#define to_spanel(ctx) container_of(ctx, struct tk4c_panel, base)
+#define to_spanel(ctx) container_of(ctx, struct tk4a_panel, base)
 
-static void tk4c_change_frequency(struct gs_panel *ctx, const struct gs_panel_mode *pmode)
+static void tk4a_change_frequency(struct gs_panel *ctx,
+									const struct gs_panel_mode *pmode)
 {
 	struct device *dev = ctx->dev;
-
 	u32 vrefresh = drm_mode_vrefresh(&pmode->mode);
 
 	if (unlikely(!ctx))
 		return;
 
 	if (vrefresh != 60 && vrefresh != 120) {
-		dev_warn(dev, "%s: invalid refresh rate %uhz\n", __func__, vrefresh);
+		dev_warn(ctx->dev, "%s: invalid refresh rate %uhz\n", __func__, vrefresh);
 		return;
 	}
 
 	GS_DCS_BUF_ADD_CMDLIST(dev, test_key_enable);
-	GS_DCS_BUF_ADD_CMD(dev, 0x83, vrefresh == 60 ? 0x08 : 0x00);
+	GS_DCS_BUF_ADD_CMD(dev, 0x60, vrefresh == 60 ? 0x00 : 0x08, 0x00);
 	GS_DCS_BUF_ADD_CMDLIST(dev, ltps_update);
 	GS_DCS_BUF_ADD_CMDLIST_AND_FLUSH(dev, test_key_disable);
 
@@ -217,25 +208,27 @@ static void tk4c_change_frequency(struct gs_panel *ctx, const struct gs_panel_mo
 	return;
 }
 
-static void tk4c_update_wrctrld(struct gs_panel *ctx)
+static void tk4a_update_wrctrld(struct gs_panel *ctx)
 {
 	struct device *dev = ctx->dev;
-	u8 val = TK4C_WRCTRLD_BCTRL_BIT;
+	u8 val = TK4A_WRCTRLD_BCTRL_BIT;
 
 	if (ctx->dimming_on)
-		val |= TK4C_WRCTRLD_DIMMING_BIT;
+		val |= TK4A_WRCTRLD_DIMMING_BIT;
 
-	dev_dbg(dev, "%s(wrctrld:0x%x, hbm: %d, dimming: %d)\n", __func__, val,
-		GS_IS_HBM_ON(ctx->hbm_mode), ctx->dimming_on);
+	dev_dbg(dev,
+		"%s(wrctrld:0x%x, hbm: %s, dimming: %s)\n",
+		__func__, val, GS_IS_HBM_ON(ctx->hbm_mode) ? "on" : "off",
+		ctx->dimming_on ? "on" : "off");
 
 	GS_DCS_BUF_ADD_CMD_AND_FLUSH(dev, MIPI_DCS_WRITE_CONTROL_DISPLAY, val);
 }
 
-static int tk4c_set_brightness(struct gs_panel *ctx, u16 br)
+static int tk4a_set_brightness(struct gs_panel *ctx, u16 br)
 {
 	u16 brightness;
 	u32 max_brightness;
-	struct tk4c_panel *spanel = to_spanel(ctx);
+	struct tk4a_panel *spanel = to_spanel(ctx);
 	struct device *dev = ctx->dev;
 
 	if (ctx->current_mode && ctx->current_mode->gs_mode.is_lp_mode) {
@@ -271,7 +264,8 @@ static int tk4c_set_brightness(struct gs_panel *ctx, u16 br)
 
 	if (br > max_brightness) {
 		br = max_brightness;
-		dev_warn(dev, "%s: capped to dbv(%d)\n", __func__, max_brightness);
+		dev_warn(dev, "%s: capped to dbv(%d)\n", __func__,
+			max_brightness);
 	}
 
 	/* swap endianness because panel expects MSB first */
@@ -280,77 +274,59 @@ static int tk4c_set_brightness(struct gs_panel *ctx, u16 br)
 	return gs_dcs_set_brightness(ctx, brightness);
 }
 
-static void tk4c_set_hbm_mode(struct gs_panel *ctx, enum gs_hbm_mode mode)
+static void tk4a_set_hbm_mode(struct gs_panel *ctx,
+				enum gs_hbm_mode mode)
 {
 	struct device *dev = ctx->dev;
 
 	ctx->hbm_mode = mode;
 
+	/* FGZ mode */
 	GS_DCS_BUF_ADD_CMDLIST(dev, test_key_enable);
-	/* FGZ mode setting */
-	GS_DCS_BUF_ADD_CMD(dev, 0xB0, 0x00, 0x61, 0x68);
-	if (GS_IS_HBM_ON(ctx->hbm_mode)) {
-		if (GS_IS_HBM_ON_IRC_OFF(ctx->hbm_mode)) {
-			/* FGZ Mode ON */
-			if (ctx->panel_rev < PANEL_REV_DVT1) {
-				GS_DCS_BUF_ADD_CMD(dev, 0x68, 0xB0, 0x2C, 0x6A, 0x80, 0x00, 0x00, 0xF5,
-					0xC4);
-			} else if (ctx->panel_rev == PANEL_REV_DVT1) {
-				GS_DCS_BUF_ADD_CMD(dev, 0x68, 0xB0, 0x2C, 0x6A, 0x80, 0x00, 0x00, 0xE4,
-					0xB6);
-			} else { /* PVT/MP */
-				GS_DCS_BUF_ADD_CMD(dev, 0x68, 0xB4, 0x2C, 0x6A, 0x80, 0x00, 0x00, 0x00,
-					0xCD);
-			}
-		} else {
-			/* FGZ Mode OFF */
-			GS_DCS_BUF_ADD_CMD(dev, 0x68, 0xB0, 0x2C, 0x6A, 0x80, 0x00, 0x00, 0x00,
-					   0x00);
-		}
+	GS_DCS_BUF_ADD_CMD(dev, 0xB0, 0x01, 0x22, 0x68);
+	if (GS_IS_HBM_ON_IRC_OFF(ctx->hbm_mode)) {
+		if (ctx->panel_rev == PANEL_REV_EVT1)
+			GS_DCS_BUF_ADD_CMD(dev, 0x68, 0x1C, 0xE3, 0xFF, 0x94); /* FGZ Mode ON */
+		else
+			GS_DCS_BUF_ADD_CMD(dev, 0x68, 0x28, 0xED, 0xFF, 0x94); /* FGZ Mode ON */;
 	} else {
-		/* FGZ Mode OFF */
-		GS_DCS_BUF_ADD_CMD(dev, 0x68, 0xB0, 0x2C, 0x6A, 0x80, 0x00, 0x00, 0x00, 0x00);
+		GS_DCS_BUF_ADD_CMD(dev, 0x68, 0x00, 0x00, 0xFF, 0x90); /* FGZ Mode OFF */
 	}
-
-	GS_DCS_BUF_ADD_CMD(dev, 0xB0, 0x00, 0x01, 0xBD);
-	GS_DCS_BUF_ADD_CMD(dev, 0xBD, ctx->hbm_mode ? 0x80 : 0x81);
-	GS_DCS_BUF_ADD_CMD(dev, 0xB0, 0x00, 0x2E, 0xBD);
-	GS_DCS_BUF_ADD_CMD(dev, 0xBD, 0x00, ctx->hbm_mode ? 0x01 : 0x02);
-
-	GS_DCS_BUF_ADD_CMDLIST(dev, ltps_update);
 	GS_DCS_BUF_ADD_CMDLIST_AND_FLUSH(dev, test_key_disable);
 
 	dev_info(dev, "hbm_on=%d hbm_ircoff=%d.\n", GS_IS_HBM_ON(ctx->hbm_mode),
 		 GS_IS_HBM_ON_IRC_OFF(ctx->hbm_mode));
 }
 
-static void tk4c_set_dimming(struct gs_panel *ctx, bool dimming_on)
+static void tk4a_set_dimming_on(struct gs_panel *gs_panel,
+                                bool dimming_on)
 {
-	struct device *dev = ctx->dev;
-	const struct gs_panel_mode *pmode = ctx->current_mode;
+	const struct gs_panel_mode *pmode = gs_panel->current_mode;
 
-	ctx->dimming_on = dimming_on;
+	gs_panel->dimming_on = dimming_on;
 
 	if (pmode->gs_mode.is_lp_mode) {
-		dev_warn(dev, "in lp mode, skip to update dimming usage\n");
+		dev_warn(gs_panel->dev, "in lp mode, skip to update dimming usage\n");
 		return;
 	}
 
-	tk4c_update_wrctrld(ctx);
+	tk4a_update_wrctrld(gs_panel);
 }
 
-static void tk4c_mode_set(struct gs_panel *ctx, const struct gs_panel_mode *pmode)
+static void tk4a_mode_set(struct gs_panel *ctx,
+                          const struct gs_panel_mode *pmode)
 {
-	tk4c_change_frequency(ctx, pmode);
+	tk4a_change_frequency(ctx, pmode);
 }
 
-static bool tk4c_is_mode_seamless(const struct gs_panel *ctx, const struct gs_panel_mode *pmode)
+static bool tk4a_is_mode_seamless(const struct gs_panel *ctx,
+                                  const struct gs_panel_mode *pmode)
 {
 	/* seamless mode switch is possible if only changing refresh rate */
 	return drm_mode_equal_no_clocks(&ctx->current_mode->mode, &pmode->mode);
 }
 
-static void tk4c_debugfs_init(struct drm_panel *panel, struct dentry *root)
+static void tk4a_debugfs_init(struct drm_panel *panel, struct dentry *root)
 {
 #ifdef CONFIG_DEBUG_FS
 	struct gs_panel *ctx = container_of(panel, struct gs_panel, base);
@@ -368,7 +344,7 @@ static void tk4c_debugfs_init(struct drm_panel *panel, struct dentry *root)
 		goto panel_out;
 	}
 
-	gs_panel_debugfs_create_cmdset(csroot, &tk4c_init_cmdset, "init");
+	gs_panel_debugfs_create_cmdset(csroot, &tk4a_init_cmdset, "init");
 
 	dput(csroot);
 panel_out:
@@ -376,7 +352,7 @@ panel_out:
 #endif
 }
 
-static void tk4c_get_panel_rev(struct gs_panel *ctx, u32 id)
+static void tk4a_get_panel_rev(struct gs_panel *ctx, u32 id)
 {
 	/* extract command 0xDB */
 	u8 build_code = (id & 0xFF00) >> 8;
@@ -387,7 +363,7 @@ static void tk4c_get_panel_rev(struct gs_panel *ctx, u32 id)
 	gs_panel_get_panel_rev(ctx, rev);
 }
 
-static int tk4c_atomic_check(struct gs_panel *ctx, struct drm_atomic_state *state)
+static int tk4a_atomic_check(struct gs_panel *ctx, struct drm_atomic_state *state)
 {
 	struct drm_connector *conn = &ctx->gs_connector->base;
 	struct drm_connector_state *new_conn_state = drm_atomic_get_new_connector_state(state, conn);
@@ -441,19 +417,46 @@ static int tk4c_atomic_check(struct gs_panel *ctx, struct drm_atomic_state *stat
 	return 0;
 }
 
-static void tk4c_set_nolp_mode(struct gs_panel *ctx, const struct gs_panel_mode *pmode)
+static void tk4a_set_nolp_mode(struct gs_panel *ctx, const struct gs_panel_mode *pmode)
 {
+	struct device *dev = ctx->dev;
+	const struct gs_panel_mode *current_mode = ctx->current_mode;
+	unsigned int vrefresh = current_mode ? drm_mode_vrefresh(&current_mode->mode) : 30;
+	unsigned int te_usec = current_mode ? current_mode->gs_mode.te_usec : 1109;
+
 	if (!gs_is_panel_active(ctx))
 		return;
 
-	/* AOD Mode Off Setting */
-	tk4c_update_wrctrld(ctx);
-	tk4c_change_frequency(ctx, pmode);
+	GS_DCS_BUF_ADD_CMD(dev, MIPI_DCS_SET_DISPLAY_OFF);
 
-	dev_info(ctx->dev, "exit LP mode\n");
+	/* backlight control and dimming */
+	tk4a_update_wrctrld(ctx);
+	tk4a_change_frequency(ctx, pmode);
+
+	PANEL_ATRACE_BEGIN("tk4a_wait_one_vblank");
+	gs_panel_wait_for_vsync_done(ctx, te_usec,
+			GS_VREFRESH_TO_PERIOD_USEC(vrefresh));
+
+	/* Additional sleep time to account for TE variability */
+	usleep_range(1000, 1010);
+	PANEL_ATRACE_END("tk4a_wait_one_vblank");
+
+	GS_DCS_BUF_ADD_CMD_AND_FLUSH(dev, MIPI_DCS_SET_DISPLAY_ON);
+
+	dev_info(dev, "exit LP mode\n");
 }
 
-static int tk4c_enable(struct drm_panel *panel)
+static void tk4a_10bit_set(struct gs_panel *ctx)
+{
+	struct device *dev = ctx->dev;
+
+	GS_DCS_BUF_ADD_CMDLIST(dev, test_key_enable);
+	GS_DCS_BUF_ADD_CMD(dev, 0xB0, 0x28, 0xF2);
+	GS_DCS_BUF_ADD_CMD_AND_FLUSH(dev, 0xF2, 0xCC);  /* 10bit */
+	GS_DCS_BUF_ADD_CMDLIST_AND_FLUSH(dev, test_key_disable);
+}
+
+static int tk4a_enable(struct drm_panel *panel)
 {
 	struct gs_panel *ctx = container_of(panel, struct gs_panel, base);
 	struct device *dev = ctx->dev;
@@ -464,19 +467,20 @@ static int tk4c_enable(struct drm_panel *panel)
 		return -EINVAL;
 	}
 
-	dev_dbg(dev, "%s\n", __func__);
+	dev_info(dev, "%s\n", __func__);
 
-	/* toggle reset gpio */
 	gs_panel_reset_helper(ctx);
 
 	/* sleep out */
 	GS_DCS_WRITE_DELAY_CMD(dev, 120, MIPI_DCS_EXIT_SLEEP_MODE);
 
+	tk4a_10bit_set(ctx);
+
 	/* initial command */
-	gs_panel_send_cmdset(ctx, &tk4c_init_cmdset);
+	gs_panel_send_cmdset(ctx, &tk4a_init_cmdset);
 
 	/* frequency */
-	tk4c_change_frequency(ctx, pmode);
+	tk4a_change_frequency(ctx, pmode);
 
 	/* DSC related configuration */
 	mipi_dsi_compression_mode(to_mipi_dsi_device(dev), true);
@@ -485,22 +489,20 @@ static int tk4c_enable(struct drm_panel *panel)
 	GS_DCS_BUF_ADD_CMD(dev, 0x9D, 0x01);
 
 	/* dimming and HBM */
-	tk4c_update_wrctrld(ctx);
+	tk4a_update_wrctrld(ctx);
 
-	/* display on */
 	if (pmode->gs_mode.is_lp_mode)
 		gs_panel_set_lp_mode_helper(ctx, pmode);
 
+	/* display on */
 	GS_DCS_WRITE_CMD(dev, MIPI_DCS_SET_DISPLAY_ON);
-
-	ctx->dsi_hs_clk_mbps = MIPI_DSI_FREQ_DEFAULT;
 
 	return 0;
 }
 
-static int tk4c_panel_probe(struct mipi_dsi_device *dsi)
+static int tk4a_panel_probe(struct mipi_dsi_device *dsi)
 {
-	struct tk4c_panel *spanel;
+	struct tk4a_panel *spanel;
 
 	spanel = devm_kzalloc(&dsi->dev, sizeof(*spanel), GFP_KERNEL);
 	if (!spanel)
@@ -511,106 +513,29 @@ static int tk4c_panel_probe(struct mipi_dsi_device *dsi)
 	return gs_dsi_panel_common_init(dsi, &spanel->base);
 }
 
-static void tk4c_pre_update_ffc(struct gs_panel *ctx)
-{
-	struct device *dev = ctx->dev;
-
-	dev_dbg(ctx->dev, "%s\n", __func__);
-
-	PANEL_ATRACE_BEGIN(__func__);
-
-	/* FFC off */
-	GS_DCS_BUF_ADD_CMDLIST(dev, test_key_enable);
-	GS_DCS_BUF_ADD_CMDLIST(dev, test_key_fc_enable);
-	GS_DCS_BUF_ADD_CMD(dev, 0xB0, 0x00, 0x36, 0xC5);
-	GS_DCS_BUF_ADD_CMD(dev, 0xC5, 0x10);
-	GS_DCS_BUF_ADD_CMDLIST(dev, test_key_fc_disable);
-	GS_DCS_BUF_ADD_CMDLIST_AND_FLUSH(dev, test_key_disable);
-
-	PANEL_ATRACE_END(__func__);
-}
-
-static void tk4c_update_ffc(struct gs_panel *ctx, unsigned int hs_clk_mbps)
-{
-	struct device *dev = ctx->dev;
-
-	dev_dbg(ctx->dev, "%s: hs_clk_mbps: current=%u, target=%u\n",
-		__func__, ctx->dsi_hs_clk_mbps, hs_clk_mbps);
-
-	PANEL_ATRACE_BEGIN(__func__);
-
-	GS_DCS_BUF_ADD_CMDLIST(dev, test_key_enable);
-	GS_DCS_BUF_ADD_CMDLIST(dev, test_key_fc_enable);
-
-	if (hs_clk_mbps != MIPI_DSI_FREQ_DEFAULT && hs_clk_mbps != MIPI_DSI_FREQ_ALTERNATIVE) {
-		dev_warn(ctx->dev, "%s: invalid hs_clk_mbps=%u for FFC\n", __func__, hs_clk_mbps);
-	} else if (ctx->dsi_hs_clk_mbps != hs_clk_mbps) {
-		dev_info(ctx->dev, "%s: updating for hs_clk_mbps=%u\n", __func__, hs_clk_mbps);
-		ctx->dsi_hs_clk_mbps = hs_clk_mbps;
-
-		/* Update FFC */
-		GS_DCS_BUF_ADD_CMD(dev, 0xB0, 0x00, 0x3A, 0xC5);
-		if (hs_clk_mbps == MIPI_DSI_FREQ_DEFAULT) {
-			GS_DCS_BUF_ADD_CMD(dev, 0xC5, 0x6C, 0x5C);
-		} else { /* MIPI_DSI_FREQ_ALTERNATIVE */
-			GS_DCS_BUF_ADD_CMD(dev, 0xC5, 0x69, 0x91);
-		}
-	}
-	GS_DCS_BUF_ADD_CMD(dev, 0xB0, 0x00, 0x36, 0xC5);
-	GS_DCS_BUF_ADD_CMD(dev, 0xC5, 0x11, 0x10, 0x50, 0x05);
-	GS_DCS_BUF_ADD_CMDLIST(dev, test_key_fc_disable);
-	GS_DCS_BUF_ADD_CMDLIST_AND_FLUSH(dev, test_key_disable);
-
-	PANEL_ATRACE_END(__func__);
-}
-
-static void tk4c_set_ssc_en(struct gs_panel *ctx, bool enabled)
-{
-	struct device *dev = ctx->dev;
-	const bool ssc_mode_update = ctx->ssc_en != enabled;
-
-	if (!ssc_mode_update) {
-		dev_dbg(ctx->dev, "ssc_mode skip update\n");
-		return;
-	}
-
-	ctx->ssc_en = enabled;
-	GS_DCS_BUF_ADD_CMDLIST(dev, test_key_enable);
-	GS_DCS_BUF_ADD_CMDLIST(dev, test_key_fc_enable);
-	GS_DCS_BUF_ADD_CMD(dev, 0x00, 0x6E, 0xC5); /* global para */
-	if (enabled)
-		GS_DCS_BUF_ADD_CMD(dev, 0xC5, 0x07, 0x7F, 0x00, 0x00);
-	else
-		GS_DCS_BUF_ADD_CMD(dev, 0xC5, 0x04, 0x00);
-	GS_DCS_BUF_ADD_CMDLIST(dev, test_key_fc_disable);
-	GS_DCS_BUF_ADD_CMDLIST_AND_FLUSH(dev, test_key_disable);
-	dev_info(dev, "ssc_mode=%d\n", ctx->ssc_en);
-}
-
 static const struct gs_display_underrun_param underrun_param = {
-	.te_idle_us = 350,
+	.te_idle_us = 500,
 	.te_var = 1,
 };
 
 static const u16 WIDTH_MM = 65, HEIGHT_MM = 146;
 static const u16 HDISPLAY = 1080, VDISPLAY = 2424;
 static const u16 HFP = 32, HSA = 12, HBP = 16;
-static const u16 VFP = 8, VSA = 4, VBP = 16;
+static const u16 VFP = 12, VSA = 4, VBP = 15;
 
-#define TK4C_DSC {\
+#define TK4A_DSC {\
 	.enabled = true,\
 	.dsc_count = 1,\
 	.cfg = &pps_config,\
 }
 
-static const struct gs_panel_mode_array tk4c_modes = {
+static const struct gs_panel_mode_array tk4a_modes = {
 	.num_modes = 2,
 	.modes = {
 		{
 			.mode = {
 				.name = "1080x2424@60:60",
-				DRM_MODE_TIMING(60, HDISPLAY, HFP, HSA, HBP,
-						VDISPLAY, VFP, VSA, VBP),
+				DRM_MODE_TIMING(60, HDISPLAY, HFP, HSA, HBP, VDISPLAY, VFP, VSA, VBP),
 				/* aligned to bootloader setting */
 				.type = DRM_MODE_TYPE_PREFERRED,
 				.width_mm = WIDTH_MM,
@@ -619,17 +544,16 @@ static const struct gs_panel_mode_array tk4c_modes = {
 			.gs_mode = {
 				.mode_flags = MIPI_DSI_CLOCK_NON_CONTINUOUS,
 				.vblank_usec = 120,
-				.te_usec = 8360,
+				.te_usec = 8450,
 				.bpc = 8,
-				.dsc = TK4C_DSC,
+				.dsc = TK4A_DSC,
 				.underrun_param = &underrun_param,
 			},
 		},
 		{
 			.mode = {
 				.name = "1080x2424@120:120",
-				DRM_MODE_TIMING(120, HDISPLAY, HFP, HSA, HBP,
-						VDISPLAY, VFP, VSA, VBP),
+				DRM_MODE_TIMING(120, HDISPLAY, HFP, HSA, HBP, VDISPLAY, VFP, VSA, VBP),
 				.width_mm = WIDTH_MM,
 				.height_mm = HEIGHT_MM,
 			},
@@ -638,14 +562,14 @@ static const struct gs_panel_mode_array tk4c_modes = {
 				.vblank_usec = 120,
 				.te_usec = 276,
 				.bpc = 8,
-				.dsc = TK4C_DSC,
+				.dsc = TK4A_DSC,
 				.underrun_param = &underrun_param,
 			},
 		},
-	},/* modes */
+	}, /* modes */
 };
 
-const struct brightness_capability tk4c_brightness_capability = {
+const struct brightness_capability tk4a_brightness_capability = {
 	.normal = {
 		.nits = {
 			.min = 2,
@@ -676,14 +600,13 @@ const struct brightness_capability tk4c_brightness_capability = {
 	},
 };
 
-static const struct gs_panel_mode_array tk4c_lp_modes = {
-	.num_modes = 1,
+static const struct gs_panel_mode_array tk4a_lp_modes = {
+	.num_modes = 2,
 	.modes = {
 		{
 			.mode = {
 				.name = "1080x2424@30:30",
-				DRM_MODE_TIMING(30, HDISPLAY, HFP, HSA, HBP,
-						VDISPLAY, VFP, VSA, VBP),
+				DRM_MODE_TIMING(30, HDISPLAY, HFP, HSA, HBP, VDISPLAY, VFP, VSA, VBP),
 				.width_mm = WIDTH_MM,
 				.height_mm = HEIGHT_MM,
 			},
@@ -692,101 +615,93 @@ static const struct gs_panel_mode_array tk4c_lp_modes = {
 				.vblank_usec = 120,
 				.te_usec = 1109,
 				.bpc = 8,
-				.dsc = TK4C_DSC,
+				.dsc = TK4A_DSC,
 				.underrun_param = &underrun_param,
 				.is_lp_mode = true,
 			},
 		},
-	}, /* modes */
+	},
 };
 
-static const struct drm_panel_funcs tk4c_drm_funcs = {
+static const struct drm_panel_funcs tk4a_drm_funcs = {
 	.disable = gs_panel_disable,
 	.unprepare = gs_panel_unprepare,
 	.prepare = gs_panel_prepare,
-	.enable = tk4c_enable,
+	.enable = tk4a_enable,
 	.get_modes = gs_panel_get_modes,
-	.debugfs_init = tk4c_debugfs_init,
+	.debugfs_init = tk4a_debugfs_init,
 };
 
-static const struct gs_panel_funcs tk4c_gs_funcs = {
-	.set_brightness = tk4c_set_brightness,
+static const struct gs_panel_funcs tk4a_gs_funcs = {
+	.set_brightness = tk4a_set_brightness,
 	.set_lp_mode = gs_panel_set_lp_mode_helper,
-	.set_nolp_mode = tk4c_set_nolp_mode,
+	.set_nolp_mode = tk4a_set_nolp_mode,
 	.set_binned_lp = gs_panel_set_binned_lp_helper,
-	.set_dimming = tk4c_set_dimming,
-	.set_hbm_mode = tk4c_set_hbm_mode,
-	.is_mode_seamless = tk4c_is_mode_seamless,
-	.mode_set = tk4c_mode_set,
-	.get_panel_rev = tk4c_get_panel_rev,
+	.set_dimming = tk4a_set_dimming_on,
+	.set_hbm_mode = tk4a_set_hbm_mode,
+	.is_mode_seamless = tk4a_is_mode_seamless,
+	.mode_set = tk4a_mode_set,
+	.get_panel_rev = tk4a_get_panel_rev,
 	.read_id = gs_panel_read_slsi_ddic_id,
-	.atomic_check = tk4c_atomic_check,
-	.pre_update_ffc = tk4c_pre_update_ffc,
-	.update_ffc = tk4c_update_ffc,
-	.set_ssc_en = tk4c_set_ssc_en,
+	.atomic_check = tk4a_atomic_check,
 };
 
-const struct gs_panel_brightness_desc tk4c_brightness_desc = {
+const struct gs_panel_brightness_desc tk4a_brightness_desc = {
 	.max_brightness = 4095,
 	.min_brightness = 2,
 	.max_luminance = 10000000,
 	.max_avg_luminance = 1200000,
 	.min_luminance = 5,
-	.default_brightness = 1290, /* 140 nits */
-	.brt_capability = &tk4c_brightness_capability,
+	.default_brightness = 1290,    /* 140 nits */
+	.brt_capability = &tk4a_brightness_capability,
 };
 
-const struct gs_panel_reg_ctrl_desc tk4c_reg_ctrl_desc = {
+const struct gs_panel_reg_ctrl_desc tk4a_reg_ctrl_desc = {
 	.reg_ctrl_enable = {
 		{PANEL_REG_ID_VDDI, 0},
-		{PANEL_REG_ID_VCI, 10},
-	},
-	.reg_ctrl_post_enable = {
-		{PANEL_REG_ID_VDDD, 5},
-	},
-	.reg_ctrl_pre_disable = {
-		{PANEL_REG_ID_VDDD, 0},
+		{PANEL_REG_ID_VCI, 0},
+		{PANEL_REG_ID_VDDD, 10},
 	},
 	.reg_ctrl_disable = {
+		{PANEL_REG_ID_VDDD, 0},
 		{PANEL_REG_ID_VCI, 0},
 		{PANEL_REG_ID_VDDI, 0},
 	},
 };
 
-const struct gs_panel_desc google_tk4c = {
+const struct gs_panel_desc google_tk4a = {
 	.data_lane_cnt = 4,
 	/* supported HDR format bitmask : 1(DOLBY_VISION), 2(HDR10), 3(HLG) */
 	.hdr_formats = BIT(2) | BIT(3),
-	.brightness_desc = &tk4c_brightness_desc,
-	.modes = &tk4c_modes,
-	.off_cmdset = &tk4c_off_cmdset,
-	.lp_modes = &tk4c_lp_modes,
-	.lp_cmdset = &tk4c_lp_cmdset,
-	.binned_lp = tk4c_binned_lp,
-	.num_binned_lp = ARRAY_SIZE(tk4c_binned_lp),
-	.reg_ctrl_desc = &tk4c_reg_ctrl_desc,
-	.panel_func = &tk4c_drm_funcs,
-	.gs_panel_func = &tk4c_gs_funcs,
-	.default_dsi_hs_clk_mbps = MIPI_DSI_FREQ_DEFAULT,
-	.reset_timing_ms = { -1, 1, 1 },
+	.brightness_desc = &tk4a_brightness_desc,
+	.modes = &tk4a_modes,
+	.off_cmdset = &tk4a_off_cmdset,
+	.lp_modes = &tk4a_lp_modes,
+	.lp_cmdset = &tk4a_lp_cmdset,
+	.binned_lp = tk4a_binned_lp,
+	.num_binned_lp = ARRAY_SIZE(tk4a_binned_lp),
+	.reg_ctrl_desc = &tk4a_reg_ctrl_desc,
+	.panel_func = &tk4a_drm_funcs,
+	.gs_panel_func = &tk4a_gs_funcs,
+	.reset_timing_ms = { 1, 1, 5 },
 };
 
 static const struct of_device_id gs_panel_of_match[] = {
-	{ .compatible = "google,gs-tk4c", .data = &google_tk4c },
+	{ .compatible = "google,gs-tk4a", .data = &google_tk4a },
 	{ }
 };
 MODULE_DEVICE_TABLE(of, gs_panel_of_match);
 
 static struct mipi_dsi_driver gs_panel_driver = {
-	.probe = tk4c_panel_probe,
+	.probe = tk4a_panel_probe,
 	.remove = gs_dsi_panel_common_remove,
 	.driver = {
-		.name = "panel-gs-tk4c",
+		.name = "panel-gs-tk4a",
 		.of_match_table = gs_panel_of_match,
 	},
 };
 module_mipi_dsi_driver(gs_panel_driver);
 
-MODULE_AUTHOR("Taylor Nelms <tknelms@google.com>");
-MODULE_DESCRIPTION("MIPI-DSI based Google tk4c panel driver");
-MODULE_LICENSE("Dual MIT/GPL");
+MODULE_AUTHOR("Safayat Ullah <safayat@google.com>");
+MODULE_DESCRIPTION("MIPI-DSI based Google tk4a panel driver");
+MODULE_LICENSE("GPL");
