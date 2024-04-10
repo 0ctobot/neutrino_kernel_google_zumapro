@@ -8,6 +8,7 @@
 #include <linux/thermal.h>
 #include <video/mipi_display.h>
 
+#include "trace/dpu_trace.h"
 #include "trace/panel_trace.h"
 
 #include "gs_panel/drm_panel_funcs_defaults.h"
@@ -588,13 +589,13 @@ static void tk4b_pre_update_ffc(struct gs_panel *ctx)
 
 	dev_dbg(ctx->dev, "%s\n", __func__);
 
-	PANEL_ATRACE_BEGIN(__func__);
+	DPU_ATRACE_BEGIN(__func__);
 
 	/* FFC off */
 	GS_DCS_BUF_ADD_CMD(dev, 0xF0, 0x55, 0xAA, 0x52, 0x08, 0x01);
 	GS_DCS_BUF_ADD_CMD_AND_FLUSH(dev, 0xC3, 0x00);
 
-	PANEL_ATRACE_END(__func__);
+	DPU_ATRACE_END(__func__);
 }
 
 static void tk4b_update_ffc(struct gs_panel *ctx, unsigned int hs_clk_mbps)
@@ -604,7 +605,7 @@ static void tk4b_update_ffc(struct gs_panel *ctx, unsigned int hs_clk_mbps)
 	dev_dbg(ctx->dev, "%s: hs_clk_mbps: current=%d, target=%d\n",
 		__func__, ctx->dsi_hs_clk_mbps, hs_clk_mbps);
 
-	PANEL_ATRACE_BEGIN(__func__);
+	DPU_ATRACE_BEGIN(__func__);
 
 	if (hs_clk_mbps != MIPI_DSI_FREQ_MBPS_DEFAULT &&
 	    hs_clk_mbps != MIPI_DSI_FREQ_MBPS_ALTERNATIVE) {
@@ -637,7 +638,7 @@ static void tk4b_update_ffc(struct gs_panel *ctx, unsigned int hs_clk_mbps)
 	GS_DCS_BUF_ADD_CMD(dev, 0xF0, 0x55, 0xAA, 0x52, 0x08, 0x01);
 	GS_DCS_BUF_ADD_CMD_AND_FLUSH(dev, 0xC3, 0xDD);
 
-	PANEL_ATRACE_END(__func__);
+	DPU_ATRACE_END(__func__);
 }
 
 static int tk4b_set_brightness(struct gs_panel *ctx, u16 br)
