@@ -623,13 +623,14 @@ bool mif_gpio_set_value(struct cpif_gpio *gpio, int value, unsigned int delay_ms
 	/* set gpio even if it is set already */
 	gpio_set_value(gpio->num, value);
 
-	mif_debug("SET GPIO %s = %d (wait %dms, dup %d)\n", gpio->label, value, delay_ms, dup);
+	if (!strcmp(gpio->label, "AP2CP_PM_WRST_N") || !strcmp(gpio->label, "AP2CP_CP_WRST_N"))
+		mif_info("SET GPIO %s = %d (wait %dms, dup %d)\n", gpio->label, value, delay_ms, dup);
 
 	if (delay_ms > 0 && !dup) {
 		if (in_interrupt() || irqs_disabled())
 			mdelay(delay_ms);
 		else if (delay_ms < 20)
-			usleep_range(delay_ms * 1000, (delay_ms * 1000) + 5000);
+			usleep_range(delay_ms * 1000, (delay_ms * 1000) + 100);
 		else
 			msleep(delay_ms);
 	}
