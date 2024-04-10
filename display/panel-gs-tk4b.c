@@ -62,6 +62,15 @@ static const struct gs_dsi_cmd tk4b_lp_off_cmds[] = {
 	GS_DSI_CMD(MIPI_DCS_SET_DISPLAY_BRIGHTNESS, 0x00, 0x00),
 };
 
+static const struct gs_dsi_cmd tk4b_lp_night_cmds[] = {
+	/* 2 nit */
+	GS_DSI_CMD(0x6F, 0x04),
+	GS_DSI_REV_CMD(PANEL_REV_GE(PANEL_REV_EVT1_1),
+				MIPI_DCS_SET_DISPLAY_BRIGHTNESS, 0x00, 0x03),
+	GS_DSI_REV_CMD(PANEL_REV_LT(PANEL_REV_EVT1_1),
+				MIPI_DCS_SET_DISPLAY_BRIGHTNESS, 0x03, 0x33),
+};
+
 static const struct gs_dsi_cmd tk4b_lp_low_cmds[] = {
 	/* 10 nit */
 	GS_DSI_CMD(0x6F, 0x04),
@@ -79,9 +88,11 @@ static const struct gs_dsi_cmd tk4b_lp_high_cmds[] = {
 
 static const struct gs_binned_lp tk4b_binned_lp[] = {
 	BINNED_LP_MODE("off", 0, tk4b_lp_off_cmds),
-	/* rising = 0, falling = 45 */
+	/* night threshold 4 nits */
+	BINNED_LP_MODE_TIMING("night", 104, tk4b_lp_night_cmds, 0, 45),
 	/* low threshold 40 nits */
 	BINNED_LP_MODE_TIMING("low", 932, tk4b_lp_low_cmds, 0, 45),
+	/* rising = 0, falling = 45 */
 	BINNED_LP_MODE_TIMING("high", 3574, tk4b_lp_high_cmds, 0, 45),
 };
 
