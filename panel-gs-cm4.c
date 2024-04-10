@@ -1042,6 +1042,9 @@ static bool cm4_set_self_refresh(struct gs_panel *ctx, bool enable)
 	struct cm4_panel *spanel = to_spanel(ctx);
 	u32 idle_vrefresh;
 
+	if (ctx->thermal && ctx->thermal->pending_temp_update && enable)
+		cm4_update_disp_therm(ctx);
+
 	if (!spanel->is_mrr_v1)
 		return false;
 
@@ -1057,9 +1060,6 @@ static bool cm4_set_self_refresh(struct gs_panel *ctx, bool enable)
 		notify_panel_mode_changed(ctx);
 		return false;
 	}
-
-	if (ctx->thermal && ctx->thermal->pending_temp_update && enable)
-		cm4_update_disp_therm(ctx);
 
 	idle_vrefresh = cm4_get_min_idle_vrefresh(ctx, pmode);
 
@@ -2578,6 +2578,7 @@ static struct gs_panel_desc gs_cm4 = {
 	.gs_panel_func = &cm4_gs_funcs,
 	.default_dsi_hs_clk_mbps = MIPI_DSI_FREQ_MBPS_DEFAULT,
 	.reset_timing_ms = { 1, 1, 5 },
+	.normal_mode_work_delay_ms = 30000,
 };
 
 static int cm4_panel_config(struct gs_panel *ctx)
