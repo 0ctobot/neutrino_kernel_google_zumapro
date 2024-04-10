@@ -9,6 +9,7 @@ panel_deps = [
     "//aosp-staging:all_headers_aarch64",
     "//private/google-modules/display/common:ddk_headers",
     "//private/google-modules/display/common/gs_panel",
+    "//private/google-modules/display/samsung:display.samsung",
 ]
 
 panel_visibility = [
