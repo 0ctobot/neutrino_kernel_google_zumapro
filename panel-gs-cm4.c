@@ -535,10 +535,10 @@ static void cm4_set_panel_feat_te(struct gs_panel *ctx, unsigned long *feat,
 #ifndef PANEL_FACTORY_BUILD
 			/* TE Freq */
 			GS_DCS_BUF_ADD_CMD(dev, 0xB0, 0x00, 0x02, 0xB9);
-			if ((drm_mode_vrefresh(&pmode->mode) == 120) || test_bit(FEAT_OP_NS, feat))
-				GS_DCS_BUF_ADD_CMD(dev, 0xB9, 0x00);
-			else
+			if (!test_bit(FEAT_OP_NS, feat) && drm_mode_vrefresh(&pmode->mode) == 60)
 				GS_DCS_BUF_ADD_CMD(dev, 0xB9, 0x01);
+			else
+				GS_DCS_BUF_ADD_CMD(dev, 0xB9, 0x00);
 #endif
 		}
 		ctx->te_opt = TEX_OPT_FIXED;
