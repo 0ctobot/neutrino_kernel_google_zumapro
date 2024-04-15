@@ -1617,18 +1617,21 @@ static int cm4_enable(struct drm_panel *panel)
 	GS_DCS_BUF_ADD_CMD(dev, 0xF2, is_fhd ? 0x81 : 0x01);
 	GS_DCS_BUF_ADD_CMDLIST_AND_FLUSH(dev, lock_cmd_f0);
 
-#ifndef PANEL_FACTORY_BUILD
-	cm4_update_refresh_ctrl_feat(ctx);
-#endif
-	cm4_update_panel_feat(ctx, true);
-	cm4_write_display_mode(ctx, mode); /* dimming and HBM */
-	cm4_change_frequency(ctx, pmode);
-
 	if (pmode->gs_mode.is_lp_mode) {
 		cm4_set_lp_mode(ctx, pmode);
 		GS_DCS_WRITE_CMD(dev, MIPI_DCS_SET_DISPLAY_ON);
-	} else if (needs_reset || (ctx->panel_state == GPANEL_STATE_BLANK)) {
-		GS_DCS_WRITE_CMD(dev, MIPI_DCS_SET_DISPLAY_ON);
+	} else {
+
+#ifndef PANEL_FACTORY_BUILD
+		cm4_update_refresh_ctrl_feat(ctx);
+#endif
+		cm4_update_panel_feat(ctx, true);
+		cm4_write_display_mode(ctx, mode); /* dimming and HBM */
+		cm4_change_frequency(ctx, pmode);
+
+		if (needs_reset || (ctx->panel_state == GPANEL_STATE_BLANK)) {
+			GS_DCS_WRITE_CMD(dev, MIPI_DCS_SET_DISPLAY_ON);
+		}
 	}
 
 	PANEL_ATRACE_END(__func__);
