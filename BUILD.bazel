@@ -15,6 +15,10 @@ panel_visibility = [
     "//private/devices/google:__subpackages__",
 ]
 
+panel_local_defines = [
+    "DYNAMIC_DEBUG_MODULE",
+]
+
 # Note: please add additional drivers as separate ddk modules
 
 ddk_module(
@@ -24,6 +28,7 @@ ddk_module(
     ],
     out = "panel-gs-km4.ko",
     kernel_build = "//private/google-modules/soc/gs:gs_kernel_build",
+    local_defines = panel_local_defines,
     visibility = panel_visibility,
     deps = panel_deps,
 )
@@ -35,6 +40,7 @@ ddk_module(
     ],
     out = "panel-gs-cm4.ko",
     kernel_build = "//private/google-modules/soc/gs:gs_kernel_build",
+    local_defines = panel_local_defines,
     visibility = panel_visibility,
     deps = panel_deps,
 )
@@ -46,6 +52,7 @@ ddk_module(
     ],
     out = "panel-gs-tk4a.ko",
     kernel_build = "//private/google-modules/soc/gs:gs_kernel_build",
+    local_defines = panel_local_defines,
     visibility = panel_visibility,
     deps = panel_deps,
 )
@@ -57,6 +64,7 @@ ddk_module(
     ],
     out = "panel-gs-tk4b.ko",
     kernel_build = "//private/google-modules/soc/gs:gs_kernel_build",
+    local_defines = panel_local_defines,
     visibility = panel_visibility,
     deps = panel_deps,
 )
@@ -68,6 +76,7 @@ ddk_module(
     ],
     out = "panel-gs-tk4c.ko",
     kernel_build = "//private/google-modules/soc/gs:gs_kernel_build",
+    local_defines = panel_local_defines,
     visibility = panel_visibility,
     deps = panel_deps,
 )
