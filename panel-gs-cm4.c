@@ -544,7 +544,7 @@ static void cm4_set_panel_feat_te(struct gs_panel *ctx, unsigned long *feat,
 				GS_DCS_BUF_ADD_CMD(dev, 0xB9, 0x00);
 #endif
 		}
-		ctx->te_opt = TEX_OPT_FIXED;
+		ctx->hw_status.te.option = TEX_OPT_FIXED;
 	} else {
 		/* Changeable TE */
 		GS_DCS_BUF_ADD_CMD(dev, 0xB9, 0x04);
@@ -554,7 +554,7 @@ static void cm4_set_panel_feat_te(struct gs_panel *ctx, unsigned long *feat,
 			GS_DCS_BUF_ADD_CMD(dev, 0xB9, 0x0B, 0x1E, 0x00, 0x1F);
 		else
 			GS_DCS_BUF_ADD_CMD(dev, 0xB9, 0x0B, 0x0E, 0x00, 0x1F);
-		ctx->te_opt = TEX_OPT_CHANGEABLE;
+		ctx->hw_status.te.option = TEX_OPT_CHANGEABLE;
 	}
 }
 
@@ -840,7 +840,7 @@ static void cm4_set_panel_feat(struct gs_panel *ctx, const struct gs_panel_mode 
 		irc_mode_changed = (sw_status->irc_mode != hw_status->irc_mode);
 		if (bitmap_empty(changed_feat, FEAT_MAX) && vrefresh == hw_status->vrefresh &&
 		    idle_vrefresh == hw_status->idle_vrefresh &&
-		    te_freq == hw_status->te_freq &&
+		    te_freq == hw_status->te.rate_hz &&
 		    !irc_mode_changed) {
 			dev_dbg(dev, "%s: no changes, skip update\n", __func__);
 			return;
@@ -857,8 +857,9 @@ static void cm4_set_panel_feat(struct gs_panel *ctx, const struct gs_panel_mode 
 	GS_DCS_BUF_ADD_CMDLIST(dev, unlock_cmd_f0);
 
 	/* TE setting */
+	sw_status->te.rate_hz = te_freq;
 	if (test_bit(FEAT_EARLY_EXIT, changed_feat) || test_bit(FEAT_OP_NS, changed_feat) ||
-	    hw_status->te_freq != te_freq)
+	    hw_status->te.rate_hz != te_freq)
 		cm4_set_panel_feat_te(ctx, feat, pmode);
 
 	/*
@@ -905,8 +906,7 @@ static void cm4_set_panel_feat(struct gs_panel *ctx, const struct gs_panel_mode 
 
 	hw_status->vrefresh = vrefresh;
 	hw_status->idle_vrefresh = idle_vrefresh;
-	hw_status->te_freq = te_freq;
-	ctx->te_freq = te_freq;
+	hw_status->te.rate_hz = te_freq;
 	bitmap_copy(hw_status->feat, feat, FEAT_MAX);
 }
 
@@ -981,7 +981,7 @@ static void cm4_change_frequency(struct gs_panel *ctx, const struct gs_panel_mod
 	u32 idle_vrefresh = 0;
 
 	if (vrefresh > ctx->op_hz) {
-		/* resolution may has been changed but refresh rate */
+		/* resolution may have been changed without refresh rate change */
 		if (ctx->mode_in_progress == MODE_RES_AND_RR_IN_PROGRESS)
 			notify_panel_mode_changed(ctx);
 		dev_err(ctx->dev, "invalid freq setting: op_hz=%u, vrefresh=%u\n", ctx->op_hz,
@@ -996,6 +996,7 @@ static void cm4_change_frequency(struct gs_panel *ctx, const struct gs_panel_mod
 		idle_vrefresh = ctx->sw_status.idle_vrefresh;
 
 	cm4_update_refresh_mode(ctx, pmode, idle_vrefresh);
+	ctx->sw_status.te.rate_hz = gs_drm_mode_te_freq(&pmode->mode);
 
 	dev_dbg(ctx->dev, "change to %u hz\n", vrefresh);
 }
@@ -1521,9 +1522,9 @@ static void cm4_set_lp_mode(struct gs_panel *ctx, const struct gs_panel_mode *pm
 	gs_panel_set_binned_lp_helper(ctx, brightness);
 
 	ctx->hw_status.vrefresh = 30;
-	ctx->hw_status.te_freq = 30;
-	ctx->te_freq = 30;
-	ctx->te_opt = TEX_OPT_FIXED;
+	ctx->hw_status.te.rate_hz = 30;
+	ctx->sw_status.te.rate_hz = 30;
+	ctx->sw_status.te.option = TEX_OPT_FIXED;
 
 	DPU_ATRACE_END(__func__);
 
@@ -1682,7 +1683,8 @@ static int cm4_disable(struct drm_panel *panel)
 	/* panel register state gets reset after disabling hardware */
 	bitmap_clear(ctx->hw_status.feat, 0, FEAT_MAX);
 	ctx->hw_status.vrefresh = 60;
-	ctx->hw_status.te_freq = 60;
+	ctx->sw_status.te.rate_hz = 60;
+	ctx->hw_status.te.rate_hz = 60;
 	ctx->hw_status.idle_vrefresh = 0;
 	ctx->hw_status.acl_mode = 0;
 	ctx->hw_status.dbv = 0;
@@ -2436,7 +2438,7 @@ static int cm4_panel_probe(struct mipi_dsi_device *dsi)
 
 	ctx->op_hz = 120;
 	ctx->hw_status.vrefresh = 60;
-	ctx->hw_status.te_freq = 60;
+	ctx->hw_status.te.rate_hz = 60;
 	ctx->hw_status.acl_mode = ACL_OFF;
 	ctx->hw_status.dbv = 0;
 	ctx->thermal = &cm4_thermal_data;
