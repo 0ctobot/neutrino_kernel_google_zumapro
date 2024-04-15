@@ -6,6 +6,7 @@ load("//build/kernel/kleaf:kernel.bzl", "ddk_module")
 
 panel_deps = [
     "//aosp:all_headers_aarch64",
+    "//aosp-staging:all_headers_aarch64",
     "//private/google-modules/display/common:ddk_headers",
     "//private/google-modules/display/common/gs_panel",
 ]
