@@ -35,6 +35,8 @@
 struct tk4b_panel {
 	/** @base: base panel struct */
 	struct gs_panel base;
+	/** @is_hbm2_enabled: indicates panel is running in HBM mode 2 */
+	bool is_hbm2_enabled;
 };
 
 #define to_spanel(ctx) container_of(ctx, struct tk4b_panel, base)
@@ -346,29 +348,43 @@ static void tk4b_update_irc(struct gs_panel *ctx,
 				const int vrefresh)
 {
 	struct device *dev = ctx->dev;
+	struct tk4b_panel *spanel = to_spanel(ctx);
 	const u16 level = gs_panel_get_brightness(ctx);
 
-	if (!GS_IS_HBM_ON(hbm_mode)) {
-		dev_info(ctx->dev, "hbm is off, skip update irc\n");
-		return;
-	}
-
 	if (GS_IS_HBM_ON_IRC_OFF(hbm_mode)) {
-		/* sync from bigSurf : to achieve the max brightness with IRC off which need to set dbv to 0xFFF */
-		if (level == ctx->desc->brightness_desc->brt_capability->hbm.level.max)
+		if (level == ctx->desc->brightness_desc->brt_capability->hbm.level.max) {
+			/* set brightness to hbm2 */
 			GS_DCS_BUF_ADD_CMD(dev, MIPI_DCS_SET_DISPLAY_BRIGHTNESS, 0x0F, 0xFF);
+			spanel->is_hbm2_enabled = true;
+			/* set ACD Level 3 */
+			GS_DCS_BUF_ADD_CMD(dev, 0x55, 0x04);
+			GS_DCS_BUF_ADD_CMD(dev, 0xF0, 0x55, 0xAA, 0x52, 0x08, 0x00);
+			GS_DCS_BUF_ADD_CMD(dev, 0x6F, 0x0C);
+			GS_DCS_BUF_ADD_CMD(dev, 0xB0, 0x0E, 0x2C, 0x32);
+		} else {
+			if (spanel->is_hbm2_enabled) {
+				/* set ACD off */
+				GS_DCS_BUF_ADD_CMD(dev, 0x55, 0x00);
+			}
+			spanel->is_hbm2_enabled = false;
+		}
+
+		dev_info(ctx->dev, "%s: is HBM2 enabled : %d\n",
+					__func__, spanel->is_hbm2_enabled);
 
 		/* IRC Off */
 		GS_DCS_BUF_ADD_CMD(dev, 0x5F, 0x01);
 		if (vrefresh == 120) {
 			GS_DCS_BUF_ADD_CMD(dev, 0x2F, 0x00);
 			GS_DCS_BUF_ADD_CMD(dev, MIPI_DCS_SET_GAMMA_CURVE, 0x02);
-			GS_DCS_BUF_ADD_CMD(dev, 0xF0, 0x55, 0xAA, 0x52, 0x08, 0x00);
-			GS_DCS_BUF_ADD_CMD(dev, 0x6F, 0x03);
-			if (ctx->panel_rev < PANEL_REV_EVT1)
-				GS_DCS_BUF_ADD_CMD(dev, 0xC0, 0x32);
-			else
-				GS_DCS_BUF_ADD_CMD(dev, 0xC0, 0x40);
+			if (ctx->panel_rev < PANEL_REV_PVT) {
+				GS_DCS_BUF_ADD_CMD(dev, 0xF0, 0x55, 0xAA, 0x52, 0x08, 0x00);
+				GS_DCS_BUF_ADD_CMD(dev, 0x6F, 0x03);
+				if (ctx->panel_rev < PANEL_REV_EVT1)
+					GS_DCS_BUF_ADD_CMD(dev, 0xC0, 0x32);
+				else
+					GS_DCS_BUF_ADD_CMD(dev, 0xC0, 0x40);
+			}
 		} else {
 			if (ctx->panel_rev < PANEL_REV_EVT1) {
 				GS_DCS_BUF_ADD_CMD(dev, 0x2F, 0x30);
@@ -393,12 +409,14 @@ static void tk4b_update_irc(struct gs_panel *ctx,
 		if (vrefresh == 120) {
 			GS_DCS_BUF_ADD_CMD(dev, 0x2F, 0x00);
 			GS_DCS_BUF_ADD_CMD(dev, MIPI_DCS_SET_GAMMA_CURVE, 0x00);
-			GS_DCS_BUF_ADD_CMD(dev, 0xF0, 0x55, 0xAA, 0x52, 0x08, 0x00);
-			GS_DCS_BUF_ADD_CMD(dev, 0x6F, 0x03);
-			if (ctx->panel_rev < PANEL_REV_EVT1)
-				GS_DCS_BUF_ADD_CMD(dev, 0xC0, 0x30);
-			else
-				GS_DCS_BUF_ADD_CMD(dev, 0xC0, 0x10);
+			if (ctx->panel_rev < PANEL_REV_PVT) {
+				GS_DCS_BUF_ADD_CMD(dev, 0xF0, 0x55, 0xAA, 0x52, 0x08, 0x00);
+				GS_DCS_BUF_ADD_CMD(dev, 0x6F, 0x03);
+				if (ctx->panel_rev < PANEL_REV_EVT1)
+					GS_DCS_BUF_ADD_CMD(dev, 0xC0, 0x30);
+				else
+					GS_DCS_BUF_ADD_CMD(dev, 0xC0, 0x10);
+			}
 		} else {
 			if (ctx->panel_rev < PANEL_REV_EVT1) {
 				GS_DCS_BUF_ADD_CMD(dev, 0x2F, 0x30);
@@ -547,6 +565,21 @@ static int tk4b_enable(struct drm_panel *panel)
 	return 0;
 }
 
+static int tk4b_disable(struct drm_panel *panel)
+{
+	struct gs_panel *ctx = container_of(panel, struct gs_panel, base);
+	struct tk4b_panel *spanel = to_spanel(ctx);
+	int ret;
+
+	spanel->is_hbm2_enabled = false;
+
+	ret = gs_panel_disable(panel);
+	if (ret)
+		return ret;
+
+	return 0;
+}
+
 static int tk4b_atomic_check(struct gs_panel *ctx, struct drm_atomic_state *state)
 {
 	struct drm_connector *conn = &ctx->gs_connector->base;
@@ -662,7 +695,7 @@ static void tk4b_update_ffc(struct gs_panel *ctx, unsigned int hs_clk_mbps)
 static int tk4b_set_brightness(struct gs_panel *ctx, u16 br)
 {
 	struct device *dev = ctx->dev;
-	u16 brightness;
+	struct tk4b_panel *spanel = to_spanel(ctx);
 
 	if (ctx->current_mode->gs_mode.is_lp_mode) {
 		const struct gs_panel_funcs *funcs;
@@ -673,17 +706,6 @@ static int tk4b_set_brightness(struct gs_panel *ctx, u16 br)
 		return 0;
 	}
 
-	if (!br) {
-		// turn off panel and set brightness directly.
-		return gs_dcs_set_brightness(ctx, 0);
-	}
-
-	if (GS_IS_HBM_ON_IRC_OFF(ctx->hbm_mode)
-				 && br == ctx->desc->brightness_desc->brt_capability->hbm.level.max)
-		br = 0xfff;
-
-	brightness = swab16(br);
-
 	if (ctx->timestamps.idle_exit_dimming_delay_ts &&
 		(ktime_sub(ctx->timestamps.idle_exit_dimming_delay_ts, ktime_get()) <= 0)) {
 		GS_DCS_WRITE_CMD(dev, MIPI_DCS_WRITE_CONTROL_DISPLAY,
@@ -691,7 +713,32 @@ static int tk4b_set_brightness(struct gs_panel *ctx, u16 br)
 		ctx->timestamps.idle_exit_dimming_delay_ts = 0;
 	}
 
-	return gs_dcs_set_brightness(ctx, brightness);
+	if (GS_IS_HBM_ON_IRC_OFF(ctx->hbm_mode)
+			&& br == ctx->desc->brightness_desc->brt_capability->hbm.level.max) {
+
+		/* set brightness to hbm2 */
+		GS_DCS_BUF_ADD_CMD(dev, MIPI_DCS_SET_DISPLAY_BRIGHTNESS, 0x0F, 0xFF);
+		spanel->is_hbm2_enabled = true;
+
+		/* set ACD Level 3 */
+		GS_DCS_BUF_ADD_CMD(dev, 0x55, 0x04);
+		GS_DCS_BUF_ADD_CMD(dev, 0xF0, 0x55, 0xAA, 0x52, 0x08, 0x00);
+		GS_DCS_BUF_ADD_CMD(dev, 0x6F, 0x0C);
+		GS_DCS_BUF_ADD_CMD_AND_FLUSH(dev, 0xB0, 0x0E, 0x2C, 0x32);
+		dev_info(ctx->dev, "%s: is HBM2 enabled : %d\n",
+				__func__, spanel->is_hbm2_enabled);
+	} else {
+
+		if (spanel->is_hbm2_enabled) {
+			/* set ACD off */
+			GS_DCS_BUF_ADD_CMD(dev, 0x55, 0x00);
+			dev_info(ctx->dev, "%s: is HBM2 enabled : off\n", __func__);
+		}
+		spanel->is_hbm2_enabled = false;
+		GS_DCS_BUF_ADD_CMD_AND_FLUSH(dev, MIPI_DCS_SET_DISPLAY_BRIGHTNESS,
+						br >> 8, br & 0xff);
+	}
+	return 0;
 }
 
 static void tk4b_set_hbm_mode(struct gs_panel *ctx,
@@ -902,11 +949,12 @@ static int tk4b_panel_probe(struct mipi_dsi_device *dsi)
 	if (!spanel)
 		return -ENOMEM;
 
+	spanel->is_hbm2_enabled = false;
 	return gs_dsi_panel_common_init(dsi, &spanel->base);
 }
 
 static const struct drm_panel_funcs tk4b_drm_funcs = {
-	.disable = gs_panel_disable,
+	.disable = tk4b_disable,
 	.unprepare = gs_panel_unprepare,
 	.prepare = gs_panel_prepare,
 	.enable = tk4b_enable,
