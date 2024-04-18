@@ -484,7 +484,7 @@ static u32 cm4_get_min_idle_vrefresh(struct gs_panel *ctx, const struct gs_panel
 	return min_idle_vrefresh;
 }
 
-static void cm4_set_panel_feat_auto_fi(struct gs_panel *ctx, bool enabled)
+static void cm4_set_panel_feat_manual_mode_fi(struct gs_panel *ctx, bool enabled)
 {
 	struct device *dev = ctx->dev;
 	u8 val;
@@ -849,7 +849,7 @@ static void cm4_set_panel_feat(struct gs_panel *ctx, const struct gs_panel_mode 
 
 	dev_dbg(dev, "hbm=%u irc=%u ns=%u vrr=%u fi=%u@a,%u@m ee=%u rr=%u-%u:%u\n",
 		test_bit(FEAT_HBM, feat), sw_status->irc_mode, test_bit(FEAT_OP_NS, feat),
-		is_vrr, test_bit(FEAT_FRAME_AUTO, feat), test_bit(FEAT_FI_AUTO, feat),
+		is_vrr, test_bit(FEAT_FRAME_AUTO, feat), test_bit(FEAT_FRAME_MANUAL_FI, feat),
 		test_bit(FEAT_EARLY_EXIT, feat), idle_vrefresh ? idle_vrefresh : vrefresh,
 		drm_mode_vrefresh(&pmode->mode), te_freq);
 
@@ -886,10 +886,10 @@ static void cm4_set_panel_feat(struct gs_panel *ctx, const struct gs_panel_mode 
 	cm4_set_panel_feat_early_exit(ctx, feat, vrefresh);
 
 	/*
-	 * Auto FI: enable or disable
+	 * Manual FI: enable or disable manual mode FI
 	 */
-	if (test_bit(FEAT_FI_AUTO, changed_feat))
-		cm4_set_panel_feat_auto_fi(ctx, test_bit(FEAT_FI_AUTO, feat));
+	if (test_bit(FEAT_FRAME_MANUAL_FI, changed_feat))
+		cm4_set_panel_feat_manual_mode_fi(ctx, test_bit(FEAT_FRAME_MANUAL_FI, feat));
 
 	/* TSP Sync setting */
 	if (enforce)
@@ -1110,52 +1110,60 @@ static bool cm4_set_self_refresh(struct gs_panel *ctx, bool enable)
 }
 
 #ifndef PANEL_FACTORY_BUILD
-static void cm4_update_refresh_ctrl_feat(struct gs_panel *ctx)
+static void cm4_update_refresh_ctrl_feat(struct gs_panel *ctx, const struct gs_panel_mode *pmode)
 {
 	const u32 ctrl = ctx->refresh_ctrl;
 	struct cm4_panel *spanel = to_spanel(ctx);
+	unsigned long *feat = ctx->sw_status.feat;
+	u32 min_vrefresh = ctx->sw_status.idle_vrefresh;
 	bool mrr_changed = false;
-	bool feat_changed = false;
+	u32 vrefresh;
+	bool lp_mode;
 
-	if (ctrl & GS_PANEL_REFRESH_CTRL_FI_AUTO) {
-		if (!test_bit(FEAT_FI_AUTO, ctx->sw_status.feat)) {
-			set_bit(FEAT_FI_AUTO, ctx->sw_status.feat);
-			feat_changed = true;
-		}
-	} else {
-		if (test_bit(FEAT_FI_AUTO, ctx->sw_status.feat)) {
-			clear_bit(FEAT_FI_AUTO, ctx->sw_status.feat);
-			feat_changed = true;
-		}
-	}
+	if (!pmode)
+		return;
+
+	vrefresh = drm_mode_vrefresh(&pmode->mode);
+	lp_mode =  pmode->gs_mode.is_lp_mode;
+
+	/* TODO(b/336580972): Support minRR and FI setting during AOD */
 
 	if (ctrl & GS_PANEL_REFRESH_CTRL_MIN_REFRESH_RATE_MASK) {
-		u32 min_vrefresh = (ctrl & GS_PANEL_REFRESH_CTRL_MIN_REFRESH_RATE_MASK) >>
-					GS_PANEL_REFRESH_CTRL_MIN_REFRESH_RATE_OFFSET;
+		min_vrefresh = (ctrl & GS_PANEL_REFRESH_CTRL_MIN_REFRESH_RATE_MASK) >>
+				GS_PANEL_REFRESH_CTRL_MIN_REFRESH_RATE_OFFSET;
+
+		if (min_vrefresh > vrefresh) {
+			dev_warn(ctx->dev, "%s: min RR %uHz requested, but valid range is 1-%uHz\n",
+				 __func__, min_vrefresh, vrefresh);
+			min_vrefresh = vrefresh;
+		}
 		if (ctx->sw_status.idle_vrefresh != min_vrefresh) {
-			ctx->sw_status.idle_vrefresh = min_vrefresh;
-			if (min_vrefresh == drm_mode_vrefresh(&ctx->current_mode->mode)) {
-				clear_bit(FEAT_FRAME_AUTO, ctx->sw_status.feat);
+			if (!lp_mode) {
+				ctx->sw_status.idle_vrefresh = min_vrefresh;
+			} else {
+				dev_warn(ctx->dev, "%s: setting minRR during AOD not supported\n",
+				 __func__);
 			}
-			feat_changed = true;
 		}
 	}
 
-	if (ctrl & GS_PANEL_REFRESH_CTRL_IDLE_ENABLED) {
-		if (!test_bit(FEAT_FRAME_AUTO, ctx->sw_status.feat) &&
-		    ctx->sw_status.idle_vrefresh < drm_mode_vrefresh(&ctx->current_mode->mode)) {
-				set_bit(FEAT_FRAME_AUTO, ctx->sw_status.feat);
-				feat_changed = true;
+	if (ctrl & GS_PANEL_REFRESH_CTRL_FI_AUTO) {
+		if (min_vrefresh == vrefresh) {
+			clear_bit(FEAT_FRAME_AUTO, feat);
+			clear_bit(FEAT_FRAME_MANUAL_FI, feat);
+		} else if (min_vrefresh > 1) {
+			set_bit(FEAT_FRAME_AUTO, feat);
+			clear_bit(FEAT_FRAME_MANUAL_FI, feat);
+		} else {
+			set_bit(FEAT_FRAME_MANUAL_FI, feat);
+			clear_bit(FEAT_FRAME_AUTO, feat);
 		}
 	} else {
-		if (test_bit(FEAT_FRAME_AUTO, ctx->sw_status.feat)) {
-			clear_bit(FEAT_FRAME_AUTO, ctx->sw_status.feat);
-			feat_changed = true;
-		}
+		clear_bit(FEAT_FRAME_AUTO, feat);
+		clear_bit(FEAT_FRAME_MANUAL_FI, feat);
 	}
 
-	if ((ctrl & GS_PANEL_REFRESH_CTRL_IDLE_ENABLED) &&
-	    (ctrl & GS_PANEL_REFRESH_CTRL_TE_TYPE_CHANGEABLE)) {
+	if (ctrl & GS_PANEL_REFRESH_CTRL_MRR_V1_OVER_V2) {
 		if (gs_is_vrr_mode(ctx->current_mode)) {
 			dev_err(ctx->dev, "%s: using vrr display mode for mrr\n", __func__);
 		} else if (!spanel->is_mrr_v1) {
@@ -1169,10 +1177,16 @@ static void cm4_update_refresh_ctrl_feat(struct gs_panel *ctx)
 		ctx->gs_connector->ignore_op_rate = false;
 	}
 
+	if (lp_mode) {
+		dev_warn(ctx->dev, "%s: new refresh_ctrl settings will apply during AOD exit\n",
+			 __func__);
+		return;
+	}
+
 	if (mrr_changed)
-		cm4_change_frequency(ctx, ctx->current_mode);
-	else if (feat_changed)
-		cm4_update_panel_feat(ctx, false);
+		cm4_change_frequency(ctx, pmode);
+	else
+		cm4_set_panel_feat(ctx, pmode, false);
 }
 
 static void cm4_refresh_ctrl(struct gs_panel *ctx)
@@ -1180,9 +1194,9 @@ static void cm4_refresh_ctrl(struct gs_panel *ctx)
 	struct device *dev = ctx->dev;
 	const u32 ctrl = ctx->refresh_ctrl;
 
-	DPU_ATRACE_BEGIN(__func__);
+	PANEL_ATRACE_BEGIN(__func__);
 
-	cm4_update_refresh_ctrl_feat(ctx);
+	cm4_update_refresh_ctrl_feat(ctx, ctx->current_mode);
 
 	if (ctrl & GS_PANEL_REFRESH_CTRL_FI_FRAME_COUNT_MASK){
 		/* TODO(b/323251635): parse frame count for inserting multiple frames */
@@ -1479,6 +1493,8 @@ static void cm4_set_lp_mode(struct gs_panel *ctx, const struct gs_panel_mode *pm
 	/* enforce manual and peak to have a smooth transition */
 	cm4_enforce_manual_and_peak(ctx);
 
+	/* TODO(b/336580972): Support minRR and FI setting during AOD */
+
 	cm4_wait_for_vsync_done(ctx, pmode);
 	GS_DCS_BUF_ADD_CMDLIST(dev, unlock_cmd_f0);
 	GS_DCS_BUF_ADD_CMDLIST(dev, aod_on);
@@ -1532,6 +1548,7 @@ static void cm4_set_nolp_mode(struct gs_panel *ctx, const struct gs_panel_mode *
 	GS_DCS_BUF_ADD_CMDLIST_AND_FLUSH(dev, lock_cmd_f0);
 
 	cm4_wait_for_vsync_done(ctx, pmode);
+	cm4_update_refresh_ctrl_feat(ctx, pmode);
 	cm4_set_panel_feat(ctx, pmode, true);
 	/* backlight control and dimming */
 	cm4_write_display_mode(ctx, &pmode->mode);
@@ -1626,7 +1643,7 @@ static int cm4_enable(struct drm_panel *panel)
 	} else {
 
 #ifndef PANEL_FACTORY_BUILD
-		cm4_update_refresh_ctrl_feat(ctx);
+		cm4_update_refresh_ctrl_feat(ctx, pmode);
 #endif
 		cm4_update_panel_feat(ctx, true);
 		cm4_write_display_mode(ctx, mode); /* dimming and HBM */
@@ -2374,10 +2391,10 @@ static void cm4_panel_init(struct gs_panel *ctx)
 #ifdef PANEL_FACTORY_BUILD
 	spanel->is_mrr_v1 = true;
 	ctx->idle_data.panel_idle_enabled = false;
-	set_bit(FEAT_FI_AUTO, ctx->sw_status.feat);
+	set_bit(FEAT_FRAME_MANUAL_FI, ctx->sw_status.feat);
 #else
 	spanel->is_mrr_v1 = false;
-	cm4_update_refresh_ctrl_feat(ctx);
+	cm4_update_refresh_ctrl_feat(ctx, pmode);
 #endif
 	ctx->hw_status.irc_mode = IRC_FLAT_DEFAULT;
 	/* default fixed TE2 120Hz */
