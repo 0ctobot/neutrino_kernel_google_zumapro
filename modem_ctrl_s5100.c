@@ -342,10 +342,8 @@ static irqreturn_t ap_wakeup_handler(int irq, void *data)
 	if (mc->mdm_data->mif_off_during_volte) {
 		int wrst_gpio_val = mif_gpio_get_value(&mc->cp_gpio[CP_GPIO_CP2AP_CP_WRST_N], true);
 		/* To avoid holding on to the wakesource in case of a race condition */
-		if (wrst_gpio_val) {
-			logbuffer_log(mc->log, "release wrst lock in ap_wakeup\n");
+		if (wrst_gpio_val || !mc->pcie_voice_call_on)
 			cpif_wake_unlock(mc->ws_wrst);
-		}
 	}
 
 	if (mc->device_reboot) {
