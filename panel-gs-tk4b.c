@@ -180,6 +180,12 @@ static const struct gs_dsi_cmd tk4b_init_cmds[] = {
 	GS_DSI_CMD(0x6F, 0x05),
 	GS_DSI_CMD(0xC5, 0x15, 0x15, 0x15, 0xDD),
 
+	/* CMD2, Page3 */
+	GS_DSI_CMD(0xF0, 0x55, 0xAA, 0x52, 0x08, 0x03),
+	/* Extend AOD TE width from 1.1ms to 1.9ms */
+	GS_DSI_CMD(0x6F, 0x22),
+	GS_DSI_CMD(0xB3, 0x70, 0x7F),
+
 	/* FFC Off */
 	GS_DSI_CMD(0xC3, 0x00),
 	/* FFC setting (MIPI: 756Mbps) */
