@@ -346,7 +346,7 @@ static void cm4_te2_setting(struct gs_panel *ctx)
 	GS_DCS_BUF_ADD_CMD(dev, 0xB9, 0x00, 0x21, 0x00, 0x35, 0x05, 0x7B);
 	GS_DCS_BUF_ADD_CMDLIST_AND_FLUSH(dev, lock_cmd_f0);
 
-	notify_panel_te2_rate_changed(ctx);
+	notify_panel_te2_rate_changed(ctx, 0);
 	notify_panel_te2_option_changed(ctx);
 	dev_dbg(dev, "TE2 setting: option %s, rising=0x%X falling=0x%X\n",
 		(option == TEX_OPT_CHANGEABLE) ? "changeable" :
@@ -2622,6 +2622,15 @@ static struct gs_panel_desc gs_cm4 = {
 	.default_dsi_hs_clk_mbps = MIPI_DSI_FREQ_MBPS_DEFAULT,
 	.reset_timing_ms = { 1, 1, 5 },
 	.normal_mode_work_delay_ms = 30000,
+	/* TODO(b/335574896): delay time in NS mode */
+	/**
+	 * While the proximity is active, we will set the min vrefresh to 30Hz with auto
+	 * frame insertion. Thus when the display is idle, we will have the refresh rate
+	 * change from 120Hz to 30Hz. According to the measurement, the pattern is: 3x120Hz
+	 * frame > 1x60Hz frame > 30Hz. With additional tolerance due to scheduler in the
+	 * kernel, the delay of notification is estimated to be ~50ms.
+	 */
+	.notify_te2_rate_changed_work_delay_ms = 50,
 };
 
 static int cm4_panel_config(struct gs_panel *ctx)
