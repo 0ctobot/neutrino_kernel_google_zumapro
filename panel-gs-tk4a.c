@@ -15,6 +15,7 @@
 #include <linux/delay.h>
 #include <video/mipi_display.h>
 
+#include "trace/dpu_trace.h"
 #include "trace/panel_trace.h"
 
 #include "gs_panel/drm_panel_funcs_defaults.h"
@@ -433,13 +434,13 @@ static void tk4a_set_nolp_mode(struct gs_panel *ctx, const struct gs_panel_mode 
 	tk4a_update_wrctrld(ctx);
 	tk4a_change_frequency(ctx, pmode);
 
-	PANEL_ATRACE_BEGIN("tk4a_wait_one_vblank");
+	DPU_ATRACE_BEGIN("tk4a_wait_one_vblank");
 	gs_panel_wait_for_vsync_done(ctx, te_usec,
 			GS_VREFRESH_TO_PERIOD_USEC(vrefresh));
 
 	/* Additional sleep time to account for TE variability */
 	usleep_range(1000, 1010);
-	PANEL_ATRACE_END("tk4a_wait_one_vblank");
+	DPU_ATRACE_END("tk4a_wait_one_vblank");
 
 	GS_DCS_BUF_ADD_CMD_AND_FLUSH(dev, MIPI_DCS_SET_DISPLAY_ON);
 
