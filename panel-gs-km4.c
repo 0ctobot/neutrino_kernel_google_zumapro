@@ -353,14 +353,23 @@ static bool km4_set_te2_rate(struct gs_panel *ctx, u32 rate_hz)
 		return false;
 
 	if (ctx->te2.option == TEX_OPT_FIXED) {
-		if (rate_hz != 120 && rate_hz != 240) {
-			dev_warn(dev, "unsupported fixed TE2 rate (%u)\n", rate_hz);
+		bool lp_mode = ctx->current_mode->gs_mode.is_lp_mode;
+
+		if ((!lp_mode && rate_hz != 120 && rate_hz != 240) ||
+		    (lp_mode && rate_hz != 30)) {
+			dev_warn(dev, "unsupported fixed TE2 rate (%u) in %s mode\n",
+				 rate_hz, lp_mode ? "lp" : "normal");
 			return false;
 		}
 
 		ctx->te2.rate_hz = rate_hz;
-		km4_update_te2_option(ctx, (rate_hz == 240) ? KM4_TE2_FIXED_240HZ :
-							      KM4_TE2_FIXED_120HZ);
+		/**
+		 * Fixed TE2 rate will be limited at 30Hz automatically in AOD mode,
+		 * so we don't need to send any commands.
+		 */
+		if (!lp_mode)
+			km4_update_te2_option(ctx, (rate_hz == 240) ? KM4_TE2_FIXED_240HZ :
+								      KM4_TE2_FIXED_120HZ);
 	} else if (ctx->te2.option == TEX_OPT_CHANGEABLE) {
 		dev_dbg(dev, "set changeable TE2 rate %uhz\n", rate_hz);
 		ctx->te2.rate_hz = rate_hz;
@@ -374,12 +383,7 @@ static bool km4_set_te2_rate(struct gs_panel *ctx, u32 rate_hz)
 
 static u32 km4_get_te2_rate(struct gs_panel *ctx)
 {
-	/**
-	 * After entering AOD mode, it should use the previous TE2 setting. But TE2 setting
-	 * in AOD mode doesn't affect ALSP, so we just return 30Hz for AOD no matter the
-	 * display state is active or idle.
-	 */
-	return (ctx->current_mode->gs_mode.is_lp_mode ? 30 : ctx->te2.rate_hz);
+	return ctx->te2.rate_hz;
 }
 
 static bool km4_set_te2_option(struct gs_panel *ctx, u32 option)
