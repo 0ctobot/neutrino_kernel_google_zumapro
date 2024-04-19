@@ -18,7 +18,6 @@
 #include <linux/thermal.h>
 #include <video/mipi_display.h>
 
-#include "trace/dpu_trace.h"
 #include "trace/panel_trace.h"
 
 #include "gs_panel/drm_panel_funcs_defaults.h"
@@ -275,12 +274,12 @@ static void cm4_update_disp_therm(struct gs_panel *ctx)
 
 	dev_dbg(dev, "%s: apply gain into ddic at %ddeg c\n", __func__, temp);
 
-	DPU_ATRACE_BEGIN(__func__);
+	PANEL_ATRACE_BEGIN(__func__);
 	GS_DCS_BUF_ADD_CMDLIST(dev, unlock_cmd_f0);
 	GS_DCS_BUF_ADD_CMD(dev, 0xB0, 0x00, 0x03, 0x67);
 	GS_DCS_BUF_ADD_CMD(dev, 0x67, temp);
 	GS_DCS_BUF_ADD_CMDLIST_AND_FLUSH(dev, lock_cmd_f0);
-	DPU_ATRACE_END(__func__);
+	PANEL_ATRACE_END(__func__);
 
 	ctx->thermal->hw_temp = temp;
 }
@@ -1023,7 +1022,7 @@ static void cm4_wait_one_vblank(struct gs_panel *ctx)
 	if (ctx->gs_connector->base.state)
 		crtc = ctx->gs_connector->base.state->crtc;
 
-	DPU_ATRACE_BEGIN(__func__);
+	PANEL_ATRACE_BEGIN(__func__);
 	if (crtc) {
 		int ret = drm_crtc_vblank_get(crtc);
 
@@ -1036,7 +1035,7 @@ static void cm4_wait_one_vblank(struct gs_panel *ctx)
 	} else {
 		usleep_range(8350, 8500);
 	}
-	DPU_ATRACE_END(__func__);
+	PANEL_ATRACE_END(__func__);
 }
 
 static bool cm4_set_self_refresh(struct gs_panel *ctx, bool enable)
@@ -1086,7 +1085,7 @@ static bool cm4_set_self_refresh(struct gs_panel *ctx, bool enable)
 	if (ctx->idle_data.panel_idle_vrefresh == idle_vrefresh)
 		return false;
 
-	DPU_ATRACE_BEGIN(__func__);
+	PANEL_ATRACE_BEGIN(__func__);
 	cm4_update_refresh_mode(ctx, pmode, idle_vrefresh);
 
 	if (idle_vrefresh) {
@@ -1104,7 +1103,7 @@ static bool cm4_set_self_refresh(struct gs_panel *ctx, bool enable)
 		cm4_wait_one_vblank(ctx);
 	}
 
-	DPU_ATRACE_END(__func__);
+	PANEL_ATRACE_END(__func__);
 
 	return true;
 }
@@ -1180,7 +1179,7 @@ static void cm4_refresh_ctrl(struct gs_panel *ctx)
 	struct device *dev = ctx->dev;
 	const u32 ctrl = ctx->refresh_ctrl;
 
-	DPU_ATRACE_BEGIN(__func__);
+	PANEL_ATRACE_BEGIN(__func__);
 
 	cm4_update_refresh_ctrl_feat(ctx);
 
@@ -1193,7 +1192,7 @@ static void cm4_refresh_ctrl(struct gs_panel *ctx)
 		GS_DCS_BUF_ADD_CMDLIST_AND_FLUSH(dev, lock_cmd_f0);
 	}
 
-	DPU_ATRACE_END(__func__);
+	PANEL_ATRACE_END(__func__);
 }
 #endif
 
@@ -1437,10 +1436,10 @@ static unsigned int cm4_get_te_usec(struct gs_panel *ctx, const struct gs_panel_
 
 static void cm4_wait_for_vsync_done(struct gs_panel *ctx, const struct gs_panel_mode *pmode)
 {
-	DPU_ATRACE_BEGIN(__func__);
+	PANEL_ATRACE_BEGIN(__func__);
 	gs_panel_wait_for_vsync_done(ctx, cm4_get_te_usec(ctx, pmode),
 				     GS_VREFRESH_TO_PERIOD_USEC(ctx->hw_status.vrefresh));
-	DPU_ATRACE_END(__func__);
+	PANEL_ATRACE_END(__func__);
 }
 
 static void cm4_enforce_manual_and_peak(struct gs_panel *ctx)
@@ -1474,7 +1473,7 @@ static void cm4_set_lp_mode(struct gs_panel *ctx, const struct gs_panel_mode *pm
 
 	dev_dbg(dev, "%s\n", __func__);
 
-	DPU_ATRACE_BEGIN(__func__);
+	PANEL_ATRACE_BEGIN(__func__);
 
 	/* enforce manual and peak to have a smooth transition */
 	cm4_enforce_manual_and_peak(ctx);
@@ -1509,7 +1508,7 @@ static void cm4_set_lp_mode(struct gs_panel *ctx, const struct gs_panel_mode *pm
 	ctx->te_freq = 30;
 	ctx->te_opt = TEX_OPT_FIXED;
 
-	DPU_ATRACE_END(__func__);
+	PANEL_ATRACE_END(__func__);
 
 	dev_info(dev, "enter %dhz LP mode\n", drm_mode_vrefresh(&pmode->mode));
 }
@@ -1520,7 +1519,7 @@ static void cm4_set_nolp_mode(struct gs_panel *ctx, const struct gs_panel_mode *
 
 	dev_dbg(dev, "%s\n", __func__);
 
-	DPU_ATRACE_BEGIN(__func__);
+	PANEL_ATRACE_BEGIN(__func__);
 
 	cm4_wait_for_vsync_done(ctx, pmode);
 	/* manual mode 30Hz */
@@ -1537,7 +1536,7 @@ static void cm4_set_nolp_mode(struct gs_panel *ctx, const struct gs_panel_mode *
 	cm4_write_display_mode(ctx, &pmode->mode);
 	cm4_change_frequency(ctx, pmode);
 
-	DPU_ATRACE_END(__func__);
+	PANEL_ATRACE_END(__func__);
 
 	dev_info(dev, "exit LP mode\n");
 }
@@ -1589,7 +1588,7 @@ static int cm4_enable(struct drm_panel *panel)
 
 	dev_info(dev, "%s (%s)\n", __func__, is_fhd ? "fhd" : "wqhd");
 
-	DPU_ATRACE_BEGIN(__func__);
+	PANEL_ATRACE_BEGIN(__func__);
 
 	if (needs_reset)
 		gs_panel_reset_helper(ctx);
@@ -1637,7 +1636,7 @@ static int cm4_enable(struct drm_panel *panel)
 		}
 	}
 
-	DPU_ATRACE_END(__func__);
+	PANEL_ATRACE_END(__func__);
 
 	return 0;
 }
@@ -1720,7 +1719,7 @@ static void cm4_update_idle_state(struct gs_panel *ctx)
 	/* triggering early exit causes a switch to 120hz */
 	ctx->timestamps.last_mode_set_ts = ktime_get();
 
-	DPU_ATRACE_BEGIN(__func__);
+	PANEL_ATRACE_BEGIN(__func__);
 
 	if (!ctx->idle_data.idle_delay_ms && spanel->force_changeable_te) {
 		dev_dbg(dev, "sending early exit out cmd\n");
@@ -1732,7 +1731,7 @@ static void cm4_update_idle_state(struct gs_panel *ctx)
 		cm4_update_refresh_mode(ctx, ctx->current_mode, 0);
 	}
 
-	DPU_ATRACE_END(__func__);
+	PANEL_ATRACE_END(__func__);
 }
 
 static void cm4_commit_done(struct gs_panel *ctx)
@@ -1827,7 +1826,7 @@ static int cm4_set_op_hz(struct gs_panel *ctx, unsigned int hz)
 		return -EINVAL;
 	}
 
-	DPU_ATRACE_BEGIN(__func__);
+	PANEL_ATRACE_BEGIN(__func__);
 
 	ctx->op_hz = hz;
 	if (hz == 60)
@@ -1839,7 +1838,7 @@ static int cm4_set_op_hz(struct gs_panel *ctx, unsigned int hz)
 		cm4_update_panel_feat(ctx, false);
 	dev_info(ctx->dev, "%s op_hz at %d\n", gs_is_panel_active(ctx) ? "set" : "cache", hz);
 
-	DPU_ATRACE_END(__func__);
+	PANEL_ATRACE_END(__func__);
 
 	return 0;
 }
@@ -1878,7 +1877,7 @@ static void cm4_pre_update_ffc(struct gs_panel *ctx)
 
 	dev_dbg(dev, "%s\n", __func__);
 
-	DPU_ATRACE_BEGIN(__func__);
+	PANEL_ATRACE_BEGIN(__func__);
 
 	GS_DCS_BUF_ADD_CMDLIST(dev, unlock_cmd_f0);
 	/* FFC off */
@@ -1886,7 +1885,7 @@ static void cm4_pre_update_ffc(struct gs_panel *ctx)
 	GS_DCS_BUF_ADD_CMD(dev, 0xC5, 0x10);
 	GS_DCS_BUF_ADD_CMDLIST_AND_FLUSH(dev, lock_cmd_f0);
 
-	DPU_ATRACE_END(__func__);
+	PANEL_ATRACE_END(__func__);
 }
 
 static void cm4_update_ffc(struct gs_panel *ctx, unsigned int hs_clk_mbps)
@@ -1896,7 +1895,7 @@ static void cm4_update_ffc(struct gs_panel *ctx, unsigned int hs_clk_mbps)
 	dev_dbg(dev, "%s: hs_clk_mbps: current=%d, target=%d\n", __func__,
 		ctx->dsi_hs_clk_mbps, hs_clk_mbps);
 
-	DPU_ATRACE_BEGIN(__func__);
+	PANEL_ATRACE_BEGIN(__func__);
 
 	GS_DCS_BUF_ADD_CMDLIST(dev, unlock_cmd_f0);
 
@@ -1928,7 +1927,7 @@ static void cm4_update_ffc(struct gs_panel *ctx, unsigned int hs_clk_mbps)
 	GS_DCS_BUF_ADD_CMD(dev, 0xC5, 0x11);
 	GS_DCS_BUF_ADD_CMDLIST_AND_FLUSH(dev, lock_cmd_f0);
 
-	DPU_ATRACE_END(__func__);
+	PANEL_ATRACE_END(__func__);
 }
 
 static const struct gs_display_underrun_param underrun_param = {
