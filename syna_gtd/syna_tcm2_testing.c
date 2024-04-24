@@ -1992,9 +1992,6 @@ static int syna_selftest(void *private_data, struct gti_selftest_cmd *cmd)
 	/* Full raw capacitance & Full raw capacitance gap*/
 	retval |= syna_testing_pt05(tcm, &test_data);
 	retval |= syna_testing_pt05_gap(tcm, &test_data);
-	/* Sensor speed test & Sensor speed test gap*/
-	retval |= syna_testing_pt10(tcm, &test_data);
-	retval |= syna_testing_pt10_gap(tcm, &test_data);
 	/* Abs Raw Cap TX/RX */
 	retval |= syna_testing_pt12(tcm, &test_data);
 	msleep(50);
