@@ -3495,8 +3495,6 @@ static int syna_dev_remove(struct platform_device *pdev)
 
 #if IS_ENABLED(CONFIG_GOOG_TOUCH_INTERFACE)
 	goog_pm_unregister_notification(tcm->gti);
-	goog_touch_interface_remove(tcm->gti);
-	tcm->gti = NULL;
 
 	cancel_work_sync(&tcm->set_grip_mode_work);
 	cancel_work_sync(&tcm->set_palm_mode_work);
@@ -3523,6 +3521,11 @@ static int syna_dev_remove(struct platform_device *pdev)
 	/* check the connection status, and do disconnection */
 	if (tcm->dev_disconnect(tcm) < 0)
 		LOGE("Fail to do device disconnection\n");
+
+#if IS_ENABLED(CONFIG_GOOG_TOUCH_INTERFACE)
+	goog_touch_interface_remove(tcm->gti);
+	tcm->gti = NULL;
+#endif
 
 	if (tcm->userspace_app_info != NULL)
 		syna_pal_mem_free(tcm->userspace_app_info);
