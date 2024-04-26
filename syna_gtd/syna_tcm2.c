@@ -1308,6 +1308,35 @@ static void syna_dev_restore_feature_setting(struct syna_tcm *tcm, unsigned int 
 }
 
 #if defined(ENABLE_HELPER)
+static void syna_dev_get_reset_reason(struct syna_tcm *tcm)
+{
+	int retval;
+	struct tcm_boot_info boot_info;
+
+	retval = syna_tcm_switch_fw_mode(tcm->tcm_dev,
+			MODE_BOOTLOADER,
+			FW_MODE_SWITCH_DELAY_MS);
+	if (retval < 0) {
+		LOGE("Fail to enter bootloader mode\n");
+		goto exit;
+	}
+
+	syna_tcm_get_boot_info(tcm->tcm_dev, &boot_info);
+	if (retval < 0) {
+		LOGE("Fail to get boot info");
+		goto exit;
+	}
+
+	LOGI("Boot info: %*ph", (int) sizeof(struct tcm_boot_info), (unsigned char*) &boot_info);
+
+exit:
+	retval = syna_tcm_switch_fw_mode(tcm->tcm_dev,
+			MODE_APPLICATION_FIRMWARE,
+			FW_MODE_SWITCH_DELAY_MS);
+	if (retval < 0)
+		LOGE("Fail to go back to application firmware\n");
+}
+
 /*
  * syna_dev_reset_detected_cb()
  *
@@ -1357,6 +1386,9 @@ static void syna_dev_helper_work(struct work_struct *work)
 			container_of(helper, struct syna_tcm, helper);
 
 #if IS_ENABLED(CONFIG_GOOG_TOUCH_INTERFACE)
+	if (goog_pm_wake_get_locks(tcm->gti) != 0)
+		syna_dev_get_reset_reason(tcm);
+
 	if (goog_pm_wake_get_locks(tcm->gti) == 0 || tcm->pwr_state != PWR_ON) {
 #else
 	if (tcm->pwr_state != PWR_ON) {
@@ -2717,7 +2749,7 @@ static int syna_dev_resume(struct device *dev)
 	struct syna_tcm *tcm = dev_get_drvdata(dev);
 	struct syna_hw_interface *hw_if = tcm->hw_if;
 	bool irq_enabled = true;
-#ifdef RESET_ON_RESUME
+#if defined(RESET_ON_RESUME) || defined(POWER_ALIVE_AT_SUSPEND)
 	unsigned char status;
 #endif
 
@@ -2765,7 +2797,21 @@ static int syna_dev_resume(struct device *dev)
 	/* enter normal power mode */
 	retval = syna_dev_enter_normal_sensing(tcm);
 	if (retval < 0) {
-		LOGE("Fail to enter normal power mode\n");
+		LOGE("Fail to enter normal power mode, trigger reset to recover\n");
+		tcm->pwr_state = PWR_ON;
+		if (hw_if->ops_hw_reset) {
+			hw_if->ops_hw_reset(hw_if);
+			retval = syna_tcm_get_event_data(tcm->tcm_dev, &status, NULL);
+			if ((retval < 0) || (status != REPORT_IDENTIFY)) {
+				LOGE("Fail to complete hw reset, ret = %d, status = %d\n",
+						retval, status);
+			}
+		} else {
+			retval = syna_tcm_reset(tcm->tcm_dev);
+			if (retval < 0)
+				LOGE("Fail to do sw reset, ret = %d\n", retval);
+		}
+		/* The settings will be done by syna_dev_helper_work if reset is triggered. */
 		goto exit;
 	}
 #endif
