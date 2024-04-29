@@ -1092,6 +1092,51 @@ static bool km4_set_self_refresh(struct gs_panel *ctx, bool enable)
 	return true;
 }
 
+static void km4_set_panel_lp_feat(struct gs_panel *ctx, const struct gs_panel_mode *pmode)
+{
+	struct device *dev = ctx->dev;
+	struct km4_panel *spanel = to_spanel(ctx);
+	unsigned long *feat = ctx->sw_status.feat;
+	struct gs_panel_status *sw_status = &ctx->sw_status;
+	u32 idle_vrefresh = sw_status->idle_vrefresh;
+	bool is_auto = (test_bit(FEAT_FRAME_AUTO, feat) || spanel->is_mrr_v1) ? true : false;
+
+	if (!pmode->gs_mode.is_lp_mode)
+		return;
+
+	dev_dbg(dev, "%s: auto=%u rr=%u-%u\n",
+		__func__, is_auto, idle_vrefresh, drm_mode_vrefresh(&pmode->mode));
+
+	GS_DCS_BUF_ADD_CMDLIST(dev, unlock_cmd_f0);
+	if (is_auto) {
+		/* Default is 1 Hz */
+		u8 val = 0x74;
+
+		GS_DCS_BUF_ADD_CMD(dev, 0xB0, 0x00, 0x18, 0xBD);
+		if (idle_vrefresh == 10)
+			val = 0x08;
+		else if (idle_vrefresh != 1)
+			dev_warn(dev, "%s: unsupported idle vrefresh %u\n",
+				__func__, idle_vrefresh);
+		GS_DCS_BUF_ADD_CMD(dev, 0xBD, 0x04, 0x00, val);
+		/* Step settings */
+		GS_DCS_BUF_ADD_CMD(dev, 0xB0, 0x00, 0xB8, 0xBD);
+		GS_DCS_BUF_ADD_CMD(dev, 0xBD, 0x00, 0x08);
+		GS_DCS_BUF_ADD_CMD(dev, 0xB0, 0x00, 0xC8, 0xBD);
+		GS_DCS_BUF_ADD_CMD(dev, 0xBD, 0x03);
+		/* Auto mode */
+		GS_DCS_BUF_ADD_CMD(dev, 0xBD, 0xA7);
+	} else {
+		/* Manual mode */
+		GS_DCS_BUF_ADD_CMD(dev, 0xBD, 0x21);
+		/* 30 Hz */
+		GS_DCS_BUF_ADD_CMD(dev, 0xB0, 0x00, 0x01, 0x60);
+		GS_DCS_BUF_ADD_CMD(dev, 0x60, 0x00);
+	}
+	GS_DCS_BUF_ADD_CMDLIST(dev, freq_update);
+	GS_DCS_BUF_ADD_CMDLIST_AND_FLUSH(dev, lock_cmd_f0);
+}
+
 #ifndef PANEL_FACTORY_BUILD
 static void km4_update_refresh_ctrl_feat(struct gs_panel *ctx, const struct gs_panel_mode *pmode)
 {
@@ -1106,10 +1151,10 @@ static void km4_update_refresh_ctrl_feat(struct gs_panel *ctx, const struct gs_p
 	if (!pmode)
 		return;
 
+	dev_dbg(ctx->dev, "%s: ctrl=0x%X\n", __func__, ctrl);
+
 	vrefresh = drm_mode_vrefresh(&pmode->mode);
 	lp_mode =  pmode->gs_mode.is_lp_mode;
-
-	/* TODO(b/336580972): Support minRR and FI setting during AOD */
 
 	if (ctrl & GS_PANEL_REFRESH_CTRL_MIN_REFRESH_RATE_MASK) {
 		min_vrefresh = (ctrl & GS_PANEL_REFRESH_CTRL_MIN_REFRESH_RATE_MASK) >>
@@ -1120,21 +1165,14 @@ static void km4_update_refresh_ctrl_feat(struct gs_panel *ctx, const struct gs_p
 				 __func__, min_vrefresh, vrefresh);
 			min_vrefresh = vrefresh;
 		}
-		if (ctx->sw_status.idle_vrefresh != min_vrefresh) {
-			if (!lp_mode) {
-				ctx->sw_status.idle_vrefresh = min_vrefresh;
-			} else {
-				dev_warn(ctx->dev, "%s: setting minRR during AOD not supported\n",
-				 __func__);
-			}
-		}
+		ctx->sw_status.idle_vrefresh = min_vrefresh;
 	}
 
 	if (ctrl & GS_PANEL_REFRESH_CTRL_FI_AUTO) {
 		if (min_vrefresh == vrefresh) {
 			clear_bit(FEAT_FRAME_AUTO, feat);
 			clear_bit(FEAT_FRAME_MANUAL_FI, feat);
-		} else if (min_vrefresh > 1) {
+		} else if ((min_vrefresh > 1) || lp_mode) {
 			set_bit(FEAT_FRAME_AUTO, feat);
 			clear_bit(FEAT_FRAME_MANUAL_FI, feat);
 		} else {
@@ -1144,6 +1182,11 @@ static void km4_update_refresh_ctrl_feat(struct gs_panel *ctx, const struct gs_p
 	} else {
 		clear_bit(FEAT_FRAME_AUTO, feat);
 		clear_bit(FEAT_FRAME_MANUAL_FI, feat);
+	}
+
+	if (lp_mode) {
+		km4_set_panel_lp_feat(ctx, pmode);
+		return;
 	}
 
 	if (ctrl & GS_PANEL_REFRESH_CTRL_MRR_V1_OVER_V2) {
@@ -1158,12 +1201,6 @@ static void km4_update_refresh_ctrl_feat(struct gs_panel *ctx, const struct gs_p
 		mrr_changed = true;
 		spanel->is_mrr_v1 = false;
 		ctx->gs_connector->ignore_op_rate = false;
-	}
-
-	if (lp_mode) {
-		dev_warn(ctx->dev, "%s: new refresh_ctrl settings will apply during AOD exit\n",
-			 __func__);
-		return;
 	}
 
 	if (mrr_changed)
@@ -1476,20 +1513,11 @@ static void km4_set_lp_mode(struct gs_panel *ctx, const struct gs_panel_mode *pm
 	/* enforce manual and peak to have a smooth transition */
 	km4_enforce_manual_and_peak(ctx);
 
-	/* TODO(b/336580972): Support minRR and FI setting during AOD */
 	km4_wait_for_vsync_done(ctx, pmode);
 	GS_DCS_BUF_ADD_CMDLIST(dev, unlock_cmd_f0);
 	GS_DCS_BUF_ADD_CMDLIST(dev, aod_on);
 	/* Fixed TE: sync on */
 	GS_DCS_BUF_ADD_CMD(dev, 0xB9, 0x51);
-	/* Auto frame insertion: 1Hz */
-	GS_DCS_BUF_ADD_CMD(dev, 0xB0, 0x00, 0x18, 0xBD);
-	GS_DCS_BUF_ADD_CMD(dev, 0xBD, 0x04, 0x00, 0x74);
-	GS_DCS_BUF_ADD_CMD(dev, 0xB0, 0x00, 0xB8, 0xBD);
-	GS_DCS_BUF_ADD_CMD(dev, 0xBD, 0x00, 0x08);
-	GS_DCS_BUF_ADD_CMD(dev, 0xB0, 0x00, 0xC8, 0xBD);
-	GS_DCS_BUF_ADD_CMD(dev, 0xBD, 0x03);
-	GS_DCS_BUF_ADD_CMD(dev, 0xBD, 0xA7);
 	/* Enable early exit */
 	GS_DCS_BUF_ADD_CMD(dev, 0xB0, 0x00, 0xE8, 0xBD);
 	GS_DCS_BUF_ADD_CMD(dev, 0xBD, 0x00);
@@ -1499,7 +1527,11 @@ static void km4_set_lp_mode(struct gs_panel *ctx, const struct gs_panel_mode *pm
 	GS_DCS_BUF_ADD_CMD(dev, 0xBD, 0x22, 0x22, 0x22, 0x22);
 	GS_DCS_BUF_ADD_CMDLIST(dev, freq_update);
 	GS_DCS_BUF_ADD_CMDLIST_AND_FLUSH(dev, lock_cmd_f0);
-
+#ifndef PANEL_FACTORY_BUILD
+	km4_update_refresh_ctrl_feat(ctx, pmode);
+#else
+	km4_set_panel_lp_feat(ctx, pmode);
+#endif
 	gs_panel_set_binned_lp_helper(ctx, brightness);
 
 	ctx->hw_status.vrefresh = 30;
@@ -1530,7 +1562,9 @@ static void km4_set_nolp_mode(struct gs_panel *ctx, const struct gs_panel_mode *
 	GS_DCS_BUF_ADD_CMDLIST_AND_FLUSH(dev, lock_cmd_f0);
 
 	km4_wait_for_vsync_done(ctx, pmode);
+#ifndef PANEL_FACTORY_BUILD
 	km4_update_refresh_ctrl_feat(ctx, pmode);
+#endif
 	km4_set_panel_feat(ctx, pmode, true);
 	/* backlight control and dimming */
 	km4_write_display_mode(ctx, &pmode->mode);
