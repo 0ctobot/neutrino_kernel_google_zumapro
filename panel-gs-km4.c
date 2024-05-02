@@ -552,24 +552,49 @@ static void km4_set_panel_feat_hbm_irc(struct gs_panel *ctx)
 	 * and "Flat Z mode" is used to replace IRC off for sunlight
 	 * environment.
 	 */
-	GS_DCS_BUF_ADD_CMD(dev, 0xB0, 0x01, 0x9B, 0x92);
-	if (unlikely(sw_status->irc_mode == IRC_OFF))
-		GS_DCS_BUF_ADD_CMD(dev, 0x92, 0x07);
-	else /* IRC_FLAT_DEFAULT or IRC_FLAT_Z */
-		GS_DCS_BUF_ADD_CMD(dev, 0x92, 0x27);
+
+	if (ctx->panel_rev <= PANEL_REV_DVT1) {
+		GS_DCS_BUF_ADD_CMD(dev, 0xB0, 0x01, 0x9B, 0x92);
+		if (unlikely(sw_status->irc_mode == IRC_OFF))
+			GS_DCS_BUF_ADD_CMD(dev, 0x92, 0x07);
+		else /* IRC_FLAT_DEFAULT or IRC_FLAT_Z */
+			GS_DCS_BUF_ADD_CMD(dev, 0x92, 0x27);
+	}
+
 	GS_DCS_BUF_ADD_CMD(dev, 0xB0, 0x02, 0x00, 0x92);
-	if (sw_status->irc_mode == IRC_FLAT_Z)
-		GS_DCS_BUF_ADD_CMD(dev, 0x92, 0x70, 0x26, 0xFF, 0xDC);
-	else /* IRC_FLAT_DEFAULT or IRC_OFF */
-		GS_DCS_BUF_ADD_CMD(dev, 0x92, 0x00, 0x00, 0xFF, 0xD0);
+	if (ctx->panel_rev == PANEL_REV_EVT1_1) {
+		if (sw_status->irc_mode == IRC_FLAT_Z)
+			GS_DCS_BUF_ADD_CMD(dev, 0x92, 0x78, 0x2D, 0xFF, 0xDC);
+		else /* IRC_FLAT_DEFAULT or IRC_OFF */
+			GS_DCS_BUF_ADD_CMD(dev, 0x92, 0x00, 0x00, 0xFF, 0xD0);
+	} else if (ctx->panel_rev <= PANEL_REV_DVT1) {
+		if (sw_status->irc_mode == IRC_FLAT_Z)
+			GS_DCS_BUF_ADD_CMD(dev, 0x92, 0x70, 0x26, 0xFF, 0xDC);
+		else /* IRC_FLAT_DEFAULT or IRC_OFF */
+			GS_DCS_BUF_ADD_CMD(dev, 0x92, 0x00, 0x00, 0xFF, 0xD0);
+	} else {
+		if (sw_status->irc_mode == IRC_FLAT_Z)
+			GS_DCS_BUF_ADD_CMD(dev, 0x92, 0x1E, 0xE5, 0xFF, 0xD4);
+		else /* IRC_FLAT_DEFAULT or IRC_OFF */
+			GS_DCS_BUF_ADD_CMD(dev, 0x92, 0x00, 0x00, 0xFF, 0xD0);
+	}
+
 	/* SP settings (burn-in compensation) */
 	if (ctx->panel_rev >= PANEL_REV_DVT1) {
 		GS_DCS_BUF_ADD_CMD(dev, 0xB0, 0x02, 0xF3, 0x68);
-		if (sw_status->irc_mode == IRC_FLAT_Z)
-			GS_DCS_BUF_ADD_CMD(dev, 0x68, 0x77, 0x77, 0x86, 0xE1, 0xE1, 0xF0);
-		else
-			GS_DCS_BUF_ADD_CMD(dev, 0x68, 0x11, 0x1A, 0x13, 0x18, 0x21, 0x18);
+		if (ctx->panel_rev < PANEL_REV_PVT) {
+			if (sw_status->irc_mode == IRC_FLAT_Z)
+				GS_DCS_BUF_ADD_CMD(dev, 0x68, 0x77, 0x77, 0x86, 0xE1, 0xE1, 0xF0);
+			else
+				GS_DCS_BUF_ADD_CMD(dev, 0x68, 0x11, 0x1A, 0x13, 0x18, 0x21, 0x18);
+		} else {
+			if (sw_status->irc_mode == IRC_FLAT_Z)
+				GS_DCS_BUF_ADD_CMD(dev, 0x68, 0x76, 0x78, 0x86, 0xE0, 0xE1, 0xF0);
+			else
+				GS_DCS_BUF_ADD_CMD(dev, 0x68, 0x12, 0x16, 0x0B, 0x22, 0x23, 0x19);
+		}
 	}
+
 	ctx->hw_status.irc_mode = sw_status->irc_mode;
 	dev_info(dev, "%s: irc_mode=%d\n", __func__, ctx->hw_status.irc_mode);
 }
