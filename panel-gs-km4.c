@@ -198,6 +198,10 @@ static const struct drm_dsc_config fhd_pps_config = {
 #define MIPI_DSI_FREQ_MBPS_DEFAULT 1368
 #define MIPI_DSI_FREQ_MBPS_ALTERNATIVE 1288
 
+#define COMP_TEMP_MIN 10
+#define COMP_TEMP_MAX 49
+#define COMP_TEMP_OFFSET -10
+
 #define PROJECT "KM4"
 
 static const u8 unlock_cmd_f0[] = { 0xF0, 0x5A, 0x5A };
@@ -233,16 +237,12 @@ static const struct gs_binned_lp km4_binned_lp[] = {
 			      KM4_TE2_FALLING_EDGE_OFFSET),
 };
 
-static inline bool is_in_comp_range(int temp)
-{
-	return temp >= 10 && temp <= 49;
-}
-
 /* Read temperature and apply appropriate gain into DDIC for burn-in compensation if needed */
 static void km4_update_disp_therm(struct gs_panel *ctx)
 {
 	/* temperature*1000 in celsius */
 	int temp, ret;
+	const int offset = (ctx->panel_rev > PANEL_REV_PROTO1_1) ? COMP_TEMP_OFFSET : 0;
 	struct device *dev = ctx->dev;
 
 	if (!ctx->thermal || IS_ERR_OR_NULL(ctx->thermal->tz))
@@ -261,10 +261,11 @@ static void km4_update_disp_therm(struct gs_panel *ctx)
 
 	temp = DIV_ROUND_CLOSEST(temp, 1000);
 	dev_dbg(dev, "%s: temp=%d\n", __func__, temp);
-	if (temp == ctx->thermal->hw_temp || !is_in_comp_range(temp))
+	temp = clamp(temp + offset, COMP_TEMP_MIN, COMP_TEMP_MAX);
+	if (temp == ctx->thermal->hw_temp)
 		return;
 
-	dev_dbg(dev, "%s: apply gain into ddic at %ddeg c\n", __func__, temp);
+	dev_dbg(dev, "%s: apply gain into ddic at %ddeg c (offset=%d)\n", __func__, temp, offset);
 
 	DPU_ATRACE_BEGIN(__func__);
 	GS_DCS_BUF_ADD_CMDLIST(dev, unlock_cmd_f0);
