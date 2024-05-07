@@ -1321,7 +1321,7 @@ static void syna_dev_get_reset_reason(struct syna_tcm *tcm)
 		goto exit;
 	}
 
-	syna_tcm_get_boot_info(tcm->tcm_dev, &boot_info);
+	retval = syna_tcm_get_boot_info(tcm->tcm_dev, &boot_info);
 	if (retval < 0) {
 		LOGE("Fail to get boot info");
 		goto exit;
@@ -1380,22 +1380,25 @@ static void syna_dev_reset_detected_cb(void *callback_data)
 static void syna_dev_helper_work(struct work_struct *work)
 {
 	unsigned char task;
+	int retval;
 	struct syna_tcm_helper *helper =
 			container_of(work, struct syna_tcm_helper, work);
 	struct syna_tcm *tcm =
 			container_of(helper, struct syna_tcm, helper);
 
-#if IS_ENABLED(CONFIG_GOOG_TOUCH_INTERFACE)
-	if (goog_pm_wake_get_locks(tcm->gti) != 0)
-		syna_dev_get_reset_reason(tcm);
-
-	if (goog_pm_wake_get_locks(tcm->gti) == 0 || tcm->pwr_state != PWR_ON) {
-#else
 	if (tcm->pwr_state != PWR_ON) {
-#endif
 		LOGI("Touch is already off.");
 		goto exit;
 	}
+
+#if IS_ENABLED(CONFIG_GOOG_TOUCH_INTERFACE)
+	retval = goog_pm_wake_lock(tcm->gti, GTI_PM_WAKELOCK_TYPE_VENDOR_REQUEST, true);
+	if (retval) {
+		LOGI("%s: Failed to obtain wake lock, ret = %d", __func__, retval);
+		goto exit;
+	}
+	syna_dev_get_reset_reason(tcm);
+#endif
 
 	task = ATOMIC_GET(helper->task);
 
@@ -1407,6 +1410,10 @@ static void syna_dev_helper_work(struct work_struct *work)
 	default:
 		break;
 	}
+
+#if IS_ENABLED(CONFIG_GOOG_TOUCH_INTERFACE)
+	goog_pm_wake_unlock_nosync(tcm->gti, GTI_PM_WAKELOCK_TYPE_VENDOR_REQUEST);
+#endif
 
 exit:
 	ATOMIC_SET(helper->task, HELP_NONE);
