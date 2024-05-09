@@ -635,7 +635,6 @@ static void km4_set_panel_feat_frequency(struct gs_panel *ctx, unsigned long *fe
 	struct device *dev = ctx->dev;
 	u8 val;
 	const bool is_ns_mode = test_bit(FEAT_OP_NS, feat);
-	const bool is_hbm = test_bit(FEAT_HBM, feat);
 
 	/*
 	 * Description: this sequence possibly overrides some configs early-exit
@@ -650,7 +649,7 @@ static void km4_set_panel_feat_frequency(struct gs_panel *ctx, unsigned long *fe
 			/* initial frequency */
 			GS_DCS_BUF_ADD_CMD(dev, 0xB0, 0x00, 0x92, 0xBD);
 			if (vrefresh == 60) {
-				val = is_hbm ? 0x01 : 0x02;
+				val = 0x02;
 			} else {
 				if (vrefresh != 120)
 					dev_warn(dev, "%s: unsupported init freq %d (hs)\n",
@@ -664,44 +663,37 @@ static void km4_set_panel_feat_frequency(struct gs_panel *ctx, unsigned long *fe
 		GS_DCS_BUF_ADD_CMD(dev, 0xB0, 0x00, 0x12, 0xBD);
 		if (is_ns_mode) {
 			if (idle_vrefresh == 30) {
-				val = is_hbm ? 0x02 : 0x04;
+				val = 0x04;
 			} else if (idle_vrefresh == 10) {
-				val = is_hbm ? 0x0A : 0x14;
+				val = 0x14;
 			} else {
 				if (idle_vrefresh != 1)
 					dev_warn(dev, "%s: unsupported target freq %d (ns)\n",
 						 __func__, idle_vrefresh);
 				/* 1Hz */
-				val = is_hbm ? 0x76 : 0xEC;
+				val = 0xEC;
 			}
 			GS_DCS_BUF_ADD_CMD(dev, 0xBD, 0x00, 0x00, val);
 		} else {
 			if (idle_vrefresh == 30) {
-				val = is_hbm ? 0x03 : 0x06;
+				val = 0x06;
 			} else if (idle_vrefresh == 10) {
-				val = is_hbm ? 0x0B : 0x16;
+				val = 0x16;
 			} else {
 				if (idle_vrefresh != 1)
 					dev_warn(dev, "%s: unsupported target freq %d (hs)\n",
 						 __func__, idle_vrefresh);
 				/* 1Hz */
-				val = is_hbm ? 0x77 : 0xEE;
+				val = 0xEE;
 			}
 			GS_DCS_BUF_ADD_CMD(dev, 0xBD, 0x00, 0x00, val);
 		}
 		/* step setting */
 		GS_DCS_BUF_ADD_CMD(dev, 0xB0, 0x00, 0x9E, 0xBD);
-		if (is_ns_mode) {
-			if (is_hbm)
-				GS_DCS_BUF_ADD_CMD(dev, 0xBD, 0x00, 0x02, 0x00, 0x0A, 0x00, 0x00);
-			else
-				GS_DCS_BUF_ADD_CMD(dev, 0xBD, 0x00, 0x04, 0x00, 0x14, 0x00, 0x00);
-		} else {
-			if (is_hbm)
-				GS_DCS_BUF_ADD_CMD(dev, 0xBD, 0x00, 0x01, 0x00, 0x03, 0x00, 0x0B);
-			else
-				GS_DCS_BUF_ADD_CMD(dev, 0xBD, 0x00, 0x02, 0x00, 0x06, 0x00, 0x16);
-		}
+		if (is_ns_mode)
+			GS_DCS_BUF_ADD_CMD(dev, 0xBD, 0x00, 0x04, 0x00, 0x14, 0x00, 0x00);
+		else
+			GS_DCS_BUF_ADD_CMD(dev, 0xBD, 0x00, 0x02, 0x00, 0x06, 0x00, 0x16);
 		GS_DCS_BUF_ADD_CMD(dev, 0xB0, 0x00, 0xAE, 0xBD);
 		if (is_ns_mode) {
 			if (idle_vrefresh == 30) {
