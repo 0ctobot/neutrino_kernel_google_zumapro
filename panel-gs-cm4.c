@@ -1255,7 +1255,7 @@ static void cm4_refresh_ctrl(struct gs_panel *ctx)
 	struct device *dev = ctx->dev;
 	const u32 ctrl = ctx->refresh_ctrl;
 
-	DPU_ATRACE_BEGIN(__func__);
+	PANEL_ATRACE_BEGIN(__func__);
 
 	cm4_update_refresh_ctrl_feat(ctx, ctx->current_mode);
 
