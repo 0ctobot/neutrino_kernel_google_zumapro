@@ -577,7 +577,7 @@ static void tk4c_set_ssc_en(struct gs_panel *ctx, bool enabled)
 	ctx->ssc_en = enabled;
 	GS_DCS_BUF_ADD_CMDLIST(dev, test_key_enable);
 	GS_DCS_BUF_ADD_CMDLIST(dev, test_key_fc_enable);
-	GS_DCS_BUF_ADD_CMD(dev, 0x00, 0x6E, 0xC5); /* global para */
+	GS_DCS_BUF_ADD_CMD(dev, 0xB0, 0x00, 0x6E, 0xC5); /* global para */
 	if (enabled)
 		GS_DCS_BUF_ADD_CMD(dev, 0xC5, 0x07, 0x7F, 0x00, 0x00);
 	else
