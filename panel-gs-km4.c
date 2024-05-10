@@ -186,10 +186,10 @@ static const struct drm_dsc_config fhd_pps_config = {
 
 #define KM4_TE_USEC_120HZ_HS 273
 #define KM4_TE_USEC_60HZ_HS 8500
-#define KM4_TE_USEC_60HZ_NS 546
+#define KM4_TE_USEC_60HZ_NS 1588
 
 #define KM4_TE_USEC_VRR_HS 273
-#define KM4_TE_USEC_VRR_NS 546
+#define KM4_TE_USEC_VRR_NS 1588
 
 #define WIDTH_MM 70
 #define HEIGHT_MM 156
@@ -520,8 +520,12 @@ static void km4_set_panel_feat_te(struct gs_panel *ctx, unsigned long *feat,
 			GS_DCS_BUF_ADD_CMD(dev, 0xB9, 0x51);
 			/* TE width */
 			GS_DCS_BUF_ADD_CMD(dev, 0xB0, 0x00, 0x08, 0xB9);
-			GS_DCS_BUF_ADD_CMD(dev, 0xB9, 0x0B, 0x9A, 0x00, 0x1F, 0x0B, 0x9A, 0x00,
-					   0x1F);
+			if (test_bit(FEAT_OP_NS, feat))
+				GS_DCS_BUF_ADD_CMD(dev, 0xB9, 0x0A, 0xDC, 0x00, 0x1F, 0x0A, 0xDC,
+						   0x00, 0x1F);
+			else
+				GS_DCS_BUF_ADD_CMD(dev, 0xB9, 0x0B, 0x9A, 0x00, 0x1F, 0x0B, 0x9A,
+						   0x00, 0x1F);
 #ifndef PANEL_FACTORY_BUILD
 			/* TE Freq */
 			GS_DCS_BUF_ADD_CMD(dev, 0xB0, 0x00, 0x02, 0xB9);
@@ -537,7 +541,10 @@ static void km4_set_panel_feat_te(struct gs_panel *ctx, unsigned long *feat,
 		GS_DCS_BUF_ADD_CMD(dev, 0xB9, 0x04);
 		/* TE width */
 		GS_DCS_BUF_ADD_CMD(dev, 0xB0, 0x00, 0x04, 0xB9);
-		GS_DCS_BUF_ADD_CMD(dev, 0xB9, 0x0B, 0x9A, 0x00, 0x1F);
+		if (test_bit(FEAT_OP_NS, feat))
+			GS_DCS_BUF_ADD_CMD(dev, 0xB9, 0x0A, 0xDC, 0x00);
+		else
+			GS_DCS_BUF_ADD_CMD(dev, 0xB9, 0x0B, 0x9A, 0x00, 0x1F);
 		ctx->hw_status.te.option = TEX_OPT_CHANGEABLE;
 	}
 }
