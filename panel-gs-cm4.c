@@ -196,10 +196,10 @@ static const struct drm_dsc_config fhd_pps_config = {
 
 #define CM4_TE_USEC_120HZ_HS 273
 #define CM4_TE_USEC_60HZ_HS 8500
-#define CM4_TE_USEC_60HZ_NS 546
+#define CM4_TE_USEC_60HZ_NS 1633
 
 #define CM4_TE_USEC_VRR_HS 273
-#define CM4_TE_USEC_VRR_NS 546
+#define CM4_TE_USEC_VRR_NS 1633
 
 #define WIDTH_MM 66
 #define HEIGHT_MM 147
@@ -530,7 +530,10 @@ static void cm4_set_panel_feat_te(struct gs_panel *ctx, unsigned long *feat,
 			GS_DCS_BUF_ADD_CMD(dev, 0xB9, 0x51);
 			/* TE width */
 			GS_DCS_BUF_ADD_CMD(dev, 0xB0, 0x00, 0x08, 0xB9);
-			if (ctx->panel_rev >= PANEL_REV_EVT1)
+			if (test_bit(FEAT_OP_NS, feat))
+				GS_DCS_BUF_ADD_CMD(dev, 0xB9, 0x0A, 0x60, 0x00, 0x1F, 0x0A,
+							   0x60, 0x00, 0x1F);
+			else if (ctx->panel_rev >= PANEL_REV_EVT1)
 				GS_DCS_BUF_ADD_CMD(dev, 0xB9, 0x0B, 0x1E, 0x00, 0x1F, 0x0B, 0x1E,
 							0x00, 0x1F);
 			else
@@ -551,7 +554,9 @@ static void cm4_set_panel_feat_te(struct gs_panel *ctx, unsigned long *feat,
 		GS_DCS_BUF_ADD_CMD(dev, 0xB9, 0x04);
 		/* TE width */
 		GS_DCS_BUF_ADD_CMD(dev, 0xB0, 0x00, 0x04, 0xB9);
-		if (ctx->panel_rev >= PANEL_REV_EVT1)
+		if (test_bit(FEAT_OP_NS, feat))
+			GS_DCS_BUF_ADD_CMD(dev, 0xB9, 0x0A, 0x60, 0x00, 0x1F);
+		else if (ctx->panel_rev >= PANEL_REV_EVT1)
 			GS_DCS_BUF_ADD_CMD(dev, 0xB9, 0x0B, 0x1E, 0x00, 0x1F);
 		else
 			GS_DCS_BUF_ADD_CMD(dev, 0xB9, 0x0B, 0x0E, 0x00, 0x1F);
