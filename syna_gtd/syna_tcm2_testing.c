@@ -1984,8 +1984,82 @@ static int syna_selftest(void *private_data, struct gti_selftest_cmd *cmd)
 	int retval;
 	struct tcm_buffer test_data;
 	struct syna_tcm *tcm = private_data;
+	char temp_limit_name[LIMIT_NAME_LEN];
+	char pt05_high_limit_name_restore[LIMIT_NAME_LEN];
+	char pt05_low_limit_name_restore[LIMIT_NAME_LEN];
+	char pt05_gap_x_limit_name_restore[LIMIT_NAME_LEN];
+	char pt05_gap_y_limit_name_restore[LIMIT_NAME_LEN];
+	char pt12_high_limit_name_restore[LIMIT_NAME_LEN];
+	char pt12_low_limit_name_restore[LIMIT_NAME_LEN];
+	struct syna_hw_interface *hw_if = tcm->hw_if;
+	struct property *prop;
+	struct device_node *np = tcm->pdev->dev.parent->of_node;
 
 	syna_tcm_buf_init(&test_data);
+
+	strncpy(pt05_high_limit_name_restore, hw_if->pt05_high_limit_name,
+			sizeof(pt05_high_limit_name_restore));
+	strncpy(pt05_low_limit_name_restore, hw_if->pt05_low_limit_name,
+			sizeof(pt05_low_limit_name_restore));
+	strncpy(pt05_gap_x_limit_name_restore, hw_if->pt05_gap_x_limit_name,
+			sizeof(pt05_gap_x_limit_name_restore));
+	strncpy(pt05_gap_y_limit_name_restore, hw_if->pt05_gap_y_limit_name,
+			sizeof(pt05_gap_y_limit_name_restore));
+	strncpy(pt12_high_limit_name_restore, hw_if->pt12_high_limit_name,
+			sizeof(pt12_high_limit_name_restore));
+	strncpy(pt12_low_limit_name_restore, hw_if->pt12_low_limit_name,
+			sizeof(pt12_low_limit_name_restore));
+
+	if (cmd->is_ical) {
+		/* Parse ical specific test limit. */
+		strncpy(temp_limit_name, hw_if->pt05_high_limit_name, sizeof(temp_limit_name));
+		strcat(temp_limit_name, "_ical");
+		prop = of_find_property(np, temp_limit_name, NULL);
+		if (prop) {
+			strncpy(hw_if->pt05_high_limit_name, temp_limit_name,
+					sizeof(hw_if->pt05_high_limit_name));
+		}
+
+		strncpy(temp_limit_name, hw_if->pt05_low_limit_name, sizeof(temp_limit_name));
+		strcat(temp_limit_name, "_ical");
+		prop = of_find_property(np, temp_limit_name, NULL);
+		if (prop) {
+			strncpy(hw_if->pt05_low_limit_name, temp_limit_name,
+					sizeof(hw_if->pt05_low_limit_name));
+		}
+
+		strncpy(temp_limit_name, hw_if->pt05_gap_x_limit_name, sizeof(temp_limit_name));
+		strcat(temp_limit_name, "_ical");
+		prop = of_find_property(np, temp_limit_name, NULL);
+		if (prop) {
+			strncpy(hw_if->pt05_gap_x_limit_name, temp_limit_name,
+					sizeof(hw_if->pt05_gap_x_limit_name));
+		}
+
+		strncpy(temp_limit_name, hw_if->pt05_gap_y_limit_name, sizeof(temp_limit_name));
+		strcat(temp_limit_name, "_ical");
+		prop = of_find_property(np, temp_limit_name, NULL);
+		if (prop) {
+			strncpy(hw_if->pt05_gap_y_limit_name, temp_limit_name,
+					sizeof(hw_if->pt05_gap_y_limit_name));
+		}
+
+		strncpy(temp_limit_name, hw_if->pt12_high_limit_name, sizeof(temp_limit_name));
+		strcat(temp_limit_name, "_ical");
+		prop = of_find_property(np, temp_limit_name, NULL);
+		if (prop) {
+			strncpy(hw_if->pt12_high_limit_name, temp_limit_name,
+					sizeof(hw_if->pt12_high_limit_name));
+		}
+
+		strncpy(temp_limit_name, hw_if->pt12_low_limit_name, sizeof(temp_limit_name));
+		strcat(temp_limit_name, "_ical");
+		prop = of_find_property(np, temp_limit_name, NULL);
+		if (prop) {
+			strncpy(hw_if->pt12_low_limit_name, temp_limit_name,
+					sizeof(hw_if->pt12_low_limit_name));
+		}
+	}
 
 	/* TRX-TRX shorts */
 	retval = syna_testing_pt01(tcm, &test_data);
@@ -1994,12 +2068,23 @@ static int syna_selftest(void *private_data, struct gti_selftest_cmd *cmd)
 	retval |= syna_testing_pt05_gap(tcm, &test_data);
 	/* Abs Raw Cap TX/RX */
 	retval |= syna_testing_pt12(tcm, &test_data);
-	msleep(50);
-	/* Tag moisture */
-	retval |= syna_testing_pt_tag_moisture(tcm, &test_data);
 
 	cmd->result = retval ? GTI_SELFTEST_RESULT_FAIL : GTI_SELFTEST_RESULT_PASS;
 	retval = 0;
+
+	/* Restore the test limit. */
+	strncpy(hw_if->pt05_high_limit_name, pt05_high_limit_name_restore,
+			sizeof(hw_if->pt05_high_limit_name));
+	strncpy(hw_if->pt05_low_limit_name, pt05_low_limit_name_restore,
+			sizeof(hw_if->pt05_low_limit_name));
+	strncpy(hw_if->pt05_gap_x_limit_name, pt05_gap_x_limit_name_restore,
+			sizeof(hw_if->pt05_gap_x_limit_name));
+	strncpy(hw_if->pt05_gap_y_limit_name, pt05_gap_y_limit_name_restore,
+			sizeof(hw_if->pt05_gap_y_limit_name));
+	strncpy(hw_if->pt12_high_limit_name, pt12_high_limit_name_restore,
+			sizeof(hw_if->pt12_high_limit_name));
+	strncpy(hw_if->pt12_low_limit_name, pt12_low_limit_name_restore,
+			sizeof(hw_if->pt12_low_limit_name));
 
 	syna_tcm_buf_release(&test_data);
 
