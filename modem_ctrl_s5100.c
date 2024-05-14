@@ -1036,6 +1036,8 @@ static void gpio_power_offon_cp(struct modem_ctl *mc)
 {
 	gpio_power_off_cp(mc);
 
+	mc->cp_ever_powered_on = true;
+
 #if IS_ENABLED(CONFIG_CP_WRESET_WA)
 	udelay(50);
 	mif_gpio_set_value(&mc->cp_gpio[CP_GPIO_AP2CP_CP_PWR], 1, 50);
@@ -2529,12 +2531,7 @@ static int suspend_cp(struct modem_ctl *mc)
 			return -EBUSY;
 		}
 
-		if (mc->phone_state == STATE_OFFLINE) {
-			mif_info("CP is already in OFFLINE state\n");
-			break;
-		}
-
-		if (mc->phone_state != STATE_ONLINE) {
+		if (mc->cp_ever_powered_on && (mc->phone_state != STATE_ONLINE)) {
 			mif_info("Abort suspend since CP state (%s) is not ONLINE\n",
 					cp_state_str(mc->phone_state));
 			return -EBUSY;
