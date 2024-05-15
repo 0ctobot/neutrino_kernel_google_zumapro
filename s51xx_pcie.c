@@ -26,7 +26,6 @@
 #include <linux/of.h>
 #include <linux/of_platform.h>
 #include <linux/pci.h>
-#include <linux/proc_fs.h>
 #include <linux/seq_file.h>
 #include <linux/pm_runtime.h>
 //#include <sound/samsung/abox.h>
@@ -35,25 +34,6 @@
 #include "modem_utils.h"
 #include "modem_ctrl.h"
 #include "s51xx_pcie.h"
-
-static int s51xx_pcie_read_procmem(struct seq_file *m, void *v)
-{
-	mif_info("Procmem READ!\n");
-
-	return 0;
-}
-
-static int s51xx_pcie_proc_open(struct inode *inode, struct  file *file)
-{
-	return single_open(file, s51xx_pcie_read_procmem, NULL);
-}
-
-static const struct proc_ops s51xx_pcie_proc_fops = {
-	.proc_open = s51xx_pcie_proc_open,
-	.proc_read = seq_read,
-	.proc_lseek = seq_lseek,
-	.proc_release = single_release,
-};
 
 void s51xx_pcie_chk_ep_conf(struct pci_dev *pdev)
 {
@@ -572,9 +552,6 @@ int s51xx_pcie_init(struct modem_ctl *mc)
 	if (ret < 0) {
 		mif_err("pci_register_driver() failed, rc:%d\n", ret);
 	}
-
-	/* Create PROC fs */
-	proc_create("driver/s51xx_pcie_proc", 0, NULL, &s51xx_pcie_proc_fops);
 
 	return 0;
 }
