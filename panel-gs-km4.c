@@ -237,6 +237,107 @@ static const struct gs_binned_lp km4_binned_lp[] = {
 			      KM4_TE2_FALLING_EDGE_OFFSET),
 };
 
+static unsigned int km4_get_te_usec(struct gs_panel *ctx, const struct gs_panel_mode *pmode)
+{
+	struct km4_panel *spanel = to_spanel(ctx);
+	const int vrefresh = drm_mode_vrefresh(&pmode->mode);
+
+	if (vrefresh != 60 || gs_is_vrr_mode(pmode)) {
+		return pmode->gs_mode.te_usec;
+	} else {
+		if (spanel->is_mrr_v1) {
+			return(test_bit(FEAT_OP_NS, ctx->sw_status.feat) ? KM4_TE_USEC_60HZ_NS :
+									    KM4_TE_USEC_60HZ_HS);
+		} else {
+			return(test_bit(FEAT_OP_NS, ctx->sw_status.feat) ? KM4_TE_USEC_VRR_NS :
+									    KM4_TE_USEC_VRR_HS);
+		}
+	}
+}
+
+/* In HS 60Hz mode, TE period is 16.6ms but DDIC vsync period is 8.3ms. */
+#define KM4_HS_VSYNC_PERIOD_US 8333
+/**
+ * km4_check_command_timing_for_te2 - control timing between a command and DDIC vsync
+ * @ctx: gs_panel struct
+ *
+ * Control the timing of sending the command in the 2nd DDIC vsync period within two contiguous
+ * TE to avoid a 120Hz frame in HS 60Hz mode. This function should be called if the command could
+ * cause a 120Hz frame and mess up the timing, e.g. TE2. The below diagram illustrates the desired
+ * timing of sending the command, where vsync ~= TE rising (vblank) + TE width (te_usec).
+ *
+ *                       send the command
+ *                      /
+ *   TE             .  v          TE
+ *   |              .             |
+ * ----------------------------------
+ *    <------    16.6ms   ---- -->
+ *
+ * vsync          vsync         vsync
+ *   |              |             |
+ * ----------------------------------
+ *    <-- 8.3ms  --> <-- 8.3ms -->
+ *         1st            2nd
+ */
+static void km4_check_command_timing_for_te2(struct gs_panel *ctx)
+{
+	struct device *dev = ctx->dev;
+	struct drm_crtc *crtc = NULL;
+	const struct gs_panel_mode *pmode = ctx->current_mode;
+	ktime_t last_te, last_vsync, now;
+	s64 since_last_vsync_us, temp_us, delay_us;
+
+	if (!pmode) {
+		dev_dbg(dev, "%s: unable to get current mode\n", __func__);
+		return;
+	}
+
+	/* only HS 60Hz mode and changeable TE2 need the timing control */
+	if (drm_mode_vrefresh(&pmode->mode) == ctx->op_hz || ctx->te2.option == TEX_OPT_FIXED)
+		return;
+
+	if (ctx->gs_connector->base.state)
+		crtc = ctx->gs_connector->base.state->crtc;
+	if (!crtc) {
+		dev_dbg(dev, "%s: unable to get crtc\n", __func__);
+		return;
+	}
+
+	drm_crtc_vblank_count_and_time(crtc, &last_te);
+	if (!last_te) {
+		dev_dbg(dev, "%s: unable to get last vblank\n", __func__);
+		return;
+	}
+
+	last_vsync = last_te + km4_get_te_usec(ctx, pmode);
+	now = ktime_get();
+	since_last_vsync_us = ktime_us_delta(now, last_vsync);
+	temp_us = since_last_vsync_us;
+
+	/**
+	 * While DPU enters/exits hibernation, we may not get the nearest vblank successfully.
+	 * Divided by TE period (vsync period * 2) then we can get the remaining time (remainder).
+	 */
+	temp_us %= (KM4_HS_VSYNC_PERIOD_US * 2);
+
+	/**
+	 * Do nothing if it's greater than a vsync time, i.e. sent in the 2nd vsync period.
+	 * The additional 1ms is for the tolerance.
+	 */
+	if (temp_us > (KM4_HS_VSYNC_PERIOD_US + 1000))
+		return;
+
+	/* Adding 1ms tolerance to make sure the command will be sent in the 2nd vsync period. */
+	delay_us = KM4_HS_VSYNC_PERIOD_US - temp_us + 1000;
+
+	dev_dbg(dev, "%s: te %lld, vsync %lld, now %lld, since_vsync %lld, delay %lld\n", __func__,
+		last_te, last_vsync, now, since_last_vsync_us, delay_us);
+
+	DPU_ATRACE_BEGIN(__func__);
+	usleep_range(delay_us, delay_us + 100);
+	DPU_ATRACE_END(__func__);
+}
+
 /* Read temperature and apply appropriate gain into DDIC for burn-in compensation if needed */
 static void km4_update_disp_therm(struct gs_panel *ctx)
 {
@@ -861,6 +962,8 @@ static void km4_set_panel_feat(struct gs_panel *ctx, const struct gs_panel_mode 
 		test_bit(FEAT_EARLY_EXIT, feat), idle_vrefresh ?: vrefresh,
 		drm_mode_vrefresh(&pmode->mode), te_freq);
 
+	DPU_ATRACE_BEGIN(__func__);
+
 	/* Unlock */
 	GS_DCS_BUF_ADD_CMDLIST(dev, unlock_cmd_f0);
 
@@ -911,6 +1014,8 @@ static void km4_set_panel_feat(struct gs_panel *ctx, const struct gs_panel_mode 
 
 	/* Lock */
 	GS_DCS_BUF_ADD_CMDLIST_AND_FLUSH(dev, lock_cmd_f0);
+
+	DPU_ATRACE_END(__func__);
 
 	hw_status->vrefresh = vrefresh;
 	hw_status->idle_vrefresh = idle_vrefresh;
@@ -1229,6 +1334,11 @@ static void km4_update_refresh_ctrl_feat(struct gs_panel *ctx, const struct gs_p
 		ctx->gs_connector->ignore_op_rate = false;
 	}
 
+	if (ctx->sw_status.idle_vrefresh && ctx->sw_status.idle_vrefresh != vrefresh &&
+	    test_bit(FEAT_FRAME_AUTO, ctx->sw_status.feat) &&
+	    !test_bit(FEAT_FRAME_MANUAL_FI, ctx->sw_status.feat))
+		km4_check_command_timing_for_te2(ctx);
+
 	if (mrr_changed)
 		km4_change_frequency(ctx, pmode);
 	else
@@ -1469,6 +1579,7 @@ static int km4_set_brightness(struct gs_panel *ctx, u16 br)
 	}
 
 	brightness = (br & 0xff) << 8 | br >> 8;
+	km4_check_command_timing_for_te2(ctx);
 	ret = gs_dcs_set_brightness(ctx, brightness);
 	if (!ret) {
 		ctx->hw_status.dbv = br;
@@ -1476,24 +1587,6 @@ static int km4_set_brightness(struct gs_panel *ctx, u16 br)
 	}
 
 	return ret;
-}
-
-static unsigned int km4_get_te_usec(struct gs_panel *ctx, const struct gs_panel_mode *pmode)
-{
-	struct km4_panel *spanel = to_spanel(ctx);
-	const int vrefresh = drm_mode_vrefresh(&pmode->mode);
-
-	if (vrefresh != 60 || gs_is_vrr_mode(pmode)) {
-		return pmode->gs_mode.te_usec;
-	} else {
-		if (spanel->is_mrr_v1) {
-			return(test_bit(FEAT_OP_NS, ctx->sw_status.feat) ? KM4_TE_USEC_60HZ_NS :
-									    KM4_TE_USEC_60HZ_HS);
-		} else {
-			return(test_bit(FEAT_OP_NS, ctx->sw_status.feat) ? KM4_TE_USEC_VRR_NS :
-									    KM4_TE_USEC_VRR_HS);
-		}
-	}
 }
 
 static void km4_wait_for_vsync_done(struct gs_panel *ctx, const struct gs_panel_mode *pmode)
