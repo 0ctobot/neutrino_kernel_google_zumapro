@@ -790,6 +790,8 @@ struct modem_ctl {
 	u32 tp_threshold;
 	u32 tp_hysteresis;
 	bool pcie_dynamic_spd_enabled;
+
+	bool cp_ever_powered_on;
 };
 
 static inline bool cp_offline(struct modem_ctl *mc)
