@@ -1410,9 +1410,9 @@ static int km4_atomic_check(struct gs_panel *ctx, struct drm_atomic_state *state
 static void km4_write_display_mode(struct gs_panel *ctx, const struct drm_display_mode *mode)
 {
 	struct device *dev = ctx->dev;
-
 	u8 val = KM4_WRCTRLD_BCTRL_BIT;
 
+	PANEL_ATRACE_BEGIN(__func__);
 	if (GS_IS_HBM_ON(ctx->hbm_mode))
 		val |= KM4_WRCTRLD_HBM_BIT;
 
@@ -1423,6 +1423,7 @@ static void km4_write_display_mode(struct gs_panel *ctx, const struct drm_displa
 		GS_IS_HBM_ON(ctx->hbm_mode) ? "on" : "off", ctx->dimming_on ? "on" : "off");
 
 	GS_DCS_BUF_ADD_CMD_AND_FLUSH(dev, MIPI_DCS_WRITE_CONTROL_DISPLAY, val);
+	PANEL_ATRACE_END(__func__);
 }
 
 #define KM4_OPR_VAL_LEN 2
