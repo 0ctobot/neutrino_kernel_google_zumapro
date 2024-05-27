@@ -803,7 +803,7 @@ done:
 }
 
 static const struct gs_display_underrun_param underrun_param = {
-	.te_idle_us = 200,
+	.te_idle_us = 350,
 	.te_var = 1,
 };
 
