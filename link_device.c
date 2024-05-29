@@ -2182,13 +2182,8 @@ static int link_load_gnss_image(struct link_device *ld,
 	mif_info("Load GNSS images\n");
 
 	if (!mld->gnss_v_base) {
-		mld->gnss_v_base = cp_shmem_get_nc_region(
-			cp_shmem_get_base(0, SHMEM_GNSS_FW),
-			cp_shmem_get_size(0, SHMEM_GNSS_FW));
-		if (!mld->gnss_v_base) {
-			mif_err("cp_shmem_get_nc_region() fail\n");
-			return -ENOMEM;
-		}
+		mif_err("No gnss_fw vmap region\n");
+		return -ENOMEM;
 	}
 
 	ret = copy_from_user(&img, (const void __user *)arg, sizeof(img));
@@ -2216,6 +2211,12 @@ static int link_read_gnss_image(struct link_device *ld,
 	struct mem_link_device *mld = to_mem_link_device(ld);
 
 	memset(&img, 0, sizeof(struct gnss_image));
+
+	if (!mld->gnss_v_base) {
+		mif_err("No gnss_fw vmap region\n");
+		return -ENOMEM;
+	}
+
 	err = copy_from_user(&img, (const void __user *)arg,
 			sizeof(struct gnss_image));
 	if (err) {
@@ -3934,6 +3935,18 @@ static int init_shmem_maps(u32 link_type, struct modem_data *modem,
 
 	ld->link_type = link_type;
 	create_legacy_link_device(mld);
+
+	if (mld->attrs & LINK_ATTR_XMIT_BTDLR_GNSS) {
+		mld->gnss_v_base = cp_shmem_get_nc_region(
+				cp_shmem_get_base(0, SHMEM_GNSS_FW),
+				cp_shmem_get_size(0, SHMEM_GNSS_FW));
+		if (!mld->gnss_v_base) {
+			mif_err("cp_shmem_get_nc_region() for gnss_fw failed\n");
+		} else {
+			mif_info("gnss_v_base=%pK\n", mld->gnss_v_base);
+		}
+
+	}
 
 	if (ld->sbd_ipc) {
 		hrtimer_init(&mld->sbd_tx_timer,
