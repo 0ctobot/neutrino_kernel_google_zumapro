@@ -3940,11 +3940,8 @@ static int init_shmem_maps(u32 link_type, struct modem_data *modem,
 		mld->gnss_v_base = cp_shmem_get_nc_region(
 				cp_shmem_get_base(0, SHMEM_GNSS_FW),
 				cp_shmem_get_size(0, SHMEM_GNSS_FW));
-		if (!mld->gnss_v_base) {
+		if (!mld->gnss_v_base)
 			mif_err("cp_shmem_get_nc_region() for gnss_fw failed\n");
-		} else {
-			mif_info("gnss_v_base=%pK\n", mld->gnss_v_base);
-		}
 
 	}
 
