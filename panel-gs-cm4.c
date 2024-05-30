@@ -2301,53 +2301,6 @@ static const struct gs_panel_mode_array cm4_modes = {
 		/* VRR modes */
 		{
 			.mode = {
-				.name = "1280x2856@120:240",
-				DRM_MODE_TIMING(120, 1280, 80, 24, 46, 2856, 12, 4, 28),
-				.flags = DRM_MODE_FLAG_TE_FREQ_X2,
-				/* aligned to bootloader resolution */
-				.type = DRM_MODE_TYPE_VRR | DRM_MODE_TYPE_PREFERRED,
-				.width_mm = WIDTH_MM,
-				.height_mm = HEIGHT_MM,
-			},
-			.gs_mode = {
-				.mode_flags = MIPI_DSI_CLOCK_NON_CONTINUOUS,
-				.vblank_usec = 120,
-				.te_usec = CM4_TE_USEC_VRR_HS,
-				.bpc = 8,
-				.dsc = CM4_WQHD_DSC,
-				.underrun_param = &underrun_param,
-			},
-			.te2_timing = {
-				.rising_edge = CM4_TE2_RISING_EDGE_OFFSET,
-				.falling_edge = CM4_TE2_FALLING_EDGE_OFFSET,
-			},
-			.idle_mode = GIDLE_MODE_UNSUPPORTED,
-		},
-		{
-			.mode = {
-				.name = "960x2142@120:240",
-				DRM_MODE_TIMING(120, 960, 80, 24, 46, 2142, 12, 4, 32),
-				.flags = DRM_MODE_FLAG_TE_FREQ_X2,
-				.type = DRM_MODE_TYPE_VRR,
-				.width_mm = WIDTH_MM,
-				.height_mm = HEIGHT_MM,
-			},
-			.gs_mode = {
-				.mode_flags = MIPI_DSI_CLOCK_NON_CONTINUOUS,
-				.vblank_usec = 120,
-				.te_usec = CM4_TE_USEC_VRR_HS,
-				.bpc = 8,
-				.dsc = CM4_FHD_DSC,
-				.underrun_param = &underrun_param,
-			},
-			.te2_timing = {
-				.rising_edge = CM4_TE2_RISING_EDGE_OFFSET,
-				.falling_edge = CM4_TE2_FALLING_EDGE_OFFSET,
-			},
-			.idle_mode = GIDLE_MODE_UNSUPPORTED,
-		},
-		{
-			.mode = {
 				.name = "1280x2856@120:120",
 				DRM_MODE_TIMING(120, 1280, 80, 24, 46, 2856, 12, 4, 28),
 				.flags = DRM_MODE_FLAG_TE_FREQ_X1,
@@ -2382,52 +2335,6 @@ static const struct gs_panel_mode_array cm4_modes = {
 				.mode_flags = MIPI_DSI_CLOCK_NON_CONTINUOUS,
 				.vblank_usec = 120,
 				.te_usec = CM4_TE_USEC_VRR_HS,
-				.bpc = 8,
-				.dsc = CM4_FHD_DSC,
-				.underrun_param = &underrun_param,
-			},
-			.te2_timing = {
-				.rising_edge = CM4_TE2_RISING_EDGE_OFFSET,
-				.falling_edge = CM4_TE2_FALLING_EDGE_OFFSET,
-			},
-			.idle_mode = GIDLE_MODE_UNSUPPORTED,
-		},
-		{
-			.mode = {
-				.name = "1280x2856@60:240",
-				DRM_MODE_TIMING(60, 1280, 80, 24, 46, 2856, 12, 4, 28),
-				.flags = DRM_MODE_FLAG_TE_FREQ_X4 | DRM_MODE_FLAG_NS,
-				.type = DRM_MODE_TYPE_VRR,
-				.width_mm = WIDTH_MM,
-				.height_mm = HEIGHT_MM,
-			},
-			.gs_mode = {
-				.mode_flags = MIPI_DSI_CLOCK_NON_CONTINUOUS,
-				.vblank_usec = 120,
-				.te_usec = CM4_TE_USEC_VRR_NS,
-				.bpc = 8,
-				.dsc = CM4_WQHD_DSC,
-				.underrun_param = &underrun_param,
-			},
-			.te2_timing = {
-				.rising_edge = CM4_TE2_RISING_EDGE_OFFSET,
-				.falling_edge = CM4_TE2_FALLING_EDGE_OFFSET,
-			},
-			.idle_mode = GIDLE_MODE_UNSUPPORTED,
-		},
-		{
-			.mode = {
-				.name = "960x2142@60:240",
-				DRM_MODE_TIMING(60, 960, 80, 24, 46, 2142, 12, 4, 32),
-				.flags = DRM_MODE_FLAG_TE_FREQ_X4 | DRM_MODE_FLAG_NS,
-				.type = DRM_MODE_TYPE_VRR,
-				.width_mm = WIDTH_MM,
-				.height_mm = HEIGHT_MM,
-			},
-			.gs_mode = {
-				.mode_flags = MIPI_DSI_CLOCK_NON_CONTINUOUS,
-				.vblank_usec = 120,
-				.te_usec = CM4_TE_USEC_VRR_NS,
 				.bpc = 8,
 				.dsc = CM4_FHD_DSC,
 				.underrun_param = &underrun_param,
