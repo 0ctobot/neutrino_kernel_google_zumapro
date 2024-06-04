@@ -2118,7 +2118,7 @@ static const struct gs_panel_mode_array cm4_modes = {
 #ifdef PANEL_FACTORY_BUILD
 	.num_modes = 6,
 #else
-	.num_modes = 10,
+	.num_modes = 6,
 #endif
 	.modes = {
 		/* MRR modes */
@@ -2304,7 +2304,7 @@ static const struct gs_panel_mode_array cm4_modes = {
 				.name = "1280x2856@120:120",
 				DRM_MODE_TIMING(120, 1280, 80, 24, 46, 2856, 12, 4, 28),
 				.flags = DRM_MODE_FLAG_TE_FREQ_X1,
-				.type = DRM_MODE_TYPE_VRR,
+				.type = DRM_MODE_TYPE_VRR | DRM_MODE_TYPE_PREFERRED,
 				.width_mm = WIDTH_MM,
 				.height_mm = HEIGHT_MM,
 			},
