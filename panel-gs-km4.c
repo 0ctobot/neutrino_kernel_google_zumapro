@@ -2108,7 +2108,7 @@ static const struct gs_panel_mode_array km4_modes = {
 #ifdef PANEL_FACTORY_BUILD
 	.num_modes = 6,
 #else
-	.num_modes = 10,
+	.num_modes = 6,
 #endif
 	.modes = {
 /* MRR modes */
@@ -2291,7 +2291,7 @@ static const struct gs_panel_mode_array km4_modes = {
 				.name = "1344x2992@120:120",
 				DRM_MODE_TIMING(120, 1344, 80, 24, 42, 2992, 12, 4, 22),
 				.flags = DRM_MODE_FLAG_TE_FREQ_X1,
-				.type = DRM_MODE_TYPE_VRR,
+				.type = DRM_MODE_TYPE_VRR | DRM_MODE_TYPE_PREFERRED,
 				.width_mm = WIDTH_MM,
 				.height_mm = HEIGHT_MM,
 			},
