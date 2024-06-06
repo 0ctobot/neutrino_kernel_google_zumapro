@@ -1,22 +1,25 @@
 # SPDX-License-Identifier: GPL-2.0-or-later
 
-load("//build/kernel/kleaf:kernel.bzl", "ddk_module")
+load("//build/kernel/kleaf:kernel.bzl", "ddk_headers", "ddk_module")
 
-# Convenience variables (to reduce repetition)
+package(
+    default_visibility = [
+        "//private/devices/google:__subpackages__",
+    ],
+)
 
-panel_deps = [
-    "//common:all_headers_aarch64",
-    "//private/google-modules/display/common:ddk_headers",
-    "//private/google-modules/display/common/gs_panel",
-]
-
-panel_visibility = [
-    "//private/devices/google:__subpackages__",
-]
-
-panel_local_defines = [
+_PANEL_LOCAL_DEFINES = [
     "DYNAMIC_DEBUG_MODULE",
 ]
+
+ddk_headers(
+    name = "common_headers",
+    hdrs = [
+        "//common:all_headers_aarch64",
+        "//private/google-modules/display/common:ddk_headers",
+    ],
+    visibility = ["//visibility:private"],
+)
 
 # Note: please add additional drivers as separate ddk modules
 
@@ -27,9 +30,11 @@ ddk_module(
     ],
     out = "panel-gs-km4.ko",
     kernel_build = "//private/google-modules/soc/gs:gs_kernel_build",
-    local_defines = panel_local_defines,
-    visibility = panel_visibility,
-    deps = panel_deps,
+    local_defines = _PANEL_LOCAL_DEFINES,
+    deps = [
+        ":common_headers",
+        "//private/google-modules/display/common/gs_panel",
+    ],
 )
 
 ddk_module(
@@ -39,9 +44,11 @@ ddk_module(
     ],
     out = "panel-gs-cm4.ko",
     kernel_build = "//private/google-modules/soc/gs:gs_kernel_build",
-    local_defines = panel_local_defines,
-    visibility = panel_visibility,
-    deps = panel_deps,
+    local_defines = _PANEL_LOCAL_DEFINES,
+    deps = [
+        ":common_headers",
+        "//private/google-modules/display/common/gs_panel",
+    ],
 )
 
 ddk_module(
@@ -51,9 +58,11 @@ ddk_module(
     ],
     out = "panel-gs-tk4a.ko",
     kernel_build = "//private/google-modules/soc/gs:gs_kernel_build",
-    local_defines = panel_local_defines,
-    visibility = panel_visibility,
-    deps = panel_deps,
+    local_defines = _PANEL_LOCAL_DEFINES,
+    deps = [
+        ":common_headers",
+        "//private/google-modules/display/common/gs_panel",
+    ],
 )
 
 ddk_module(
@@ -63,9 +72,11 @@ ddk_module(
     ],
     out = "panel-gs-tk4b.ko",
     kernel_build = "//private/google-modules/soc/gs:gs_kernel_build",
-    local_defines = panel_local_defines,
-    visibility = panel_visibility,
-    deps = panel_deps,
+    local_defines = _PANEL_LOCAL_DEFINES,
+    deps = [
+        ":common_headers",
+        "//private/google-modules/display/common/gs_panel",
+    ],
 )
 
 ddk_module(
@@ -75,7 +86,9 @@ ddk_module(
     ],
     out = "panel-gs-tk4c.ko",
     kernel_build = "//private/google-modules/soc/gs:gs_kernel_build",
-    local_defines = panel_local_defines,
-    visibility = panel_visibility,
-    deps = panel_deps,
+    local_defines = _PANEL_LOCAL_DEFINES,
+    deps = [
+        ":common_headers",
+        "//private/google-modules/display/common/gs_panel",
+    ],
 )
