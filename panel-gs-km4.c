@@ -481,6 +481,8 @@ static bool km4_set_te2_rate(struct gs_panel *ctx, u32 rate_hz)
 		return false;
 	}
 
+	DPU_ATRACE_INT("te2_rate", ctx->te2.rate_hz);
+
 	return true;
 }
 
@@ -604,6 +606,7 @@ static void km4_set_panel_feat_te(struct gs_panel *ctx, unsigned long *feat,
 	struct device *dev = ctx->dev;
 	bool is_vrr = gs_is_vrr_mode(pmode);
 	u32 te_freq = gs_drm_mode_te_freq(&pmode->mode);
+	u32 vrefresh = drm_mode_vrefresh(&pmode->mode);
 
 	if (test_bit(FEAT_EARLY_EXIT, feat) && !spanel->force_changeable_te) {
 		if (is_vrr && te_freq == 240) {
@@ -619,7 +622,10 @@ static void km4_set_panel_feat_te(struct gs_panel *ctx, unsigned long *feat,
 						   0x00, 0x1F);
 		} else {
 			/* Fixed TE */
-			GS_DCS_BUF_ADD_CMD(dev, 0xB9, 0x51);
+			if (!test_bit(FEAT_OP_NS, feat) && vrefresh == 60)
+				GS_DCS_BUF_ADD_CMD(dev, 0xB9, 0xD1);
+			else
+				GS_DCS_BUF_ADD_CMD(dev, 0xB9, 0x51);
 			/* TE width */
 			GS_DCS_BUF_ADD_CMD(dev, 0xB0, 0x00, 0x08, 0xB9);
 			if (test_bit(FEAT_OP_NS, feat))
@@ -631,7 +637,7 @@ static void km4_set_panel_feat_te(struct gs_panel *ctx, unsigned long *feat,
 #ifndef PANEL_FACTORY_BUILD
 			/* TE Freq */
 			GS_DCS_BUF_ADD_CMD(dev, 0xB0, 0x00, 0x02, 0xB9);
-			if (!test_bit(FEAT_OP_NS, feat) && drm_mode_vrefresh(&pmode->mode) == 60)
+			if (!test_bit(FEAT_OP_NS, feat) && vrefresh == 60)
 				GS_DCS_BUF_ADD_CMD(dev, 0xB9, 0x01);
 			else
 				GS_DCS_BUF_ADD_CMD(dev, 0xB9, 0x00);
@@ -1105,7 +1111,12 @@ static void km4_change_frequency(struct gs_panel *ctx, const struct gs_panel_mod
 	if (km4_get_idle_mode(ctx, pmode) == GIDLE_MODE_ON_INACTIVITY)
 		idle_vrefresh = km4_get_min_idle_vrefresh(ctx, pmode);
 
-	if (!spanel->is_mrr_v1 && test_bit(FEAT_FRAME_AUTO, ctx->sw_status.feat))
+	/**
+	 * While TE2 is changeable, the idle_vrefresh should be set. We should use the
+	 * idle_vrefresh instead of 0 for the proximity sensor.
+	 */
+	if ((!spanel->is_mrr_v1 && test_bit(FEAT_FRAME_AUTO, ctx->sw_status.feat)) ||
+	    (ctx->te2.option == TEX_OPT_CHANGEABLE && !idle_vrefresh))
 		idle_vrefresh = ctx->sw_status.idle_vrefresh;
 
 	km4_update_refresh_mode(ctx, pmode, idle_vrefresh);
@@ -1162,8 +1173,19 @@ static bool km4_set_self_refresh(struct gs_panel *ctx, bool enable)
 	if (ctx->thermal && ctx->thermal->pending_temp_update && enable)
 		km4_update_disp_therm(ctx);
 
-	if (!spanel->is_mrr_v1)
+	DPU_ATRACE_INT(__func__, enable);
+
+	if (!spanel->is_mrr_v1) {
+		u32 vrefresh = drm_mode_vrefresh(&pmode->mode);
+
+		idle_vrefresh = ctx->sw_status.idle_vrefresh;
+		/* notify the changes of TE2 rate in case DPU enters/exits hibernation */
+		if (ctx->te2.option == TEX_OPT_CHANGEABLE && vrefresh != idle_vrefresh &&
+		    test_bit(FEAT_FRAME_AUTO, ctx->sw_status.feat) &&
+		    km4_set_te2_rate(ctx, enable ? idle_vrefresh : vrefresh))
+			notify_panel_te2_rate_changed(ctx, 0);
 		return false;
+	}
 
 	dev_dbg(ctx->dev, "%s: %d\n", __func__, enable);
 
@@ -1276,6 +1298,9 @@ static void km4_update_refresh_ctrl_feat(struct gs_panel *ctx, const struct gs_p
 	unsigned long *feat = ctx->sw_status.feat;
 	u32 min_vrefresh = ctx->sw_status.idle_vrefresh;
 	bool mrr_changed = false;
+	bool idle_vrefresh_changed = false;
+	bool feat_frame_auto_changed = false;
+	bool prev_feat_frame_auto_enabled = test_bit(FEAT_FRAME_AUTO, feat);
 	u32 vrefresh;
 	bool lp_mode;
 
@@ -1297,6 +1322,7 @@ static void km4_update_refresh_ctrl_feat(struct gs_panel *ctx, const struct gs_p
 			min_vrefresh = vrefresh;
 		}
 		ctx->sw_status.idle_vrefresh = min_vrefresh;
+		idle_vrefresh_changed = true;
 	}
 
 	if (ctrl & GS_PANEL_REFRESH_CTRL_FI_AUTO) {
@@ -1320,6 +1346,22 @@ static void km4_update_refresh_ctrl_feat(struct gs_panel *ctx, const struct gs_p
 		return;
 	}
 
+	/**
+	 * TODO(b/344478264): avoid setting idle 60Hz in the composer.
+	 *
+	 * 60Hz idle_vrefresh is not supported in non-60Hz mode. Default to 1Hz to save power.
+	 * Otherwise, set to 30Hz to respect proximity sensor's working frequency.
+	 */
+	if (test_bit(FEAT_FRAME_AUTO, feat) && ctx->sw_status.idle_vrefresh == 60 &&
+	    vrefresh != 60) {
+		dev_warn(ctx->dev, "%s: idle_vrefresh 60Hz is not supported in %uHz mode\n",
+			 __func__, vrefresh);
+		ctx->sw_status.idle_vrefresh = (ctx->te2.option == TEX_OPT_CHANGEABLE) ? 30 : 1;
+	}
+
+	if (prev_feat_frame_auto_enabled != test_bit(FEAT_FRAME_AUTO, feat))
+		feat_frame_auto_changed = true;
+
 	if (ctrl & GS_PANEL_REFRESH_CTRL_MRR_V1_OVER_V2) {
 		if (gs_is_vrr_mode(pmode)) {
 			dev_err(ctx->dev, "%s: using vrr display mode for mrr\n", __func__);
@@ -1334,9 +1376,27 @@ static void km4_update_refresh_ctrl_feat(struct gs_panel *ctx, const struct gs_p
 		ctx->gs_connector->ignore_op_rate = false;
 	}
 
-	if (ctx->sw_status.idle_vrefresh && ctx->sw_status.idle_vrefresh != vrefresh &&
-	    test_bit(FEAT_FRAME_AUTO, ctx->sw_status.feat) &&
-	    !test_bit(FEAT_FRAME_MANUAL_FI, ctx->sw_status.feat))
+	DPU_ATRACE_INT("idle_vrefresh", ctx->sw_status.idle_vrefresh);
+	DPU_ATRACE_INT("FEAT_FRAME_AUTO", test_bit(FEAT_FRAME_AUTO, feat));
+
+	/**
+	 * While DPU is not in hibernation, it may keep transferring frames and TE2 will remain
+	 * at peak refresh rate, e.g. 60Hz or 120Hz. Set and notify peak refresh rate even though
+	 * idle_vrefresh is at a lower rate (e.g. 30Hz) to avoid misalignment between the display
+	 * and ALSP.
+	 */
+	if (ctx->te2.option == TEX_OPT_CHANGEABLE && vrefresh != ctx->sw_status.idle_vrefresh &&
+	    test_bit(FEAT_FRAME_AUTO, feat) && !ctx->idle_data.self_refresh_active &&
+	    km4_set_te2_rate(ctx, vrefresh))
+		notify_panel_te2_rate_changed(ctx, 0);
+
+	/**
+	 * The changes of idle vrefresh and frame auto could trigger a 120Hz frame.
+	 * Check whether we need to adjust the timing of sending the commands in these
+	 * conditions.
+	 */
+	if (idle_vrefresh_changed && feat_frame_auto_changed &&
+	    !test_bit(FEAT_FRAME_MANUAL_FI, feat))
 		km4_check_command_timing_for_te2(ctx);
 
 	if (mrr_changed)
@@ -1358,9 +1418,11 @@ static void km4_refresh_ctrl(struct gs_panel *ctx)
 		/* TODO(b/323251635): parse frame count for inserting multiple frames */
 
 		dev_dbg(dev, "%s: manually inserting frame\n", __func__);
+		DPU_ATRACE_BEGIN("insert_frame");
 		GS_DCS_BUF_ADD_CMDLIST(dev, unlock_cmd_f0);
 		GS_DCS_BUF_ADD_CMD(dev, 0xF7, 0x02);
 		GS_DCS_BUF_ADD_CMDLIST_AND_FLUSH(dev, lock_cmd_f0);
+		DPU_ATRACE_END("insert_frame");
 	}
 
 	DPU_ATRACE_END(__func__);
@@ -1955,6 +2017,21 @@ static void km4_set_dimming(struct gs_panel *ctx, bool dimming_on)
 static void km4_mode_set(struct gs_panel *ctx, const struct gs_panel_mode *pmode)
 {
 	km4_change_frequency(ctx, pmode);
+
+	/**
+	 * TODO(b/344478250): update the refresh rate change in the composer
+	 *
+	 * Notify the changes of TE2 rate while switching the modes with different vrefresh in
+	 * case we miss the refresh rate change report from the composer.
+	 */
+	if (ctx->current_mode && ctx->te2.option == TEX_OPT_CHANGEABLE) {
+		u32 current_vrefresh = drm_mode_vrefresh(&ctx->current_mode->mode);
+		u32 target_vrefresh = drm_mode_vrefresh(&pmode->mode);
+
+		if (current_vrefresh != target_vrefresh && !ctx->idle_data.self_refresh_active &&
+		    km4_set_te2_rate(ctx, target_vrefresh))
+			notify_panel_te2_rate_changed(ctx, 0);
+	}
 }
 
 static bool km4_is_mode_seamless(const struct gs_panel *ctx, const struct gs_panel_mode *pmode)
