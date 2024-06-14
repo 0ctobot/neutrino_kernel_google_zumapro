@@ -1704,7 +1704,7 @@ static void cm4_set_lp_mode(struct gs_panel *ctx, const struct gs_panel_mode *pm
 
 	/* TODO(b/336580972): Support minRR and FI setting during AOD */
 
-	cm4_wait_for_vsync_done(ctx, pmode);
+	cm4_wait_for_vsync_done(ctx, ctx->current_mode);
 	GS_DCS_BUF_ADD_CMDLIST(dev, unlock_cmd_f0);
 	GS_DCS_BUF_ADD_CMDLIST(dev, aod_on);
 	/* Fixed TE: sync on */
@@ -1743,16 +1743,16 @@ static void cm4_set_nolp_mode(struct gs_panel *ctx, const struct gs_panel_mode *
 
 	PANEL_ATRACE_BEGIN(__func__);
 
-	cm4_wait_for_vsync_done(ctx, pmode);
+	cm4_wait_for_vsync_done(ctx, ctx->current_mode);
 	/* manual mode 30Hz */
 	cm4_enforce_manual_and_peak(ctx);
 
-	cm4_wait_for_vsync_done(ctx, pmode);
+	cm4_wait_for_vsync_done(ctx, ctx->current_mode);
 	GS_DCS_BUF_ADD_CMDLIST(dev, unlock_cmd_f0);
 	GS_DCS_BUF_ADD_CMDLIST(dev, aod_off);
 	GS_DCS_BUF_ADD_CMDLIST_AND_FLUSH(dev, lock_cmd_f0);
 
-	cm4_wait_for_vsync_done(ctx, pmode);
+	cm4_wait_for_vsync_done(ctx, ctx->current_mode);
 #ifndef PANEL_FACTORY_BUILD
 	cm4_update_refresh_ctrl_feat(ctx, pmode);
 #endif
