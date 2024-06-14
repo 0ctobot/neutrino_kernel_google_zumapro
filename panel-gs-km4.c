@@ -1737,7 +1737,11 @@ static void km4_set_nolp_mode(struct gs_panel *ctx, const struct gs_panel_mode *
 	/* manual mode 30Hz */
 	km4_enforce_manual_and_peak(ctx);
 
+	/* b/346215549
+	 * ensure AOD off command is sent a bit later than vsync done
+	 */
 	km4_wait_for_vsync_done(ctx, ctx->current_mode);
+	usleep_range(5000, 5000 + 100);
 	GS_DCS_BUF_ADD_CMDLIST(dev, unlock_cmd_f0);
 	GS_DCS_BUF_ADD_CMDLIST(dev, aod_off);
 	GS_DCS_BUF_ADD_CMDLIST_AND_FLUSH(dev, lock_cmd_f0);
@@ -2431,7 +2435,7 @@ static const struct gs_panel_mode_array km4_lp_modes = {
 			.gs_mode = {
 				.mode_flags = MIPI_DSI_CLOCK_NON_CONTINUOUS,
 				.vblank_usec = 120,
-				.te_usec = 693,
+				.te_usec = 1096,
 				.bpc = 8,
 				.dsc = KM4_WQHD_DSC,
 				.underrun_param = &underrun_param,
@@ -2449,7 +2453,7 @@ static const struct gs_panel_mode_array km4_lp_modes = {
 			.gs_mode = {
 				.mode_flags = MIPI_DSI_CLOCK_NON_CONTINUOUS,
 				.vblank_usec = 120,
-				.te_usec = 693,
+				.te_usec = 1096,
 				.bpc = 8,
 				.dsc = KM4_FHD_DSC,
 				.underrun_param = &underrun_param,
