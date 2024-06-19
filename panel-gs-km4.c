@@ -621,10 +621,7 @@ static void km4_set_panel_feat_te(struct gs_panel *ctx, unsigned long *feat,
 						   0x00, 0x1F);
 		} else {
 			/* Fixed TE */
-			if (!test_bit(FEAT_OP_NS, feat) && vrefresh == 60)
-				GS_DCS_BUF_ADD_CMD(dev, 0xB9, 0xD1);
-			else
-				GS_DCS_BUF_ADD_CMD(dev, 0xB9, 0x51);
+			GS_DCS_BUF_ADD_CMD(dev, 0xB9, 0x51);
 			/* TE width */
 			GS_DCS_BUF_ADD_CMD(dev, 0xB0, 0x00, 0x08, 0xB9);
 			if (test_bit(FEAT_OP_NS, feat))
