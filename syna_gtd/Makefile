@@ -16,5 +16,5 @@ include $(KERNEL_SRC)/../private/google-modules/soc/gs/Makefile.include
 EXTRA_CFLAGS	+= -DCONFIG_GOOG_TOUCH_INTERFACE
 
 modules modules_install clean:
-	$(MAKE) -C $(KERNEL_SRC) M=$(M) W=1 $(KBUILD_OPTIONS) \
+	$(MAKE) -C $(KERNEL_SRC) M=$(M) $(KBUILD_OPTIONS) \
 	EXTRA_CFLAGS="$(EXTRA_CFLAGS)" KBUILD_EXTRA_SYMBOLS="$(EXTRA_SYMBOLS)" $(@)
