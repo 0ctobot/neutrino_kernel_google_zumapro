@@ -748,7 +748,7 @@ static void cm4_set_panel_feat_tsp_sync(struct gs_panel *ctx) {
 }
 
 static void cm4_set_panel_feat_frequency(struct gs_panel *ctx, unsigned long *feat, u32 vrefresh,
-					 u32 idle_vrefresh, bool is_vrr)
+					 u32 idle_vrefresh, u32 te_freq, bool is_vrr)
 {
 	struct device *dev = ctx->dev;
 	u8 val;
@@ -866,7 +866,8 @@ static void cm4_set_panel_feat_frequency(struct gs_panel *ctx, unsigned long *fe
 		GS_DCS_BUF_ADD_CMD(dev, 0xBD, 0xA3);
 	} else { /* manual */
 		if (is_vrr) {
-			GS_DCS_BUF_ADD_CMD(dev, 0xBD, 0x21, 0x41);
+			/* set gating TE 240hz or 120hz */
+			GS_DCS_BUF_ADD_CMD(dev, 0xBD, 0x21, (te_freq == 240) ? 0x41 : 0x01);
 		} else {
 			GS_DCS_BUF_ADD_CMD(dev, 0xBD, 0x21);
 		}
@@ -1019,7 +1020,7 @@ static void cm4_set_panel_feat(struct gs_panel *ctx, const struct gs_panel_mode 
 	/*
 	 * Frequency setting: FI, frequency, idle frequency
 	 */
-	cm4_set_panel_feat_frequency(ctx, feat, vrefresh, idle_vrefresh, is_vrr);
+	cm4_set_panel_feat_frequency(ctx, feat, vrefresh, idle_vrefresh, te_freq, is_vrr);
 
 	/* Lock */
 	GS_DCS_BUF_ADD_CMDLIST_AND_FLUSH(dev, lock_cmd_f0);
