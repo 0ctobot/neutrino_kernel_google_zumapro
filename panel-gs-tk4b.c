@@ -203,6 +203,8 @@ static const struct gs_dsi_cmd tk4b_init_cmds[] = {
 	/* Extend AOD TE width from 1.1ms to 1.9ms */
 	GS_DSI_CMD(0x6F, 0x22),
 	GS_DSI_CMD(0xB3, 0x70, 0x7F),
+	/* Disable AOD power saving */
+	GS_DSI_CMD(0xC7, 0x00),
 
 	/* CMD2, Page4 */
 	GS_DSI_CMD(0xF0, 0x55, 0xAA, 0x52, 0x08, 0x04),
