@@ -548,6 +548,20 @@ static inline bool is_auto_mode_allowed(struct gs_panel *ctx)
 	return ctx->idle_data.panel_idle_enabled;
 }
 
+static void cm4_disable_sp(struct gs_panel *ctx)
+{
+	struct device *dev = ctx->dev;
+
+	GS_DCS_BUF_ADD_CMDLIST(dev, unlock_cmd_f0);
+	/* Disable SP accumulation */
+	GS_DCS_BUF_ADD_CMD(dev, 0xB0, 0x00, 0x67, 0x69);
+	GS_DCS_BUF_ADD_CMD(dev, 0x69, 0x00);
+	/* SP Off */
+	GS_DCS_BUF_ADD_CMD(dev, 0xB0, 0x00, 0x58, 0x69);
+	GS_DCS_BUF_ADD_CMD(dev, 0x69, 0x00);
+	GS_DCS_BUF_ADD_CMDLIST_AND_FLUSH(dev, lock_cmd_f0);
+}
+
 static u32 cm4_get_idle_mode(struct gs_panel *ctx, const struct gs_panel_mode *pmode)
 {
 	struct cm4_panel *spanel = to_spanel(ctx);
@@ -1753,8 +1767,8 @@ static void cm4_set_nolp_mode(struct gs_panel *ctx, const struct gs_panel_mode *
 	GS_DCS_BUF_ADD_CMDLIST(dev, unlock_cmd_f0);
 	GS_DCS_BUF_ADD_CMDLIST(dev, aod_off);
 	GS_DCS_BUF_ADD_CMDLIST_AND_FLUSH(dev, lock_cmd_f0);
-
 	cm4_wait_for_vsync_done(ctx, ctx->current_mode);
+	cm4_disable_sp(ctx);
 #ifndef PANEL_FACTORY_BUILD
 	cm4_update_refresh_ctrl_feat(ctx, pmode);
 #endif
@@ -1834,6 +1848,7 @@ static int cm4_enable(struct drm_panel *panel)
 
 		GS_DCS_WRITE_DELAY_CMD(dev, 120, MIPI_DCS_EXIT_SLEEP_MODE);
 		gs_panel_send_cmdset(ctx, &cm4_init_cmdset);
+		cm4_disable_sp(ctx);
 		cm4_te2_setting(ctx);
 		spanel->is_pixel_off = false;
 		ctx->dsi_hs_clk_mbps = MIPI_DSI_FREQ_MBPS_DEFAULT;
@@ -2566,6 +2581,8 @@ static void cm4_panel_init(struct gs_panel *ctx)
 {
 	struct cm4_panel *spanel = to_spanel(ctx);
 	const struct gs_panel_mode *pmode = ctx->current_mode;
+
+	cm4_disable_sp(ctx);
 
 #ifdef PANEL_FACTORY_BUILD
 	spanel->is_mrr_v1 = true;
