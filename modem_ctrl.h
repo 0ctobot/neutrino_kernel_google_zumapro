@@ -20,6 +20,12 @@ struct msi_reg_type {
 	u32 img_addr_hi;
 	u32 img_size;
 	u32 otp_version;
+	u32 unused[3];
+	u32 flag_cafe;
+	u32 sub_boot_stage;
+	u32 db_loop_cnt;
+	u32 db_received;
+	u32 boot_size;
 };
 
 enum boot_stage_bit_s5400 {
@@ -63,6 +69,12 @@ enum boot_stage_bit_s5300 {
 #define BOOT_STAGE_5400_DONE_MASK	(BIT(BOOT_STAGE_5400_DONE_BIT + 1) - 1)
 #define BOOT_STAGE_5300_DONE_MASK	(BIT(BOOT_STAGE_5300_DONE_BIT + 1) - 1)
 #define BOOT_STAGE_BL1_DOWNLOAD_DONE_MASK      (BIT(BOOT_STAGE_5400_BL1_DOWNLOAD_DONE_BIT + 1) - 1)
+
+#define CLEAR_MSI_REG_FIELD(mld, field) \
+	do { \
+		iowrite32(0, (mld)->msi_reg_base + offsetof(struct msi_reg_type, field)); \
+	} while (0)
+
 #endif
 
 void modem_ctrl_set_kerneltime(struct modem_ctl *mc);
