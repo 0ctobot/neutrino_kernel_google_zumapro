@@ -24,6 +24,9 @@
 #define WIDTH_MM 64
 #define HEIGHT_MM 145
 
+#define TK4B_BEH_LEN 10
+#define TK4B_READ_BEH_RETRY_COUNT 3
+
 #define PROJECT "TK4B"
 
 /**
@@ -309,7 +312,7 @@ static const struct gs_dsi_cmd tk4b_init_cmds[] = {
 	/* 60Hz */
 	GS_DSI_REV_CMD(PANEL_REV_LT(PANEL_REV_EVT1), 0x2F, 0x30),
 	GS_DSI_REV_CMD(PANEL_REV_LT(PANEL_REV_EVT1), 0x6D, 0x00, 0x00),
-	GS_DSI_DELAY_CMD(60, MIPI_DCS_EXIT_SLEEP_MODE)
+	GS_DSI_DELAY_CMD(70, MIPI_DCS_EXIT_SLEEP_MODE)
 };
 static DEFINE_GS_CMDSET(tk4b_init);
 
@@ -531,6 +534,38 @@ static void tk4b_dimming_frame_setting(struct gs_panel *ctx, u8 dimming_frame)
 	GS_DCS_BUF_ADD_CMD_AND_FLUSH(dev, 0xB2, dimming_frame, dimming_frame);
 }
 
+static int tk4b_read_beh(struct gs_panel *ctx)
+{
+	struct device *dev = ctx->dev;
+	struct mipi_dsi_device *dsi = to_mipi_dsi_device(dev);
+	u8 buf[TK4B_BEH_LEN] = {0};
+	int ret;
+
+	GS_DCS_WRITE_CMD(dev, 0xF0, 0x55, 0xAA, 0x52, 0x08, 0x04);
+
+	ret = mipi_dsi_dcs_read(dsi, 0xBE, buf, TK4B_BEH_LEN);
+	if (ret != TK4B_BEH_LEN) {
+		dev_warn(dev, "Unable to read BEh values (ret = %d)\n", ret);
+		return -EIO;
+	}
+
+	if (buf[0] != 0 || buf[1] != 2 || buf[2] != 0 || buf[5] != 0 || buf[7] != 0
+		|| buf[8] != 6 || buf[9] != 3)
+		return -EAGAIN;
+
+	return 0;
+}
+
+static void tk4b_change_spi_speed(struct gs_panel *ctx, int speed)
+{
+	struct device *dev = ctx->dev;
+
+	GS_DCS_BUF_ADD_CMD(dev, 0xF0, 0x55, 0xAA, 0x52, 0x08, 0x04);
+	GS_DCS_BUF_ADD_CMD(dev, 0xC2, (speed == 23)? 0x14 : 0x12);
+	GS_DCS_BUF_ADD_CMD(dev, 0xF0, 0x55, 0xAA, 0x52, 0x08, 0x08);
+	GS_DCS_BUF_ADD_CMD_AND_FLUSH(dev, 0xC2, (speed == 23)? 0x00 : 0x33);
+}
+
 static int tk4b_enable(struct drm_panel *panel)
 {
 	struct gs_panel *ctx = container_of(panel, struct gs_panel, base);
@@ -552,6 +587,28 @@ static int tk4b_enable(struct drm_panel *panel)
 
 	/* frequency */
 	tk4b_change_frequency(ctx, pmode);
+
+	if (tk4b_read_beh(ctx)) {
+		int retry;
+		int ret = 1;
+
+		dev_warn(dev, "Reading BEh failed at first try\n");
+
+		tk4b_change_spi_speed(ctx, 23);
+
+		for (retry = 0; retry < TK4B_READ_BEH_RETRY_COUNT && ret; retry++) {
+			GS_DCS_WRITE_DELAY_CMD(dev, 120, MIPI_DCS_ENTER_SLEEP_MODE);
+			GS_DCS_WRITE_DELAY_CMD(dev, 120, MIPI_DCS_EXIT_SLEEP_MODE);
+			ret = tk4b_read_beh(ctx);
+		}
+
+		if (retry == TK4B_READ_BEH_RETRY_COUNT)
+			dev_warn(dev, "Failed to read BEh %d times\n", retry);
+		else
+			dev_info(dev, "Success to read BEh after retry %d time(s)\n", retry);
+
+		tk4b_change_spi_speed(ctx, 34);
+	}
 
 	/* dimming frame */
 	tk4b_dimming_frame_setting(ctx, TK4B_DIMMING_FRAME);
