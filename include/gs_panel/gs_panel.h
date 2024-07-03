@@ -953,6 +953,8 @@ struct gs_panel_timestamps {
 	ktime_t last_lp_exit_ts;
 	ktime_t idle_exit_dimming_delay_ts;
 	ktime_t timeline_expected_present_ts;
+	/** @conn_last_present_ts: last expected present timestamp */
+	ktime_t conn_last_present_ts;
 };
 
 /**
@@ -1223,6 +1225,9 @@ struct gs_panel {
 
 	/** @frame_interval_us: frame interval of new timeline in us */
 	u32 frame_interval_us;
+
+	/** @skip_align: skip cmd align mechanism while this flag is set */
+	bool skip_cmd_align;
 };
 
 /* FUNCTIONS */
@@ -1576,6 +1581,20 @@ u32 panel_calc_gamma_2_2_luminance(const u32 value, const u32 max_value, const u
  * Return: prorated luminance
  */
 u32 panel_calc_linear_luminance(const u32 value, const u32 coef_x_1k, const int offset);
+
+/**
+ * gs_dsi_cmd_align() - wait until after sending DCS would not cause frame drop by gated TE
+ *
+ * @ctx: Reference to panel data
+ *
+ * Note this function can't be called within panel context's mode_lock mutex lock.
+ *
+ * This function calculates proper number of us to delay(the number might be 0),
+ * based on expected present timestamp, frame interval and panel property such as
+ * TE period, vrefresh rate, to prevent frame drop caused by unexpected gated TE.
+ * This function can be used if following sending DSI cmds would trigger panel self-scan behavior.
+ */
+void gs_dsi_cmd_align(struct gs_panel *ctx);
 
 /* HBM */
 

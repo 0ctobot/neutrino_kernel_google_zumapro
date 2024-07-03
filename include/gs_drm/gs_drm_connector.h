@@ -184,6 +184,12 @@ struct gs_drm_connector_state {
 	 * estimate next frame's present time.
 	 */
 	unsigned int frame_interval_us;
+
+	/**
+	 * @crtc_last_present_ts: record the most recent corresponding CRTC's expected present timestamp,
+	 * help connector target the proper timing for sending cmd.
+	 */
+	ktime_t crtc_last_present_ts;
 };
 
 #define to_gs_connector_state(connector_state) \

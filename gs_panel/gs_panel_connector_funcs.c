@@ -392,6 +392,9 @@ static void gs_panel_commit_properties(struct gs_panel *ctx,
 	if (conn_state->frame_interval_us)
 		ctx->frame_interval_us = conn_state->frame_interval_us;
 
+	/* assign target present timestamp to panel context */
+	ctx->timestamps.conn_last_present_ts = conn_state->crtc_last_present_ts;
+
 	mutex_unlock(&ctx->mode_lock);
 
 	if (!conn_state->pending_update_flags)
@@ -434,8 +437,18 @@ static void gs_panel_commit_properties(struct gs_panel *ctx,
 	if ((conn_state->pending_update_flags & GS_HBM_FLAG_BL_UPDATE) &&
 	    (ctx->bl->props.brightness != conn_state->brightness_level)) {
 		PANEL_ATRACE_BEGIN("set_bl");
+		/*
+		 * backlight update happens at the same time that atomic_commit is taking
+		 * place, any delays can be avoided by command alignment.
+		 */
+		mutex_lock(&ctx->mode_lock);
+		ctx->skip_cmd_align = true;
+		mutex_unlock(&ctx->mode_lock);
 		ctx->bl->props.brightness = conn_state->brightness_level;
 		backlight_update_status(ctx->bl);
+		mutex_lock(&ctx->mode_lock);
+		ctx->skip_cmd_align = false;
+		mutex_unlock(&ctx->mode_lock);
 		PANEL_ATRACE_END("set_bl");
 	}
 
