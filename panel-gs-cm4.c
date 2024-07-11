@@ -49,6 +49,14 @@ struct cm4_panel {
 	 * @is_mrr_v1: indicates panel is running in mrr v1 mode
 	 */
 	bool is_mrr_v1;
+	/**
+	 * @frame_rate: real time frame rate
+	 */
+	u16 frame_rate;
+	/**
+	 * @dbi_frame_count: frame counter to alternatively set dbi ref if frame rate > 60
+	 */
+	u64 dbi_frame_count;
 };
 
 #define to_spanel(ctx) container_of(ctx, struct cm4_panel, base)
@@ -199,6 +207,8 @@ static const struct drm_dsc_config fhd_pps_config = {
 
 #define CM4_TE_USEC_VRR_HS 273
 #define CM4_TE_USEC_VRR_NS 1633
+
+#define CM4_DBI_REF_DEFAULT 60
 
 #define WIDTH_MM 66
 #define HEIGHT_MM 147
@@ -910,6 +920,47 @@ static void cm4_set_panel_feat_frequency(struct gs_panel *ctx, unsigned long *fe
 	GS_DCS_BUF_ADD_CMDLIST(dev, freq_update);
 }
 
+static u8 cm4_calc_dbi_ref(struct gs_panel *ctx)
+{
+	struct cm4_panel *spanel = to_spanel(ctx);
+	u16 frame_rate = spanel->frame_rate;
+	u8 value = 60 / frame_rate;
+
+	if (frame_rate <= 60)
+		return value;
+
+	if (spanel->dbi_frame_count++ % (frame_rate == 120 ? 2 : 4))
+		return 1;
+	else
+		return 0;
+}
+
+static void cm4_set_dbi_ref(struct gs_panel *ctx, u8 value)
+{
+	struct device *dev = ctx->dev;
+
+	GS_DCS_BUF_ADD_CMDLIST(dev, unlock_cmd_f0);
+	GS_DCS_BUF_ADD_CMD(dev, 0xB0, 0x00, 0x67, 0x69);
+	GS_DCS_BUF_ADD_CMD(dev, 0x69, value);
+	GS_DCS_BUF_ADD_CMDLIST_AND_FLUSH(dev, lock_cmd_f0);
+	dev_dbg(dev, "%s: DBI: setting %#02X\n", __func__, value);
+}
+
+static void cm4_set_frame_rate(struct gs_panel *ctx, u16 frame_rate)
+{
+	struct device *dev = ctx->dev;
+	struct cm4_panel *spanel = to_spanel(ctx);
+
+	if (frame_rate == spanel->frame_rate ||
+		test_bit(FEAT_FRAME_AUTO, ctx->sw_status.feat) ||
+		ctx->sw_status.idle_vrefresh == drm_mode_vrefresh(&ctx->current_mode->mode))
+		return;
+
+	dev_dbg(dev, "%s: DBI: updating for %u fps\n", __func__, frame_rate);
+	spanel->frame_rate = frame_rate;
+	cm4_set_dbi_ref(ctx, cm4_calc_dbi_ref(ctx));
+}
+
 /**
  * cm4_set_panel_feat - configure panel features
  * @ctx: gs_panel struct
@@ -1016,6 +1067,10 @@ static void cm4_set_panel_feat(struct gs_panel *ctx, const struct gs_panel_mode 
 	/* TSP Sync setting */
 	if (enforce)
 		cm4_set_panel_feat_tsp_sync(ctx);
+
+	/* Reset DBI Reference frequency for auto and fixed peak manual mode */
+	if (test_bit(FEAT_FRAME_AUTO, feat) || idle_vrefresh == vrefresh)
+		cm4_set_dbi_ref(ctx, CM4_DBI_REF_DEFAULT);
 
 	/*
 	 * Frequency setting: FI, frequency, idle frequency
@@ -1721,6 +1776,7 @@ static void cm4_set_lp_mode(struct gs_panel *ctx, const struct gs_panel_mode *pm
 #else
 	cm4_set_panel_lp_feat(ctx, pmode);
 #endif
+	cm4_set_dbi_ref(ctx, CM4_DBI_REF_DEFAULT);
 	gs_panel_set_binned_lp_helper(ctx, brightness);
 
 	ctx->hw_status.vrefresh = 30;
@@ -1837,6 +1893,11 @@ static int cm4_enable(struct drm_panel *panel)
 		cm4_te2_setting(ctx);
 		spanel->is_pixel_off = false;
 		ctx->dsi_hs_clk_mbps = MIPI_DSI_FREQ_MBPS_DEFAULT;
+		if (test_bit(FEAT_OP_NS, ctx->sw_status.feat))
+			spanel->frame_rate = 60;
+		else
+			spanel->frame_rate = 120;
+		spanel->dbi_frame_count = 0;
 	}
 
 	GS_DCS_BUF_ADD_CMDLIST(dev, unlock_cmd_f0);
@@ -1964,8 +2025,16 @@ static void cm4_update_idle_state(struct gs_panel *ctx)
 
 static void cm4_commit_done(struct gs_panel *ctx)
 {
+	struct cm4_panel *spanel = to_spanel(ctx);
+
 	if (ctx->current_mode->gs_mode.is_lp_mode)
 		return;
+
+	if (!test_bit(FEAT_FRAME_AUTO, ctx->sw_status.feat) &&
+		spanel->frame_rate > 60 &&
+		ctx->sw_status.idle_vrefresh < drm_mode_vrefresh(&ctx->current_mode->mode)) {
+		cm4_set_dbi_ref(ctx, cm4_calc_dbi_ref(ctx));
+	}
 
 	/* skip idle update if going through RRS */
 	if (ctx->mode_in_progress == MODE_RES_IN_PROGRESS ||
@@ -2528,6 +2597,8 @@ static void cm4_panel_init(struct gs_panel *ctx)
 	spanel->is_mrr_v1 = false;
 	cm4_update_refresh_ctrl_feat(ctx, pmode);
 #endif
+	spanel->frame_rate = 120;
+	spanel->dbi_frame_count = 0;
 	ctx->hw_status.irc_mode = IRC_FLAT_DEFAULT;
 	/* default fixed TE2 120Hz */
 	ctx->te2.option = TEX_OPT_FIXED;
@@ -2610,6 +2681,7 @@ static const struct gs_panel_funcs cm4_gs_funcs = {
 #ifndef PANEL_FACTORY_BUILD
 	.refresh_ctrl = cm4_refresh_ctrl,
 #endif
+	.set_frame_rate = cm4_set_frame_rate,
 	.set_op_hz = cm4_set_op_hz,
 	.read_id = cm4_read_id,
 	.get_te_usec = cm4_get_te_usec,
