@@ -98,6 +98,62 @@ static void print_mc_state(struct modem_ctl *mc)
 		ap_status, phone_active, wrst, partial_reset);
 }
 
+static void print_msi_space(struct modem_ctl *mc)
+{
+	struct link_device *ld = get_current_link(mc->bootd);
+	struct mem_link_device *mld = to_mem_link_device(ld);
+	void __iomem *msi_address = mld->msi_reg_base;
+	int i = 0;
+
+	logbuffer_log(mc->log, "<%ps> offset: 0 4 8 C\n", CALLER);
+	for (i = 0x30; i < 0x50; i += 0x10) {
+		logbuffer_log(mc->log,
+			"MSI %04x: %08x %08x %08x %08x\n",
+			i,
+			ioread32(msi_address + i + 0x0),
+			ioread32(msi_address + i + 0x4),
+			ioread32(msi_address + i + 0x8),
+			ioread32(msi_address + i + 0xC));
+	}
+}
+
+void print_ep_config_space(struct modem_ctl *mc)
+{
+	int i;
+	u32 val1, val2, val3, val4;
+
+	logbuffer_log(mc->log, "<%ps> offset: 0 4 8 C\n", CALLER);
+	for (i = 0x100; i < 0x120; i += 0x10) {
+		pci_read_config_dword(mc->s51xx_pdev, i, &val1);
+		pci_read_config_dword(mc->s51xx_pdev, i + 0x4, &val2);
+		pci_read_config_dword(mc->s51xx_pdev, i + 0x8, &val3);
+		pci_read_config_dword(mc->s51xx_pdev, i + 0xC, &val4);
+		logbuffer_log(mc->log, "EP_CFG %04x: %08x %08x %08x %08x\n",
+			i, val1, val2, val3, val4);
+	}
+}
+
+void print_doorbell_region(struct modem_ctl *mc)
+{
+	struct s51xx_pcie *s51xx_pcie = pci_get_drvdata(mc->s51xx_pdev);
+	u32 i;
+
+	logbuffer_log(mc->log, "doorbell_addr = %#lx (PHYSICAL %#lx)\n",
+		(unsigned long)s51xx_pcie->doorbell_addr,
+		(unsigned long)s51xx_pcie->dbaddr_base);
+
+	logbuffer_log(mc->log, "<%ps> offset: 0 4 8 C\n", CALLER);
+	for (i = 0x9200; i < 0x9280; i+= 0x10) {
+		logbuffer_log(mc->log,
+			"DB %04x: %08x %08x %08x %08x\n",
+			i,
+			ioread32(s51xx_pcie->doorbell_addr + i + 0x0),
+			ioread32(s51xx_pcie->doorbell_addr + i + 0x4),
+			ioread32(s51xx_pcie->doorbell_addr + i + 0x8),
+			ioread32(s51xx_pcie->doorbell_addr + i + 0xC));
+	}
+}
+
 static void pcie_clean_dislink(struct modem_ctl *mc)
 {
 #if IS_ENABLED(CONFIG_CPIF_AP_SUSPEND_DURING_VOICE_CALL)
@@ -1094,7 +1150,7 @@ static void clear_boot_stage(struct modem_ctl *mc)
 {
 	struct link_device *ld = get_current_link(mc->iod);
 	struct mem_link_device *mld = to_mem_link_device(ld);
-	int val;
+	u32 boot_stage, sub_boot_stage;
 
 	if (mld->attrs & LINK_ATTR_XMIT_BTDLR_PCIE) {
 		if (!mld->msi_reg_base) {
@@ -1106,11 +1162,23 @@ static void clear_boot_stage(struct modem_ctl *mc)
 			}
 		}
 
-		iowrite32(0, mld->msi_reg_base +
+		/* Clear the boot_stage and sub_boot_stage fields */
+		CLEAR_MSI_REG_FIELD(mld, boot_stage);
+		boot_stage = ioread32(mld->msi_reg_base +
 			offsetof(struct msi_reg_type, boot_stage));
-		val = ioread32(mld->msi_reg_base +
-			offsetof(struct msi_reg_type, boot_stage));
-		mif_info("Clear boot_stage == 0x%X\n", val);
+		CLEAR_MSI_REG_FIELD(mld, sub_boot_stage);
+		sub_boot_stage = ioread32(mld->msi_reg_base +
+			offsetof(struct msi_reg_type, sub_boot_stage));
+
+		/* Clear other boot stage related fields */
+		CLEAR_MSI_REG_FIELD(mld, flag_cafe);
+		CLEAR_MSI_REG_FIELD(mld, otp_version);
+		CLEAR_MSI_REG_FIELD(mld, db_loop_cnt);
+		CLEAR_MSI_REG_FIELD(mld, db_received);
+		CLEAR_MSI_REG_FIELD(mld, boot_size);
+
+		mif_info("Clear boot_stage, sub_boot_stage to %X, %X\n", boot_stage,
+			sub_boot_stage);
 	}
 }
 
@@ -1535,35 +1603,45 @@ static int check_boot_status(struct modem_ctl *mc, unsigned int count, bool chec
 	struct mem_link_device *mld = to_mem_link_device(ld);
 	bool check_done = false;
 	int cnt = 0;
-	int val;
+	u32 val, otp_ver, sub_boot_stage;
 
 	do {
 		/* ensure that CP updates the value */
 		msleep(20);
 
-		val = (int)ioread32(mld->msi_reg_base +
+		val = ioread32(mld->msi_reg_base +
 			offsetof(struct msi_reg_type, boot_stage));
-		if (val == (check_bl1 ? BOOT_STAGE_BL1_DOWNLOAD_DONE_MASK : BOOT_STAGE_5400_DONE_MASK)) {
+		otp_ver = ioread32(mld->msi_reg_base +
+			offsetof(struct msi_reg_type, otp_version));
+		sub_boot_stage = ioread32(mld->msi_reg_base +
+			offsetof(struct msi_reg_type, sub_boot_stage));
+		mif_info_limited("boot_stage: %X sub_boot_stage: %X otp_version: %X (cnt %d)\n",
+			val, sub_boot_stage, otp_ver, cnt);
+		if (val == (check_bl1 ? BOOT_STAGE_BL1_DOWNLOAD_DONE_MASK
+				: BOOT_STAGE_5400_DONE_MASK)) {
 			check_done = true;
 			break;
 		}
-
-		mif_info_limited("boot_stage == 0x%X (cnt %d)\n", val, cnt);
 	} while (++cnt < count);
 
 	if (!check_done) {
 		mif_err("ERR! boot_stage == 0x%X (cnt %d)\n", val, cnt);
-		return -EFAULT;
+		goto status_error;
 	}
 
 	mif_info("boot_stage == 0x%X (cnt %d)\n", val, cnt);
-
-	val = (int)ioread32(mld->msi_reg_base + offsetof(struct msi_reg_type, otp_version));
-	mif_info("otp_version == 0x%X\n", val);
 	if (cnt == 0)
 		msleep(10);
 
 	return 0;
+
+status_error:
+	print_msi_space(mc);
+	if (mc->pcie_powered_on && pcie_check_link_status(mc->pcie_ch_num)) {
+		print_ep_config_space(mc);
+		print_doorbell_region(mc);
+	}
+	return -EFAULT;
 }
 
 static int set_cp_rom_boot_img(struct mem_link_device *mld)
