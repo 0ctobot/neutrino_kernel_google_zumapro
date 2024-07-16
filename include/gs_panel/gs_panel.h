@@ -795,6 +795,14 @@ struct gs_panel_desc {
 	u32 default_dsi_hs_clk_mbps;
 	/** @refresh_on_lp: inform composer that we need a frame update while entering AOD or not */
 	bool refresh_on_lp;
+
+	/**
+	 * @frame_interval_us: store frame interval information, it provides a hint about the
+	 * next frame(s) cadence. This information can be utilized by driver to estimate
+	 * next frame's present time. The unit is microsecond.
+	 */
+	u32 frame_interval_us;
+
 	/** @normal_mode_work_delay_ms: period of the periodic work in normal mode */
 	const u32 normal_mode_work_delay_ms;
 	/**
