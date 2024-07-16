@@ -236,6 +236,9 @@ static int gs_panel_connector_get_property(struct gs_drm_connector *gs_connector
 	} else if (property == p->mipi_sync) {
 		*val = gs_state->mipi_sync;
 		dev_dbg(ctx->dev, "%s: mipi_sync(0x%llx)\n", __func__, *val);
+	} else if (property == p->frame_interval) {
+		*val = gs_state->frame_interval_us * NSEC_PER_USEC;
+		dev_dbg(ctx->dev, "%s: frame_interval(%llu)\n", __func__, *val);
 	} else
 		return -EINVAL;
 
@@ -277,6 +280,12 @@ static int gs_panel_connector_set_property(struct gs_drm_connector *gs_connector
 	} else if (property == p->mipi_sync) {
 		gs_state->mipi_sync = val;
 		dev_dbg(ctx->dev, "%s: mipi_sync(0x%lx)\n", __func__, gs_state->mipi_sync);
+	} else if (property == p->frame_interval) {
+		if (val != 0)
+			do_div(val, NSEC_PER_USEC);
+		gs_state->frame_interval_us = val;
+		PANEL_ATRACE_INT("prop_frame_interval", val);
+		dev_dbg(ctx->dev, "%s: frame interval(%u)us\n", __func__, gs_state->frame_interval_us);
 	} else {
 		dev_err(ctx->dev, "property not recognized within %s- \n", __func__);
 		return -EINVAL;
@@ -378,6 +387,12 @@ static void gs_panel_commit_properties(struct gs_panel *ctx,
 	const struct gs_panel_funcs *gs_panel_func = ctx->desc->gs_panel_func;
 	bool mipi_sync;
 	bool ghbm_updated = false;
+
+	mutex_lock(&ctx->mode_lock);
+	if (conn_state->frame_interval_us)
+		ctx->frame_interval_us = conn_state->frame_interval_us;
+
+	mutex_unlock(&ctx->mode_lock);
 
 	if (!conn_state->pending_update_flags)
 		return;
@@ -569,6 +584,7 @@ static int gs_panel_connector_attach_properties(struct gs_panel *ctx)
 	drm_object_attach_property(obj, p->rr_switch_duration, desc->rr_switch_duration);
 	drm_object_attach_property(obj, p->operation_rate, 0);
 	drm_object_attach_property(obj, p->refresh_on_lp, desc->refresh_on_lp);
+	drm_object_attach_property(obj, p->frame_interval, desc->frame_interval_us);
 
 	if (desc->brightness_desc->brt_capability) {
 		ret = gs_panel_attach_brightness_capability(ctx->gs_connector,
