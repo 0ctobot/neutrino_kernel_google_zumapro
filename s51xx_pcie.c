@@ -438,7 +438,7 @@ static int s51xx_pcie_probe(struct pci_dev *pdev, const struct pci_device_id *en
 		/* Set doorbell base address as pcie outbound base address */
 		s51xx_pcie->dbaddr_base = pci_resource_start(pdev, 0);
 		s51xx_pcie->doorbell_addr = devm_ioremap(&pdev->dev,
-						s51xx_pcie->dbaddr_base, SZ_4K);
+						s51xx_pcie->dbaddr_base, SZ_64K);
 
 		/*
 		ret = abox_pci_doorbell_paddr_set(s51xx_pcie->dbaddr_base);
