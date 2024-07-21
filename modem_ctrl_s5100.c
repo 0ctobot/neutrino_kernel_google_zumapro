@@ -1101,8 +1101,10 @@ static void gpio_power_off_cp_with_s5910_on(struct modem_ctl *mc)
 	/* Turn on S5910 clock buffer after AP resets CP */
 	if (mc->cp_ever_powered_on && mc->s5910_dev) {
 		udelay(10);
+		s5910_check_lpm_mode(mc->s5910_dev);
 		s5910_turn_on_sequence(mc->s5910_dev);
 		udelay(200);
+		s5910_check_lpm_mode(mc->s5910_dev);
 	}
 	mif_gpio_set_value(&mc->cp_gpio[CP_GPIO_AP2CP_CP_WRST_N], 0, 0);
 	mif_gpio_set_value(&mc->cp_gpio[CP_GPIO_AP2CP_CP_PWR], 0, 30);
