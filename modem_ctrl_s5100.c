@@ -1088,9 +1088,31 @@ static void gpio_power_off_cp(struct modem_ctl *mc)
 #endif
 }
 
+static void gpio_power_off_cp_with_s5910_on(struct modem_ctl *mc)
+{
+#if IS_ENABLED(CONFIG_CP_WRESET_WA)
+	mif_gpio_set_value(&mc->cp_gpio[CP_GPIO_AP2CP_NRESET], 0, 50);
+	mif_gpio_set_value(&mc->cp_gpio[CP_GPIO_AP2CP_CP_PWR], 0, 0);
+#else
+	mif_gpio_set_value(&mc->cp_gpio[CP_GPIO_AP2CP_WAKEUP], 1, 10);
+	mif_gpio_set_value(&mc->cp_gpio[CP_GPIO_AP2CP_WAKEUP], 0, 0);
+	mif_gpio_set_value(&mc->cp_gpio[CP_GPIO_AP2CP_NRESET], 0, 0);
+
+	/* Turn on S5910 clock buffer after AP resets CP */
+	if (mc->cp_ever_powered_on && mc->s5910_dev) {
+		udelay(10);
+		s5910_turn_on_sequence(mc->s5910_dev);
+		udelay(200);
+	}
+	mif_gpio_set_value(&mc->cp_gpio[CP_GPIO_AP2CP_CP_WRST_N], 0, 0);
+	mif_gpio_set_value(&mc->cp_gpio[CP_GPIO_AP2CP_CP_PWR], 0, 30);
+	mif_gpio_set_value(&mc->cp_gpio[CP_GPIO_AP2CP_PM_WRST_N], 0, 50);
+#endif
+}
+
 static void gpio_power_offon_cp(struct modem_ctl *mc)
 {
-	gpio_power_off_cp(mc);
+	gpio_power_off_cp_with_s5910_on(mc);
 
 	mc->cp_ever_powered_on = true;
 
