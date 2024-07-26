@@ -426,13 +426,6 @@ struct gs_panel_funcs {
 	void (*refresh_ctrl)(struct gs_panel *gs_panel);
 
 	/**
-	 * @set_frame_rate
-	 *
-	 * Set the current frame rate.
-	 */
-	void (*set_frame_rate)(struct gs_panel *gs_panel, u16 frame_rate);
-
-	/**
 	 * @set_op_hz
 	 *
 	 * set display panel working on specified operation rate.
@@ -1214,30 +1207,6 @@ struct gs_panel {
 };
 
 /* FUNCTIONS */
-static inline const char *
-gs_get_panel_state_string(enum gs_panel_state panel_state)
-{
-	switch (panel_state) {
-	case GPANEL_STATE_UNINITIALIZED:
-		return "UNINITIALIZED";
-	case GPANEL_STATE_HANDOFF:
-		return "HANDOFF";
-	case GPANEL_STATE_HANDOFF_MODESET:
-		return "HANDOFF_MODESET";
-	case GPANEL_STATE_OFF:
-		return "OFF";
-	case GPANEL_STATE_NORMAL:
-		return "NORMAL";
-	case GPANEL_STATE_LP:
-		return "LP";
-	case GPANEL_STATE_MODESET:
-		return "MODESET";
-	case GPANEL_STATE_BLANK:
-		return "BLANK";
-	default:
-		return "UNKNOWN";
-	}
-}
 
 /* accessors */
 

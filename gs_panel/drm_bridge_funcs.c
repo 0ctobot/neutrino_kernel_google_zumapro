@@ -78,8 +78,7 @@ void gs_panel_set_backlight_state(struct gs_panel *ctx, enum gs_panel_state pane
 
 	if (state_changed) {
 		notify_panel_mode_changed(ctx);
-		dev_info(ctx->dev, "panel: %s | bl: brightness@%u, state@%#x\n",
-			gs_get_panel_state_string(panel_state), bl->props.brightness,
+		dev_dbg(ctx->dev, "%s: panel:%d, bl:0x%x\n", __func__, panel_state,
 			bl->props.state);
 	}
 }
@@ -749,6 +748,7 @@ static void gs_panel_bridge_disable(struct drm_bridge *bridge,
 			ctx->panel_state = GPANEL_STATE_BLANK;
 		} else {
 			ctx->panel_state = GPANEL_STATE_OFF;
+			ctx->mode_in_progress = MODE_DONE;
 
 			if (gs_panel_has_func(ctx, run_normal_mode_work)) {
 				dev_dbg(dev, "%s: cancel normal_mode_work\n", __func__);
