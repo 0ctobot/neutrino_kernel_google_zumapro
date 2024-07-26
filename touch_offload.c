@@ -46,8 +46,8 @@ static int pack_frame(struct touch_offload_context *context,
 	/* TODO: compute precise size of a packed frame */
 	int max_packed_frame_size =
 		sizeof(struct touch_offload_frame) +
-		TOUCH_OFFLOAD_DATA_SIZE_2D(context->caps.heatmap_height,
-					   context->caps.heatmap_width) *
+		TOUCH_OFFLOAD_DATA_SIZE_2D(context->caps.rx_size,
+					   context->caps.tx_size) *
 		MAX_CHANNELS;
 	/* TODO: preallocate memory for a single packed frame */
 	char *packed_mem = NULL;
@@ -75,12 +75,12 @@ static int pack_frame(struct touch_offload_context *context,
 			channel_size = TOUCH_OFFLOAD_FRAME_SIZE_COORD;
 		else if ((frame->channel_type[i] & TOUCH_SCAN_TYPE_MUTUAL) != 0)
 			channel_size =
-			    TOUCH_OFFLOAD_FRAME_SIZE_2D(context->caps.heatmap_height,
-							context->caps.heatmap_width);
+			    TOUCH_OFFLOAD_FRAME_SIZE_2D(context->caps.rx_size,
+							context->caps.tx_size);
 		else if ((frame->channel_type[i] & TOUCH_SCAN_TYPE_SELF) != 0)
 			channel_size =
-			    TOUCH_OFFLOAD_FRAME_SIZE_1D(context->caps.heatmap_height,
-							context->caps.heatmap_width);
+			    TOUCH_OFFLOAD_FRAME_SIZE_1D(context->caps.rx_size,
+							context->caps.tx_size);
 		else if (frame->channel_type[i] ==
 				CONTEXT_CHANNEL_TYPE_DRIVER_STATUS)
 			channel_size = TOUCH_OFFLOAD_FRAME_SIZE_DRIVER_STATUS;
@@ -279,8 +279,8 @@ static int touch_offload_allocate_buffers(struct touch_offload_context *context,
 				frame->channel_type[chan] =
 				    TOUCH_SCAN_TYPE_MUTUAL | mask;
 				size = TOUCH_OFFLOAD_FRAME_SIZE_2D(
-						context->caps.heatmap_height,
-						context->caps.heatmap_width);
+						context->caps.rx_size,
+						context->caps.tx_size);
 				frame->channel_data[chan] = kzalloc(size,
 								    GFP_KERNEL);
 				if (frame->channel_data[chan] == NULL)
@@ -302,8 +302,8 @@ static int touch_offload_allocate_buffers(struct touch_offload_context *context,
 				frame->channel_type[chan] =
 					TOUCH_SCAN_TYPE_SELF | mask;
 				size = TOUCH_OFFLOAD_FRAME_SIZE_1D(
-						context->caps.heatmap_height,
-						context->caps.heatmap_width);
+						context->caps.rx_size,
+						context->caps.tx_size);
 				frame->channel_data[chan] = kzalloc(size,
 								GFP_KERNEL);
 				if (frame->channel_data[chan] == NULL)

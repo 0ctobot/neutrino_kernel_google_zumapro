@@ -112,7 +112,6 @@ struct g_usi_context {
 					 * the previous one. We notify that by creating new input
 					 * event node with the new vid/pid.
 					 */
-	bool recreate_evdev_enabled;	/* recreate input event node is enabled ? */
 
 	bool is_flex_beacon;		/* true: flex beacon, false: standard beacon */
 	enum g_usi_op_status status;	/* pen operation status */
@@ -277,8 +276,7 @@ int goog_usi_report_gid(g_usi_handle_t handle, const u8 *gid)
 		usi_ctx->id.product = pid;
 
 		/* create new input node when the new stylus is unpaired */
-		if (usi_ctx->recreate_evdev_enabled)
-			usi_ctx->create_new_input_dev_flag = true;
+		usi_ctx->create_new_input_dev_flag = true;
 	}
 
 	usi_ctx->status = G_USI_OP_IDENTIFIED; /* Parsing GID is done. The stylus is identified */
@@ -2524,38 +2522,6 @@ setget_error:
 	return ret;
 }
 
-static ssize_t recreate_evdev_enabled_store(struct device *dev, struct device_attribute *attr,
-					    const char *buf, size_t count)
-{
-	struct g_usi_context *usi_ctx = container_of(dev_get_drvdata(dev), struct g_usi_context,
-						     g_usi_hidraw_dev);
-
-	if (kstrtobool(buf, &usi_ctx->recreate_evdev_enabled))
-		G_USI_ERR("error: invalid input!\n");
-
-	return count;
-}
-
-static ssize_t recreate_evdev_enabled_show(struct device *dev, struct device_attribute *attr,
-					   char *buf)
-{
-	struct g_usi_context *usi_ctx = container_of(dev_get_drvdata(dev), struct g_usi_context,
-						     g_usi_hidraw_dev);
-
-	return sysfs_emit(buf, "recreate_evdev_enabled : %d\n", usi_ctx->recreate_evdev_enabled);
-}
-
-static DEVICE_ATTR_RW(recreate_evdev_enabled);
-
-static struct attribute *g_usi_attrs[] = {
-	&dev_attr_recreate_evdev_enabled.attr,
-	NULL,
-};
-
-static const struct attribute_group g_usi_attrs_group = {
-	.attrs = g_usi_attrs,
-};
-
 static const struct file_operations g_usi_fops = {
 	.owner = THIS_MODULE,
 	.open = device_open,
@@ -2577,23 +2543,11 @@ static int g_usi_create_hidraw(struct g_usi_context *usi_ctx)
 		return ret;
 	}
 
-	ret = sysfs_create_group(&usi_ctx->g_usi_hidraw_dev.this_device->kobj, &g_usi_attrs_group);
-	if (ret) {
-		G_USI_ERR("failed to create attributes : %d\n", ret);
-		goto error_sysfs_create_group;
-	}
-
 	return 0;
-
-error_sysfs_create_group:
-	misc_deregister(&usi_ctx->g_usi_hidraw_dev);
-
-	return ret;
 }
 
 static void g_usi_remove_hidraw(struct g_usi_context *usi_ctx)
 {
-	sysfs_remove_group(&usi_ctx->g_usi_hidraw_dev.this_device->kobj, &g_usi_attrs_group);
 	misc_deregister(&usi_ctx->g_usi_hidraw_dev);
 }
 
@@ -2649,7 +2603,6 @@ g_usi_handle_t goog_usi_register(struct g_usi *usi)
 	 */
 	usi_ctx->id.vendor = 0xFFFF;
 	usi_ctx->id.product = 0xFFFF;
-	usi_ctx->recreate_evdev_enabled = 1;
 	usi_ctx->input_dev = g_usi_register_input(usi_ctx);
 	if (!usi_ctx->input_dev) {
 		G_USI_ERR("Cannot create input device");
