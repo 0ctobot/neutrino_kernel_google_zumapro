@@ -40,14 +40,6 @@ struct km4_panel {
 	 * @is_mrr_v1: indicates panel is running in mrr v1 mode
 	 */
 	bool is_mrr_v1;
-	/**
-	 * @frame_rate: real time frame rate
-	 */
-	u16 frame_rate;
-	/**
-	 * @dbi_frame_count: frame counter to alternatively set dbi ref if frame rate > 60
-	 */
-	u64 dbi_frame_count;
 };
 
 #define to_spanel(ctx) container_of(ctx, struct km4_panel, base)
@@ -198,8 +190,6 @@ static const struct drm_dsc_config fhd_pps_config = {
 
 #define KM4_TE_USEC_VRR_HS 273
 #define KM4_TE_USEC_VRR_NS 1588
-
-#define KM4_DBI_REF_DEFAULT 60
 
 #define WIDTH_MM 70
 #define HEIGHT_MM 156
@@ -547,6 +537,20 @@ static inline bool is_auto_mode_allowed(struct gs_panel *ctx)
 	}
 
 	return ctx->idle_data.panel_idle_enabled;
+}
+
+static void km4_disable_sp(struct gs_panel *ctx)
+{
+	struct device *dev = ctx->dev;
+
+	GS_DCS_BUF_ADD_CMDLIST(dev, unlock_cmd_f0);
+	/* Disable SP accumulation */
+	GS_DCS_BUF_ADD_CMD(dev, 0xB0, 0x00, 0x67, 0x69);
+	GS_DCS_BUF_ADD_CMD(dev, 0x69, 0x00);
+	/* SP Off */
+	GS_DCS_BUF_ADD_CMD(dev, 0xB0, 0x00, 0x58, 0x69);
+	GS_DCS_BUF_ADD_CMD(dev, 0x69, 0x00);
+	GS_DCS_BUF_ADD_CMDLIST_AND_FLUSH(dev, lock_cmd_f0);
 }
 
 static u32 km4_get_idle_mode(struct gs_panel *ctx, const struct gs_panel_mode *pmode)
@@ -913,47 +917,6 @@ static void km4_set_panel_feat_frequency(struct gs_panel *ctx, unsigned long *fe
 	GS_DCS_BUF_ADD_CMDLIST(dev, freq_update);
 }
 
-static u8 km4_calc_dbi_ref(struct gs_panel *ctx)
-{
-	struct km4_panel *spanel = to_spanel(ctx);
-	u16 frame_rate = spanel->frame_rate;
-	u8 value = 60 / frame_rate;
-
-	if (frame_rate <= 60)
-		return value;
-
-	if (spanel->dbi_frame_count++ % (frame_rate == 120 ? 2 : 4))
-		return 1;
-	else
-		return 0;
-}
-
-static void km4_set_dbi_ref(struct gs_panel *ctx, u8 value)
-{
-	struct device *dev = ctx->dev;
-
-	GS_DCS_BUF_ADD_CMDLIST(dev, unlock_cmd_f0);
-	GS_DCS_BUF_ADD_CMD(dev, 0xB0, 0x00, 0x67, 0x69);
-	GS_DCS_BUF_ADD_CMD(dev, 0x69, value);
-	GS_DCS_BUF_ADD_CMDLIST_AND_FLUSH(dev, lock_cmd_f0);
-	dev_dbg(dev, "%s: DBI: setting 0x%02X\n", __func__, value);
-}
-
-static void km4_set_frame_rate(struct gs_panel *ctx, u16 frame_rate)
-{
-	struct device *dev = ctx->dev;
-	struct km4_panel *spanel = to_spanel(ctx);
-
-	if (frame_rate == spanel->frame_rate ||
-		test_bit(FEAT_FRAME_AUTO, ctx->sw_status.feat) ||
-		ctx->sw_status.idle_vrefresh == drm_mode_vrefresh(&ctx->current_mode->mode))
-		return;
-
-	dev_dbg(dev, "%s: DBI: updating for %u fps\n", __func__, frame_rate);
-	spanel->frame_rate = frame_rate;
-	km4_set_dbi_ref(ctx, km4_calc_dbi_ref(ctx));
-}
-
 /**
  * km4_set_panel_feat - configure panel features
  * @ctx: gs_panel struct
@@ -1060,11 +1023,6 @@ static void km4_set_panel_feat(struct gs_panel *ctx, const struct gs_panel_mode 
 	/* TSP Sync setting */
 	if (enforce)
 		km4_set_panel_feat_tsp_sync(ctx);
-
-
-	/* Reset DBI Reference frequency for auto and fixed peak manual mode */
-	if (test_bit(FEAT_FRAME_AUTO, feat) || idle_vrefresh == vrefresh)
-		km4_set_dbi_ref(ctx, KM4_DBI_REF_DEFAULT);
 
 	/*
 	 * Frequency setting: FI, frequency, idle frequency
@@ -1767,7 +1725,6 @@ static void km4_set_lp_mode(struct gs_panel *ctx, const struct gs_panel_mode *pm
 #else
 	km4_set_panel_lp_feat(ctx, pmode);
 #endif
-	km4_set_dbi_ref(ctx, KM4_DBI_REF_DEFAULT);
 	gs_panel_set_binned_lp_helper(ctx, brightness);
 
 	ctx->hw_status.vrefresh = 30;
@@ -1800,8 +1757,8 @@ static void km4_set_nolp_mode(struct gs_panel *ctx, const struct gs_panel_mode *
 	GS_DCS_BUF_ADD_CMDLIST(dev, unlock_cmd_f0);
 	GS_DCS_BUF_ADD_CMDLIST(dev, aod_off);
 	GS_DCS_BUF_ADD_CMDLIST_AND_FLUSH(dev, lock_cmd_f0);
-
 	km4_wait_for_vsync_done(ctx, ctx->current_mode);
+	km4_disable_sp(ctx);
 #ifndef PANEL_FACTORY_BUILD
 	km4_update_refresh_ctrl_feat(ctx, pmode);
 #endif
@@ -1881,14 +1838,10 @@ static int km4_enable(struct drm_panel *panel)
 
 		GS_DCS_WRITE_DELAY_CMD(dev, 120, MIPI_DCS_EXIT_SLEEP_MODE);
 		gs_panel_send_cmdset(ctx, &km4_init_cmdset);
+		km4_disable_sp(ctx);
 		km4_te2_setting(ctx);
 		spanel->is_pixel_off = false;
 		ctx->dsi_hs_clk_mbps = MIPI_DSI_FREQ_MBPS_DEFAULT;
-		if (test_bit(FEAT_OP_NS, ctx->sw_status.feat))
-			spanel->frame_rate = 60;
-		else
-			spanel->frame_rate = 120;
-		spanel->dbi_frame_count = 0;
 	}
 
 	GS_DCS_BUF_ADD_CMDLIST(dev, unlock_cmd_f0);
@@ -2016,16 +1969,8 @@ static void km4_update_idle_state(struct gs_panel *ctx)
 
 static void km4_commit_done(struct gs_panel *ctx)
 {
-	struct km4_panel *spanel = to_spanel(ctx);
-
 	if (ctx->current_mode->gs_mode.is_lp_mode)
 		return;
-
-	if (!test_bit(FEAT_FRAME_AUTO, ctx->sw_status.feat) &&
-		spanel->frame_rate > 60 &&
-		ctx->sw_status.idle_vrefresh < drm_mode_vrefresh(&ctx->current_mode->mode)) {
-		km4_set_dbi_ref(ctx, km4_calc_dbi_ref(ctx));
-	}
 
 	/* skip idle update if going through RRS */
 	if (ctx->mode_in_progress == MODE_RES_IN_PROGRESS ||
@@ -2649,6 +2594,8 @@ static void km4_panel_init(struct gs_panel *ctx)
 	struct km4_panel *spanel = to_spanel(ctx);
 	const struct gs_panel_mode *pmode = ctx->current_mode;
 
+	km4_disable_sp(ctx);
+
 #ifdef PANEL_FACTORY_BUILD
 	spanel->is_mrr_v1 = true;
 	ctx->idle_data.panel_idle_enabled = false;
@@ -2657,8 +2604,6 @@ static void km4_panel_init(struct gs_panel *ctx)
 	spanel->is_mrr_v1 = false;
 	km4_update_refresh_ctrl_feat(ctx, pmode);
 #endif
-	spanel->frame_rate = 120;
-	spanel->dbi_frame_count = 0;
 	ctx->hw_status.irc_mode = IRC_FLAT_DEFAULT;
 	/* default fixed TE2 120Hz */
 	ctx->te2.option = TEX_OPT_FIXED;
@@ -2737,7 +2682,6 @@ static const struct gs_panel_funcs km4_gs_funcs = {
 #ifndef PANEL_FACTORY_BUILD
 	.refresh_ctrl = km4_refresh_ctrl,
 #endif
-	.set_frame_rate = km4_set_frame_rate,
 	.set_op_hz = km4_set_op_hz,
 	.read_id = km4_read_id,
 	.get_te_usec = km4_get_te_usec,
