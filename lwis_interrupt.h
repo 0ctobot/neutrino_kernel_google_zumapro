@@ -82,10 +82,8 @@ struct lwis_interrupt {
 	struct list_head leaf_nodes;
 	/* Store the combined IRQ mask value */
 	uint64_t mask_value;
-	/* If IRQ mask value is updated */
-	bool has_mask_update;
-	/* Mask/Unmask the interrupt  */
-	bool is_set_reg_bit;
+	/* If IRQ mask value is written */
+	bool has_mask_value;
 };
 
 /*

@@ -18,22 +18,14 @@
 
 #define LWIS_CLIENTS_HASH_BITS 8
 
-extern bool lwis_fence_debug;
-#define lwis_debug_info(fmt, ...)                                                                  \
-	({                                                                                         \
-		if (unlikely(lwis_fence_debug)) {                                                  \
-			pr_info(fmt, ##__VA_ARGS__);                                               \
-		}                                                                                  \
-	})
+/* Randomly generated number used to identify lwis_fence objects */
+#define LWIS_FENCE_IDENTIFIER 0x75A2C6BC
 
-#define lwis_debug_dev_info(dev, fmt, ...)                                                         \
-	({                                                                                         \
-		if (unlikely(lwis_fence_debug)) {                                                  \
-			dev_info(dev, fmt, ##__VA_ARGS__);                                         \
-		}                                                                                  \
-	})
+extern bool lwis_fence_debug;
 
 struct lwis_fence {
+	/* Used to identify the structure when casting from void pointer */
+	int struct_id;
 	int fd;
 	int status;
 	spinlock_t lock;
@@ -62,6 +54,8 @@ struct lwis_fence_pending_signal {
  *  lwis_fence_create: Create a new lwis_fence.
  */
 int lwis_fence_create(struct lwis_device *lwis_dev);
+
+int ioctl_lwis_fence_create(struct lwis_device *lwis_dev, int32_t __user *msg);
 
 /*
  *  lwis_fence_get: Get the file pointer for the lwis_fence associated with the fd.
@@ -92,10 +86,9 @@ int lwis_parse_trigger_condition(struct lwis_client *client, struct lwis_transac
 int lwis_fence_signal(struct lwis_fence *lwis_fence, int status);
 
 /*
- *  lwis_add_completion_fences_to_transaction: Prepares the transaction completion fence list.
+ *  lwis_add_completion_fence: Adds the fence with the given fd as a completion fence to this transaction.
  */
-int lwis_add_completion_fences_to_transaction(struct lwis_client *client,
-					      struct lwis_transaction *transaction);
+int lwis_add_completion_fence(struct lwis_client *client, struct lwis_transaction *transaction);
 
 /* lwis_fence_pending_signal_create: Creates and returns a lwis_fence_pending_signal list entry */
 struct lwis_fence_pending_signal *lwis_fence_pending_signal_create(struct lwis_fence *fence,

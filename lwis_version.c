@@ -48,10 +48,16 @@ void lwis_get_feature_flags(char *buffer, size_t buffer_size)
 		*/
 		" transaction-info-submit=%d"
 		/*
+		* transaction-info-replace:
+		* Latest supported version of transaction-info-replace
+		*/
+		" transaction-info-replace=%d"
+		/*
 		* pdma-io:
 		* Indicating that LWIS supports PDMA writing.
 		*/
 		" pdma-io"
 		"\n";
-	scnprintf(buffer, buffer_size, long_string_format, LWIS_CMD_ID_TRANSACTION_SUBMIT);
+	scnprintf(buffer, buffer_size, long_string_format, LWIS_CMD_ID_TRANSACTION_SUBMIT_V4,
+		  LWIS_CMD_ID_TRANSACTION_REPLACE_V4);
 }
