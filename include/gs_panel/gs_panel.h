@@ -426,6 +426,13 @@ struct gs_panel_funcs {
 	void (*refresh_ctrl)(struct gs_panel *gs_panel);
 
 	/**
+	 * @set_frame_rate
+	 *
+	 * Set the current frame rate.
+	 */
+	void (*set_frame_rate)(struct gs_panel *gs_panel, u16 frame_rate);
+
+	/**
 	 * @set_op_hz
 	 *
 	 * set display panel working on specified operation rate.

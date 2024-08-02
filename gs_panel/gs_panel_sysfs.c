@@ -756,6 +756,32 @@ static ssize_t force_power_on_show(struct device *dev, struct device_attribute *
 	return count;
 }
 
+static ssize_t frame_rate_store(struct device *dev, struct device_attribute *attr,
+				const char *buf, size_t count)
+{
+	const struct mipi_dsi_device *dsi = to_mipi_dsi_device(dev);
+	struct gs_panel *ctx = mipi_dsi_get_drvdata(dsi);
+	int ret;
+	u16 frame_rate;
+
+	ret = kstrtou16(buf, 0, &frame_rate);
+	if (ret || frame_rate < 1 || frame_rate > 120) {
+		dev_err(dev, "invalid frame rate value: %u\n", frame_rate);
+		return ret;
+	}
+
+	if (!gs_is_panel_active(ctx)) {
+		dev_warn(ctx->dev, "panel is not enabled\n");
+		return -EPERM;
+	}
+
+	mutex_lock(&ctx->mode_lock);
+	ctx->desc->gs_panel_func->set_frame_rate(ctx, frame_rate);
+	mutex_unlock(&ctx->mode_lock);
+
+	return count;
+}
+
 static DEVICE_ATTR_RO(serial_number);
 static DEVICE_ATTR_RO(panel_extinfo);
 static DEVICE_ATTR_RO(panel_name);
@@ -779,6 +805,7 @@ static DEVICE_ATTR_RO(power_state);
 static DEVICE_ATTR_RO(error_count_te);
 static DEVICE_ATTR_RO(error_count_unknown);
 static DEVICE_ATTR_RW(force_power_on);
+static DEVICE_ATTR_WO(frame_rate);
 /* TODO(tknelms): re-implement below */
 #if 0
 static DEVICE_ATTR_WO(gamma);
@@ -823,6 +850,11 @@ int gs_panel_sysfs_create_files(struct device *dev, struct gs_panel *ctx)
 
 		if (sysfs_create_file(&dev->kobj, &dev_attr_available_disp_stats.attr))
 			dev_err(ctx->dev, "unable to add available_disp_stats sysfs file\n");
+	}
+
+	if (gs_panel_has_func(ctx, set_frame_rate)) {
+		if (sysfs_create_file(&dev->kobj, &dev_attr_frame_rate.attr))
+			dev_err(ctx->dev, "unable to add set_frame_rate sysfs file\n");
 	}
 
 	return sysfs_create_files(&dev->kobj, panel_attrs);

@@ -215,3 +215,10 @@ Contact: "Burney Yu" <bosyuyu@google.com>
 Description:
   This file provides the TE option (fixed/changeable).
   Valid panels are 'primary-panel' or 'secondary-panel'.
+
+What: /sys/devices/platform/gs-drm-connector/panel/frame_rate
+Date: June 2024
+KernelVersion: 6.1
+Contact: "Jeremy DeHaan" <jdehaan@google.com>
+Description:
+  Userspace client uses this to write the current frame rate. The unit is frames per second.
