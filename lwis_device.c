@@ -122,7 +122,6 @@ static int lwis_open(struct inode *node, struct file *fp)
 	spin_lock_init(&lwis_client->periodic_io_lock);
 	spin_lock_init(&lwis_client->event_lock);
 	spin_lock_init(&lwis_client->flush_lock);
-	spin_lock_init(&lwis_client->buffer_lock);
 
 	/* Empty hash table for client event states */
 	hash_init(lwis_client->event_states);

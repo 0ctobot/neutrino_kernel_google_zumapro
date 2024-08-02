@@ -71,12 +71,10 @@ static void dump_total_enrolled_buffer_size(struct lwis_device *lwis_dev)
 			continue;
 		}
 		hash_for_each (client->enrolled_buffers, i, enrollment_list, node) {
-			spin_lock_irqsave(&client->buffer_lock, flags);
 			buffer = list_first_entry(&enrollment_list->list,
 						  struct lwis_enrolled_buffer, list_node);
 			total_enrolled_size += buffer->dma_buf->size;
 			num_enrolled_buffers++;
-			spin_unlock_irqrestore(&client->buffer_lock, flags);
 		}
 	}
 	spin_unlock_irqrestore(&lwis_dev->lock, flags);
@@ -283,6 +281,8 @@ err:
 int lwis_buffer_disenroll(struct lwis_client *lwis_client, struct lwis_enrolled_buffer *buffer)
 {
 	char trace_name[LWIS_MAX_NAME_STRING_LEN];
+	unsigned long flags;
+	struct lwis_device *lwis_dev = lwis_client->lwis_dev;
 
 	if (!lwis_client) {
 		pr_err("Disenroll: LWIS client is NULL\n");
@@ -303,12 +303,14 @@ int lwis_buffer_disenroll(struct lwis_client *lwis_client, struct lwis_enrolled_
 	dma_buf_detach(buffer->dma_buf, buffer->dma_buf_attachment);
 	dma_buf_put(buffer->dma_buf);
 	LWIS_ATRACE_FUNC_END(lwis_client->lwis_dev, trace_name);
+	spin_lock_irqsave(&lwis_dev->lock, flags);
 	/* Delete the node from the hash table */
 	list_del(&buffer->list_node);
 	if (list_empty(&buffer->enrollment_list->list)) {
 		hash_del(&buffer->enrollment_list->node);
 		kfree(buffer->enrollment_list);
 	}
+	spin_unlock_irqrestore(&lwis_dev->lock, flags);
 	return 0;
 }
 
