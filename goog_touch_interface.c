@@ -4261,6 +4261,7 @@ void goog_init_options(struct goog_touch_interface *gti,
 {
 	u32 coords[4];
 	int touch_max_x = 0;
+	int display_max_x = 0;
 
 	/* Initialize the common features. */
 	gti->mf_mode = GTI_MF_MODE_DEFAULT;
@@ -4291,14 +4292,11 @@ void goog_init_options(struct goog_touch_interface *gti,
 			gti->lptw_track_max_y = coords[3];
 			/* Scale the tracking area to touch resolution. */
 			touch_max_x = input_abs_get_max(gti->vendor_input_dev, ABS_MT_POSITION_X) + 1;
-			gti->lptw_track_min_x = gti->lptw_track_min_x * touch_max_x /
-					(gti->lptw_track_min_x + gti->lptw_track_max_x);
-			gti->lptw_track_max_x = gti->lptw_track_max_x * touch_max_x /
-					(gti->lptw_track_min_x + gti->lptw_track_max_x);
-			gti->lptw_track_min_y = gti->lptw_track_min_y * touch_max_x /
-					(gti->lptw_track_min_x + gti->lptw_track_max_x);
-			gti->lptw_track_max_y = gti->lptw_track_max_y * touch_max_x /
-					(gti->lptw_track_min_x + gti->lptw_track_max_x);
+			display_max_x = gti->lptw_track_min_x + gti->lptw_track_max_x;
+			gti->lptw_track_min_x = gti->lptw_track_min_x * touch_max_x / display_max_x;
+			gti->lptw_track_max_x = gti->lptw_track_max_x * touch_max_x / display_max_x;
+			gti->lptw_track_min_y = gti->lptw_track_min_y * touch_max_x / display_max_x;
+			gti->lptw_track_max_y = gti->lptw_track_max_y * touch_max_x / display_max_x;
 			GOOG_LOGI(gti, "goog,lptw-tracking-area %d, %d, %d, %d\n",
 					gti->lptw_track_min_x, gti->lptw_track_max_x,
 					gti->lptw_track_min_y, gti->lptw_track_max_y);
