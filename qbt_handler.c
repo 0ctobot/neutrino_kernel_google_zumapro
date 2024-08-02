@@ -95,6 +95,7 @@ struct qbt_drvdata {
 	struct cdev	qbt_fd_cdev;
 	struct cdev	qbt_ipc_cdev;
 	struct input_dev	*in_dev;
+	struct input_dev	*input_touch_dev;
 	struct device	*dev;
 	char		*qbt_node;
 	atomic_t	fd_available;
@@ -137,7 +138,11 @@ static int qbt_touch_connect(struct input_handler *handler,
 	struct input_dev *dev, const struct input_device_id *id)
 {
 	struct input_handle *handle;
+	struct qbt_drvdata *drvdata;
 	int ret;
+
+	drvdata = handler->private;
+
 	handle = kzalloc(sizeof(struct input_handle), GFP_KERNEL);
 	if (!handle)
 		return -ENOMEM;
@@ -157,6 +162,8 @@ static int qbt_touch_connect(struct input_handler *handler,
 		kfree(handle);
 		return ret;
 	}
+
+	drvdata->input_touch_dev = handle->dev;
 	pr_info("Connected device: %s\n", dev_name(&dev->dev));
 	return ret;
 }
@@ -170,10 +177,13 @@ static void qbt_touch_disconnect(struct input_handle *handle)
 static void qbt_touch_report_event(struct input_handle *handle,
 	unsigned int type, unsigned int code, int value)
 {
+	int touch_width = 0;
+	int display_width = 0;
 	struct qbt_drvdata *drvdata = handle->handler->private;
 	struct finger_detect_touch *fd_touch = &drvdata->fd_touch;
 	struct touch_event *event = NULL;
 	static bool report_event = true;
+
 	if (type != EV_SYN && type != EV_ABS)
 		return;
 	if (fd_touch->current_slot >= MT_MAX_FINGERS) {
@@ -181,6 +191,10 @@ static void qbt_touch_report_event(struct input_handle *handle,
 			fd_touch->current_slot);
 		return;
 	}
+
+	touch_width = input_abs_get_max(drvdata->input_touch_dev, ABS_MT_POSITION_X) + 1;
+	display_width = fd_touch->config.left + fd_touch->config.right;
+
 	event = &fd_touch->current_events[fd_touch->current_slot];
 	switch (code) {
 	case ABS_MT_SLOT:
@@ -194,10 +208,12 @@ static void qbt_touch_report_event(struct input_handle *handle,
 		report_event = false;
 		break;
 	case ABS_MT_POSITION_X:
+		value = value * display_width / touch_width;
 		event->X = abs(value);
 		report_event = false;
 		break;
 	case ABS_MT_POSITION_Y:
+		value = value * display_width / touch_width;
 		event->Y = abs(value);
 		report_event = false;
 		break;
@@ -932,8 +948,15 @@ static void qbt_gpio_report_event(struct qbt_drvdata *drvdata, int state)
 }
 void qbt_lptw_report_event(int x, int y, int state) {
 	struct fd_event event;
+	struct qbt_drvdata *drvdata = qbt_touch_handler.private;
+	int touch_width = input_abs_get_max(drvdata->input_touch_dev, ABS_MT_POSITION_X) + 1;
+	int display_width = drvdata->fd_touch.config.left + drvdata->fd_touch.config.right;
+
+	x = x * display_width / touch_width;
+	y = y * display_width / touch_width;
 	memset(&event, 0, sizeof(event));
 	pr_debug("lptw touch: x=%d y=%d state=%d", x, y, state);
+
 	event.X = x;
 	event.Y = y;
 	// Use a unique finger ID so AOD touches can be recognized.
@@ -942,7 +965,7 @@ void qbt_lptw_report_event(int x, int y, int state) {
 	event.touch_valid = true;
 	event.timestamp = ktime_to_timespec64(ktime_get());
 
-	qbt_fd_report_event(qbt_touch_handler.private, &event);
+	qbt_fd_report_event(drvdata, &event);
 }
 EXPORT_SYMBOL_GPL(qbt_lptw_report_event);
 static void qbt_gpio_work_func(struct work_struct *work)
