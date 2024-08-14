@@ -3499,6 +3499,7 @@ int goog_offload_probe(struct goog_touch_interface *gti)
 	int offload_ids_size;
 	int id_size;
 	const char *usb_psy_name = NULL;
+	bool is_default_offload_id = false;
 
 	/*
 	 * TODO(b/201610482): rename DEVICE_NAME in touch_offload.h for more specific.
@@ -3542,6 +3543,7 @@ int goog_offload_probe(struct goog_touch_interface *gti)
 		gti->offload_id_byte[1] = 'O';
 		gti->offload_id_byte[2] = 'O';
 		gti->offload_id_byte[3] = 'G';
+		is_default_offload_id = true;
 	}
 
 	gti->offload.caps.touch_offload_major_version = TOUCH_OFFLOAD_INTERFACE_MAJOR_VERSION;
@@ -3558,8 +3560,11 @@ int goog_offload_probe(struct goog_touch_interface *gti)
 		gti->offload.caps.rx_size = values[1];
 	} else {
 		GOOG_ERR(gti, "Please set \"goog,channel-num\" in dts!");
-		ret = -EINVAL;
-		goto err_offload_probe;
+		/*
+		 * TODO(b/356993163): Refine the GTI capability.
+		 */
+		gti->offload.caps.tx_size = 50;
+		gti->offload.caps.rx_size = 50;
 	}
 
 	/*
@@ -3571,20 +3576,25 @@ int goog_offload_probe(struct goog_touch_interface *gti)
 			&gti->offload.caps.bus_speed_hz))
 		gti->offload.caps.bus_speed_hz = 0;
 
-	if (of_property_read_u16(np, "goog,offload-caps-data-types",
+	if (is_default_offload_id ||
+			of_property_read_u16(np, "goog,offload-caps-data-types",
 			&gti->offload.caps.touch_data_types)) {
 		gti->offload.caps.touch_data_types =
 			TOUCH_DATA_TYPE_COORD | TOUCH_DATA_TYPE_STRENGTH |
-			TOUCH_DATA_TYPE_RAW | TOUCH_DATA_TYPE_BASELINE;
+			TOUCH_DATA_TYPE_RAW | TOUCH_DATA_TYPE_BASELINE |
+			TOUCH_DATA_TYPE_FILTERED;
 	}
-	if (of_property_read_u16(np, "goog,offload-caps-scan-types",
+	if (is_default_offload_id ||
+			of_property_read_u16(np, "goog,offload-caps-scan-types",
 			&gti->offload.caps.touch_scan_types)) {
 		gti->offload.caps.touch_scan_types =
-			TOUCH_SCAN_TYPE_MUTUAL;
+			TOUCH_SCAN_TYPE_MUTUAL | TOUCH_SCAN_TYPE_SELF;
 	}
-	if (of_property_read_u16(np, "goog,offload-caps-context-channel-types",
+	if (is_default_offload_id ||
+			of_property_read_u16(np, "goog,offload-caps-context-channel-types",
 			&gti->offload.caps.context_channel_types)) {
-		gti->offload.caps.context_channel_types = 0;
+		gti->offload.caps.context_channel_types =
+			CONTEXT_CHANNEL_TYPE_DRIVER_STATUS;
 	}
 	GOOG_INFO(gti, "offload.caps: data_types %#x, scan_types %#x, context_channel_types %#x.\n",
 		gti->offload.caps.touch_data_types,
