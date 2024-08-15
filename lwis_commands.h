@@ -373,6 +373,10 @@ struct lwis_transaction_trigger_condition {
 #define LWIS_EVENT_COUNTER_ON_NEXT_OCCURRENCE (-1LL)
 #define LWIS_EVENT_COUNTER_EVERY_TIME (-2LL)
 
+// LWIS IO_ENTRY transaction overflow restriction
+#define LWIS_IO_ENTRY_READ_RESTRICTION (SHRT_MAX - sizeof(struct lwis_transaction_response_header))
+#define LWIS_IO_ENTRY_READ_OVERFLOW_BOUND                                                          \
+	(LWIS_IO_ENTRY_READ_RESTRICTION / sizeof(struct lwis_io_entry))
 struct lwis_transaction_info_v2 {
 	// Input
 	int64_t trigger_event_id;

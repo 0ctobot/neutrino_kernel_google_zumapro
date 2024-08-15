@@ -996,15 +996,6 @@ static int prepare_response_locked(struct lwis_client *client, struct lwis_trans
 	/* Event response payload consists of header, and address and offset pairs. */
 	resp_size = sizeof(struct lwis_transaction_response_header) +
 		    read_entries * sizeof(struct lwis_io_result) + read_buf_size;
-
-	if (read_entries > INT_MAX / sizeof(struct lwis_io_result)) {
-		return -EOVERFLOW;
-	}
-
-	if (read_buf_size > INT_MAX - sizeof(struct lwis_transaction_response_header) -
-				    read_entries * sizeof(struct lwis_io_result)) {
-		return -EOVERFLOW;
-	}
 	/*
 	 * Revisit the use of GFP_ATOMIC here. Reason for this to be atomic is
 	 * because this function can be called by transaction_replace while
