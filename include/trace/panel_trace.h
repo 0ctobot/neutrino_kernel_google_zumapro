@@ -112,54 +112,80 @@ TRACE_EVENT(te2_update_settings,
 );
 
 TRACE_EVENT(panel_write_generic,
-	TP_PROTO(char type, int pid, const char *name, int value),
-	TP_ARGS(type, pid, name, value),
+	TP_PROTO(char type, int pid, struct va_format *vaf, int value),
+	TP_ARGS(type, pid, vaf, value),
 	TP_STRUCT__entry(
 		__field(char, type)
 		__field(int, pid)
-		__string(name, name)
+		__vstring(name, vaf->fmt, vaf->va)
 		__field(int, value)
 	),
 	TP_fast_assign(
 		__entry->type = type;
 		__entry->pid = pid;
-		__assign_str(name, name);
+		__assign_vstr(name, vaf->fmt, vaf->va);
 		__entry->value = value;
 	),
 	TP_printk("%c|%d|%s|%d",
 		  __entry->type, __entry->pid, __get_str(name), __entry->value)
 );
+#ifndef __PANEL_ATRACE_API_DEF_
+#define __PANEL_ATRACE_API_DEF_
+
+/* utility function for variadic arguments */
+static inline void _panel_write_generic(char type, int pid, int value, const char *fmt, ...)
+{
+	va_list args = {0};
+	struct va_format vaf = {
+		.fmt = fmt,
+	};
+
+	va_start(args, fmt);
+	vaf.va = &args;
+	trace_panel_write_generic(type, pid, &vaf, value);
+	va_end(args);
+}
+
 /**
  * PANEL_ATRACE_BEGIN() - used to trace beginning of a scope
- * @name: Name of scope to trace
+ * @...: Name of scope to trace; supports format string
  *
  * Used to trace a scope of time. Often used for function duration,
  * but may be used to keep track of the duration of more high-level operations.
  */
-#define PANEL_ATRACE_BEGIN(name) trace_panel_write_generic('B', current->tgid, name, 0)
+#define PANEL_ATRACE_BEGIN(...) \
+	_panel_write_generic('B', current->tgid, 0, __VA_ARGS__)
+
 /**
  * PANEL_ATRACE_END() - used to trace end of a scope
- * @name: Name of scope to trace
+ * @...: Name of scope to trace; supports format string
  *
  * Used to trace a scope of time. Often used for function duration,
  * but may be used to keep track of the duration of more high-level operations.
  */
-#define PANEL_ATRACE_END(name) trace_panel_write_generic('E', current->tgid, "", 0)
+#define PANEL_ATRACE_END(...) \
+	_panel_write_generic('E', current->tgid, 0, "")
+
 /**
  * PANEL_ATRACE_INSTANT() - used to trace an instantaneous event
- * @name: Name of event to trace
+ * @...: Name of event to trace; supports format string
  *
  * Used to trace a named event without a duration attached.
  */
-#define PANEL_ATRACE_INSTANT(name) trace_panel_write_generic('I', current->tgid, name, 0)
+#define PANEL_ATRACE_INSTANT(...) \
+	_panel_write_generic('I', current->tgid, 0, __VA_ARGS__)
+
 /**
  * PANEL_ATRACE_INT() - used to trace an integer value
- * @name: Name of variable to trace
+ * @name: Name of variable to trace; does not support format string
  * @value: Value of variable to trace
  *
  * Used to trace a variable or counter with an integer value
  */
-#define PANEL_ATRACE_INT(name, value) trace_panel_write_generic('C', current->tgid, name, value)
+#define PANEL_ATRACE_INT(name, value) \
+	_panel_write_generic('C', current->tgid, value, name)
+
+#endif /* __PANEL_ATRACE_API_DEF_ */
 
 #endif /* _PANEL_TRACE_H_ */
 

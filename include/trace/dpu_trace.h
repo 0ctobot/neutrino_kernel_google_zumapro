@@ -91,29 +91,84 @@ TRACE_EVENT(dsi_label_scope,
 #define PANEL_SEQ_LABEL_END(name) trace_dsi_label_scope(name, false)
 
 TRACE_EVENT(tracing_mark_write,
-	TP_PROTO(char type, int pid, const char *name, int value),
-	TP_ARGS(type, pid, name, value),
+	TP_PROTO(char type, int pid, struct va_format *vaf, int value),
+	TP_ARGS(type, pid, vaf, value),
 	TP_STRUCT__entry(
 		__field(char, type)
 		__field(int, pid)
-		__string(name, name)
+		__vstring(name, vaf->fmt, vaf->va)
 		__field(int, value)
 	),
 	TP_fast_assign(
 		__entry->type = type;
 		__entry->pid = pid;
-		__assign_str(name, name);
+		__assign_vstr(name, vaf->fmt, vaf->va);
 		__entry->value = value;
 	),
 	TP_printk("%c|%d|%s|%d",
 		__entry->type, __entry->pid, __get_str(name), __entry->value)
 );
 
-#define DPU_ATRACE_INT_PID(name, value, pid) trace_tracing_mark_write('C', pid, name, value)
-#define DPU_ATRACE_INT(name, value) DPU_ATRACE_INT_PID(name, value, current->tgid)
-#define DPU_ATRACE_BEGIN(name) trace_tracing_mark_write('B', current->tgid, name, 0)
-#define DPU_ATRACE_END(name) trace_tracing_mark_write('E', current->tgid, "", 0)
+/* extra define flag for the case TRACE_HEAD_MULTI_READ & _DPU_TRACE_H both set */
+#ifndef __DPU_ATRACE_API_DEF_
+#define __DPU_ATRACE_API_DEF_
 
+/* utility function for variadic arguments */
+static inline void _tracing_mark_write(char type, int pid, int value, const char *fmt, ...)
+{
+	va_list args = {0};
+	struct va_format vaf = {
+		.fmt = fmt,
+	};
+
+	va_start(args, fmt);
+	vaf.va = &args;
+	trace_tracing_mark_write(type, pid, &vaf, value);
+	va_end(args);
+}
+
+/**
+ * DPU_ATRACE_INT_PID() - used to trace an integer value
+ * @name: Name of variable to trace; does not support format string
+ * @value: Value of variable to trace
+ * @pid: Attach trace log to specific process ID
+ *
+ * Used to trace a variable or counter with an integer value
+ */
+#define DPU_ATRACE_INT_PID(name, value, pid) \
+	_tracing_mark_write('C', pid, value, name)
+
+/**
+ * DPU_ATRACE_INT() - used to trace an integer value
+ * @name: Name of variable to trace; does not support format string
+ * @value: Value of variable to trace
+ *
+ * Used to trace a variable or counter with an integer value
+ */
+#define DPU_ATRACE_INT(name, value) \
+	DPU_ATRACE_INT_PID(name, value, current->tgid)
+
+/**
+ * DPU_ATRACE_BEGIN() - used to trace beginning of a scope
+ * @...: Name of scope to trace; supports format string
+ *
+ * Used to trace a scope of time. Often used for function duration,
+ * but may be used to keep track of the duration of more high-level operations.
+ */
+#define DPU_ATRACE_BEGIN(...) \
+	_tracing_mark_write('B', current->tgid, 0, __VA_ARGS__)
+
+/**
+ * DPU_ATRACE_END() - used to trace end of a scope
+ * @...: Name of scope to trace; supports format string
+ *
+ * Used to trace a scope of time. Often used for function duration,
+ * but may be used to keep track of the duration of more high-level operations.
+ */
+#define DPU_ATRACE_END(...) \
+	_tracing_mark_write('E', current->tgid, 0, "")
+
+#endif /* __DPU_ATRACE_API_DEF_ */
 #endif /* _DPU_TRACE_H_ */
 
 #undef TRACE_INCLUDE_PATH
