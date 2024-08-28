@@ -1931,6 +1931,7 @@ static int syna_dev_create_input_device(struct syna_tcm *tcm)
 
 	input_dev->name = TOUCH_INPUT_NAME;
 	input_dev->phys = TOUCH_INPUT_PHYS_PATH;
+	input_dev->uniq = "google_touchscreen";
 	input_dev->id.product = SYNAPTICS_TCM_DRIVER_ID;
 	input_dev->id.version = SYNAPTICS_TCM_DRIVER_VERSION;
 	input_dev->dev.parent = tcm->pdev->dev.parent;
