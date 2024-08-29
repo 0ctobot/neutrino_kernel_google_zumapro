@@ -209,7 +209,8 @@ static long ipc_ioctl(struct file *filp, unsigned int cmd, unsigned long arg)
 			return -EINVAL;
 		}
 
-		mif_info("%s: IOCTL_LOAD_GNSS_IMAGE\n", iod->name);
+		mif_info_limited("%s: IOCTL_LOAD_GNSS_IMAGE\n", iod->name);
+
 		return ld->load_gnss_image(ld, iod, arg);
 
 	case IOCTL_READ_GNSS_IMAGE:
@@ -218,7 +219,7 @@ static long ipc_ioctl(struct file *filp, unsigned int cmd, unsigned long arg)
 			return -EINVAL;
 		}
 
-		mif_info("%s: IOCTL_READ_GNSS_IMAGE\n", iod->name);
+		mif_info_limited("%s: IOCTL_READ_GNSS_IMAGE\n", iod->name);
 		return ld->read_gnss_image(ld, iod, arg);
 
 	default:

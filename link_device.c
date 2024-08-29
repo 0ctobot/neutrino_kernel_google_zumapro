@@ -2179,7 +2179,7 @@ static int link_load_gnss_image(struct link_device *ld,
 
 	memset(&img, 0, sizeof(struct gnss_image));
 
-	mif_info("Load GNSS images\n");
+	mif_info_limited("Load GNSS images\n");
 
 	if (!mld->gnss_v_base) {
 		mif_err("No gnss_fw vmap region\n");
