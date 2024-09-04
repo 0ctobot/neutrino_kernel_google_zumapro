@@ -782,6 +782,82 @@ static ssize_t frame_rate_store(struct device *dev, struct device_attribute *att
 	return count;
 }
 
+/* assign new timeline's expected present timestamp for align sending CMD timing */
+static ssize_t expected_present_time_ns_store(struct device *dev, struct device_attribute *attr,
+					  const char *buf, size_t count)
+{
+	struct mipi_dsi_device *dsi = to_mipi_dsi_device(dev);
+	struct gs_panel *ctx = mipi_dsi_get_drvdata(dsi);
+	int ret;
+	u64 pf_timestamp;
+
+	ret = kstrtou64(buf, 0, &pf_timestamp);
+	if (ret) {
+		dev_err(dev, "invalid timeline present_ts input:%d\n", ret);
+		return ret;
+	}
+
+	mutex_lock(&ctx->mode_lock);
+	ctx->timestamps.timeline_expected_present_ts = pf_timestamp;
+	mutex_unlock(&ctx->mode_lock);
+
+	return count;
+}
+
+static ssize_t expected_present_time_ns_show(struct device *dev, struct device_attribute *attr,
+					  char *buf)
+{
+	struct mipi_dsi_device *dsi = to_mipi_dsi_device(dev);
+	struct gs_panel *ctx = mipi_dsi_get_drvdata(dsi);
+	ssize_t ret;
+
+	mutex_lock(&ctx->mode_lock);
+	ret = sysfs_emit(buf, "%llu\n",
+			ctx->timestamps.timeline_expected_present_ts);
+	mutex_unlock(&ctx->mode_lock);
+
+	return ret;
+}
+
+/* assign new timeline's frame interval for align sending CMD timing */
+static ssize_t frame_interval_ns_store(struct device *dev, struct device_attribute *attr,
+					  const char *buf, size_t count)
+{
+	struct mipi_dsi_device *dsi = to_mipi_dsi_device(dev);
+	struct gs_panel *ctx = mipi_dsi_get_drvdata(dsi);
+	int ret;
+	u64 frame_interval;
+
+	ret = kstrtou64(buf, 0, &frame_interval);
+	if (ret) {
+		dev_err(dev, "invalid frame_interval input:%d\n", ret);
+		return ret;
+	}
+
+	mutex_lock(&ctx->mode_lock);
+	if (frame_interval != 0)
+		do_div(frame_interval, NSEC_PER_USEC);
+	PANEL_ATRACE_INT("sysfs frame_interval", frame_interval);
+	ctx->frame_interval_us = frame_interval;
+	mutex_unlock(&ctx->mode_lock);
+
+	return count;
+}
+
+static ssize_t frame_interval_ns_show(struct device *dev, struct device_attribute *attr,
+					  char *buf)
+{
+	struct mipi_dsi_device *dsi = to_mipi_dsi_device(dev);
+	struct gs_panel *ctx = mipi_dsi_get_drvdata(dsi);
+	ssize_t ret;
+
+	mutex_lock(&ctx->mode_lock);
+	ret = sysfs_emit(buf, "%lu\n", (ctx->frame_interval_us * NSEC_PER_USEC));
+	mutex_unlock(&ctx->mode_lock);
+
+	return ret;
+}
+
 static DEVICE_ATTR_RO(serial_number);
 static DEVICE_ATTR_RO(panel_extinfo);
 static DEVICE_ATTR_RO(panel_name);
@@ -806,6 +882,8 @@ static DEVICE_ATTR_RO(error_count_te);
 static DEVICE_ATTR_RO(error_count_unknown);
 static DEVICE_ATTR_RW(force_power_on);
 static DEVICE_ATTR_WO(frame_rate);
+static DEVICE_ATTR_RW(expected_present_time_ns);
+static DEVICE_ATTR_RW(frame_interval_ns);
 /* TODO(tknelms): re-implement below */
 #if 0
 static DEVICE_ATTR_WO(gamma);
@@ -834,6 +912,8 @@ static const struct attribute *panel_attrs[] = { &dev_attr_serial_number.attr,
 						 &dev_attr_error_count_te.attr,
 						 &dev_attr_error_count_unknown.attr,
 						 &dev_attr_force_power_on.attr,
+						 &dev_attr_expected_present_time_ns.attr,
+						 &dev_attr_frame_interval_ns.attr,
 /* TODO(tknelms): re-implement below */
 #if 0
 						 &dev_attr_gamma.attr,
