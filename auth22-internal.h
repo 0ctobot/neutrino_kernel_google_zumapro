@@ -62,7 +62,6 @@ typedef enum hdcp_tx_hdcp_link_state {
 struct hdcp_link_data {
 	uint32_t state;
 	bool is_repeater;
-	bool is_aborted;
 	bool is_stored_km;
 	bool pairing_ready;
 	bool hprime_ready;

@@ -15,16 +15,6 @@
 
 struct hdcp_device;
 
-enum auth_state {
-	HDCP_AUTH_IDLE,
-	HDCP1_AUTH_PROGRESS,
-	HDCP1_AUTH_DONE,
-	HDCP2_AUTH_PROGRESS,
-	HDCP2_AUTH_DONE,
-};
-
-int hdcp_get_auth_state(void);
-
 int hdcp_auth_worker_init(struct hdcp_device *dev);
 int hdcp_auth_worker_deinit(struct hdcp_device *dev);
 void hdcp_auth_worker_schedule(struct hdcp_device *dev);

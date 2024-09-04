@@ -12,6 +12,7 @@
 #include <linux/kernel.h>
 
 #include "auth22-internal.h"
+#include "auth-state.h"
 #include "dpcd.h"
 #include "teeif.h"
 #include "hdcp-log.h"
@@ -23,7 +24,7 @@ static int do_send_ske_send_eks(struct hdcp_link_data *lk)
 	uint8_t edkey_ks[HDCP_AKE_MKEY_BYTE_LEN];
 	uint8_t riv[HDCP_RTX_BYTE_LEN];
 
-	if (lk->is_aborted)
+	if (is_hdcp_auth_aborted())
 		return -ECANCELED;
 
 	ret = teei_generate_riv(riv, sizeof(riv));

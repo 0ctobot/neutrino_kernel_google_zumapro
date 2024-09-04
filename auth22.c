@@ -20,7 +20,7 @@
 
 #include "exynos-hdcp-interface.h"
 
-#include "auth-control.h"
+#include "auth-state.h"
 #include "auth22.h"
 #include "auth22-internal.h"
 #include "dpcd.h"
@@ -151,11 +151,6 @@ int hdcp22_dplink_authenticate(void)
 	} while (1);
 }
 
-int hdcp22_dplink_abort(void) {
-	lkd.is_aborted = 1;
-	return 0;
-}
-
 int hdcp22_dplink_handle_irq(void) {
 	uint8_t rxstatus = 0;
 
@@ -170,13 +165,9 @@ int hdcp22_dplink_handle_irq(void) {
 
 	if (HDCP_2_2_DP_RXSTATUS_LINK_FAILED(rxstatus)) {
 		hdcp_info("integrity check fail.\n");
-		hdcp22_dplink_abort();
-		hdcp_tee_disable_enc();
 		return -EFAULT;
 	} else if (HDCP_2_2_DP_RXSTATUS_REAUTH_REQ(rxstatus)) {
 		hdcp_info("reauth requested.\n");
-		hdcp22_dplink_abort();
-		hdcp_tee_disable_enc();
 		return -EFAULT;
 	} else if (HDCP_2_2_DP_RXSTATUS_PAIRING(rxstatus)) {
 		hdcp_info("pairing avaible\n");
@@ -189,9 +180,8 @@ int hdcp22_dplink_handle_irq(void) {
 	} else if (HDCP_2_2_DP_RXSTATUS_READY(rxstatus)) {
 		hdcp_info("ready avaible\n");
 		lkd.rp_ready = 1;
-		if (hdcp_get_auth_state() == HDCP2_AUTH_DONE)
-			return -EAGAIN;
-		return 0;
+		hdcp_set_auth_state(HDCP2_AUTH_RP);
+		return -EAGAIN;
 	}
 
 	hdcp_err("undefined RxStatus(0x%x). ignore\n", rxstatus);

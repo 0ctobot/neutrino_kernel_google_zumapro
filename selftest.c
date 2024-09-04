@@ -237,7 +237,7 @@ static int dp_hdcp_protocol_self_test_internal(void) {
 			hdcp_info("SUCCESS selftest\n");
 			return 0;
 		}
-		msleep(100);
+		msleep(200);
 	}
 
 	hdcp_err("FAIL selftest: HDCP_VERSION(%d)\n", version);
@@ -258,6 +258,7 @@ int hdcp_protocol_self_test(void) {
 				    pdp_dpcd_write_for_hdcp22_emu);
 
 	rc = hdcp_tee_set_test_mode(true);
+	hdcp_dplink_connect_state(DP_CONNECT);
 	if (rc) {
 		hdcp_err("setting test mode failed: %d", rc);
 		return rc;
