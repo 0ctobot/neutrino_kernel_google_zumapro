@@ -222,3 +222,27 @@ KernelVersion: 6.1
 Contact: "Jeremy DeHaan" <jdehaan@google.com>
 Description:
   Userspace client uses this to write the current frame rate. The unit is frames per second.
+
+What: /sys/devices/platform/gs-drm-connector/panel/expected_present_time_ns
+Date: August 2024
+KernelVersion: 6.1
+Contact: "Tai-Hua Tseng" <taihua@google.com>
+Description:
+  Userspace client can use this node to deliver next frame's expected present timestamp,
+  similar with CRTC property expected present timestamp, but it can be noticed
+  far ahead from setting property with atomic_commit (e.g., 30ms).
+  Could assist connector targeting appropriate DCS timing during idle scenarios with
+  frame_interval information.
+  The unit is nanosecond.
+
+What: /sys/devices/platform/gs-drm-connector/panel/frame_interval_ns
+Date: August 2024
+KernelVersion: 6.1
+Contact: "Tai-Hua Tseng" <taihua@google.com>
+Description:
+  Userspace client can use this node to deliver next frame's interval,
+  similar with connector property frame interval, but it can be noticed
+  far ahead from setting property with atomic_commit (e.g., 30ms).
+  Could assist connector targeting appropriate DCS timing during idle scenarios with
+  expected present information.
+  The unit is nanosecond.

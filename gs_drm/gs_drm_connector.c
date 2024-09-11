@@ -134,6 +134,9 @@ static struct drm_connector_state *gs_drm_connector_duplicate_state(struct drm_c
 	/* clear pending update */
 	copy->pending_update_flags = 0;
 
+	/* clear frame_interval us */
+	copy->frame_interval_us = 0;
+
 	copy->mipi_sync = GS_MIPI_CMD_SYNC_NONE;
 
 	return &copy->base;
@@ -380,6 +383,10 @@ int gs_drm_connector_create_properties(struct drm_connector *connector)
 		return ret;
 
 	ret = gs_drm_connector_create_hdr_formats_property(gs_connector);
+
+	p->frame_interval = drm_property_create_range(drm_dev, 0, "frame_interval", 0, UINT_MAX);
+	if (IS_ERR(p->frame_interval))
+		return PTR_ERR(p->frame_interval);
 
 	dev_dbg(dev, "%s-\n", __func__);
 	return ret;

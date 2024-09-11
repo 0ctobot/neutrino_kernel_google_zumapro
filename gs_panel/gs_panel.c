@@ -999,6 +999,125 @@ static int gs_bl_find_range(struct gs_panel *ctx, int brightness, u32 *range)
 	return 0;
 }
 
+#define CMD_ALIGN_ATRACE(type, event, te, vblank, interval, diff, delay) \
+	PANEL_ATRACE_##type("cmd_align %s TE:%u vblank:%u interval:%u diff:%llu delay:%u", \
+			event, te, vblank, interval, diff, delay)
+#define SEND_CMD_OVERHEAD_US (2000)
+
+static void gs_dsi_cmd_align_delay_us(const char *event, u32 te_period, u32 vblank_period,
+		u32 interval, u32 diff, u32 delay)
+{
+	CMD_ALIGN_ATRACE(BEGIN, event, te_period, vblank_period, interval, diff, delay);
+	usleep_range(delay, delay + 10);
+	CMD_ALIGN_ATRACE(END, event, te_period, vblank_period, interval, diff, delay);
+}
+
+void gs_dsi_cmd_align(struct gs_panel *ctx)
+{
+	const struct gs_panel_mode *current_mode;
+	ktime_t current_ts, base_line_ts;
+	u64 diff;
+	u32 te_period, vblank_period, te_usec, interval, delay;
+
+	if (WARN_ON(ctx == NULL)) {
+		pr_err("%s, invalid argument ctx\n", __func__);
+		return;
+	}
+
+	mutex_lock(&ctx->mode_lock);
+
+	if (ctx->skip_cmd_align) {
+		mutex_unlock(&ctx->mode_lock);
+		return;
+	}
+
+	current_mode = ctx->current_mode;
+	if (WARN_ON(current_mode == NULL)) {
+		dev_err(ctx->dev, "%s: missing current_mode\n", __func__);
+		mutex_unlock(&ctx->mode_lock);
+		return;
+	}
+	te_period = USEC_PER_SEC / gs_drm_mode_te_freq(&current_mode->mode);
+	vblank_period = USEC_PER_SEC / drm_mode_vrefresh(&current_mode->mode);
+
+	/* gated TE should not happen when panel refresh duration equal to TE period */
+	if (vblank_period == te_period) {
+		mutex_unlock(&ctx->mode_lock);
+		return;
+	}
+
+	interval = ctx->frame_interval_us ? ctx->frame_interval_us : vblank_period;
+	/* interval less than TE period would cause calculation underflow */
+	if (interval < te_period) {
+		mutex_unlock(&ctx->mode_lock);
+		return;
+	}
+	if (gs_panel_has_func(ctx, get_te_usec))
+		te_usec = ctx->desc->gs_panel_func->get_te_usec(ctx, current_mode);
+	else
+		te_usec = current_mode->gs_mode.te_usec;
+
+	if (ktime_after(ctx->timestamps.conn_last_present_ts,
+				ctx->timestamps.timeline_expected_present_ts))
+		base_line_ts = ctx->timestamps.conn_last_present_ts;
+	else
+		base_line_ts = ctx->timestamps.timeline_expected_present_ts;
+
+	mutex_unlock(&ctx->mode_lock);
+
+	base_line_ts = ktime_add_us(base_line_ts, te_usec);
+	current_ts = ktime_get();
+	/* expected present timestamp larger than current timestamp */
+	if (base_line_ts > current_ts) {
+		diff = ktime_us_delta(base_line_ts, current_ts);
+		diff = do_div(diff, interval);
+		/*
+		 * should delay send cmd, otherwise display would be blocked
+		 * by gated TE at expected pf time.
+		 */
+		if ((diff < (vblank_period + SEND_CMD_OVERHEAD_US)) && (diff > te_period)) {
+			delay = diff - te_period;
+			gs_dsi_cmd_align_delay_us("future_ts", te_period, vblank_period,
+					interval, diff, delay);
+		/* close to the expected time */
+		} else if (diff < SEND_CMD_OVERHEAD_US) {
+			delay = diff;
+			gs_dsi_cmd_align_delay_us("close future_ts", te_period, vblank_period,
+					interval, diff, delay);
+		}
+	/* expected present timestamp less than current timestamp */
+	} else if (base_line_ts < current_ts) {
+		diff = ktime_us_delta(current_ts, base_line_ts);
+		diff = do_div(diff, interval);
+		if (diff < (interval - te_period)) {
+			/* can send cmd immediately */
+			if (interval > (vblank_period + SEND_CMD_OVERHEAD_US) &&
+					diff < (interval - vblank_period - SEND_CMD_OVERHEAD_US)) {
+				CMD_ALIGN_ATRACE(INSTANT, "skip", te_period, vblank_period,
+						interval, diff, 0);
+			/*
+			 * should delay send cmd, otherwise display would be blocked
+			 * by gated TE at expected pf time.
+			 */
+			} else {
+				delay = interval - te_period - diff;
+				gs_dsi_cmd_align_delay_us("past_ts", te_period, vblank_period,
+					interval, diff, delay);
+			}
+		} else if (diff > (interval - SEND_CMD_OVERHEAD_US)) {
+			/* close to the expected time */
+			delay = interval - diff;
+			gs_dsi_cmd_align_delay_us("close past_ts", te_period, vblank_period,
+				interval, diff, delay);
+		}
+	}
+	/*
+	 * attention that frame drop might be worse
+	 * if frame update does not stick to the expected time.
+	 */
+}
+EXPORT_SYMBOL_GPL(gs_dsi_cmd_align);
+
 static int gs_update_backlight_status(struct backlight_device *bl)
 {
 	struct gs_panel *ctx = bl_get_data(bl);
@@ -1023,15 +1142,16 @@ static int gs_update_backlight_status(struct backlight_device *bl)
 	if (brightness && brightness < min_brightness)
 		brightness = min_brightness;
 
-	dev_info(dev, "req: %d, br: %d\n", bl->props.brightness, brightness);
-
-	mutex_lock(&ctx->mode_lock); /*TODO(b/267170999): MODE*/
 	if (ctx->base.backlight && !ctx->bl_ctrl_dcs) {
+		mutex_lock(&ctx->mode_lock); /*TODO(b/267170999): MODE*/
 		dev_info(dev, "Setting brightness via backlight function\n");
 		backlight_device_set_brightness(ctx->base.backlight, brightness);
 	} else if (gs_panel_has_func(ctx, set_brightness)) {
+		gs_dsi_cmd_align(ctx); /* hold mutex after cmd align */
+		mutex_lock(&ctx->mode_lock); /*TODO(b/267170999): MODE*/
 		ctx->desc->gs_panel_func->set_brightness(ctx, brightness);
 	} else {
+		mutex_lock(&ctx->mode_lock); /*TODO(b/267170999): MODE*/
 		dev_info(dev, "Setting brightness via dcs\n");
 		gs_dcs_set_brightness(ctx, brightness);
 	}
@@ -1042,6 +1162,8 @@ static int gs_update_backlight_status(struct backlight_device *bl)
 		notify_brightness_changed(ctx);
 		dev_dbg(dev, "bl range is changed to %d\n", bl_range);
 	}
+
+	dev_info(dev, "req: %d, br: %d\n", bl->props.brightness, brightness);
 
 	mutex_unlock(&ctx->mode_lock); /*TODO(b/267170999): MODE*/
 	PANEL_ATRACE_END(__func__);

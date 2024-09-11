@@ -58,6 +58,7 @@ struct gs_drm_connector_properties {
 	struct drm_property *refresh_on_lp;
 	struct drm_property *rr_switch_duration;
 	struct drm_property *operation_rate;
+	struct drm_property *frame_interval;
 };
 
 struct gs_display_partial {
@@ -176,6 +177,19 @@ struct gs_drm_connector_state {
 	 * will enable DPU histogram with ROI set to the provided location.
 	 */
 	struct gs_drm_connector_lhbm_hist_data lhbm_hist_data;
+
+	/**
+	 * @frame_interval_us: store frame interval information, indicating the time interval
+	 * consecutive frames in microseconds. This information can be utilized by driver to
+	 * estimate next frame's present time.
+	 */
+	unsigned int frame_interval_us;
+
+	/**
+	 * @crtc_last_present_ts: record the most recent corresponding CRTC's expected present timestamp,
+	 * help connector target the proper timing for sending cmd.
+	 */
+	ktime_t crtc_last_present_ts;
 };
 
 #define to_gs_connector_state(connector_state) \
