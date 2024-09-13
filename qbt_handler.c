@@ -652,17 +652,17 @@ static long qbt_ioctl(
 				pr_err("failed copy from user space %d\n", rc);
 				goto end;
 			} else {
-				// Succeeded in copying, double side length for up AoI.
+				// Succeeded in copying, multiply side lengths by 1.5 for up AoI
 				struct qbt_touch_config_v3 *config = &drvdata->fd_touch.config;
 				int width = config->right - config->left;
 				int height = config->bottom - config->top;
 				memcpy(&drvdata->fd_touch.up_config,
 							 &drvdata->fd_touch.config,
 							 sizeof(drvdata->fd_touch.config));
-				drvdata->fd_touch.up_config.right += width/2;
-				drvdata->fd_touch.up_config.left -= width/2;
-				drvdata->fd_touch.up_config.top -= height/2;
-				drvdata->fd_touch.up_config.bottom += height/2;
+				drvdata->fd_touch.up_config.right += width / 4;
+				drvdata->fd_touch.up_config.left -= width / 4;
+				drvdata->fd_touch.up_config.top -= height / 4;
+				drvdata->fd_touch.up_config.bottom += height / 4;
 			}
 		}
 		pr_debug("Touch FD enable: %d\n",
