@@ -100,6 +100,7 @@ i2c-dev.ko
 i2c-exynos5.ko
 iovad-best-fit-algo.ko
 itmon.ko
+kernel-top.ko
 keycombo.ko
 keydebug.ko
 ln8411.ko
@@ -217,7 +218,6 @@ ufs-pixel-fips140.ko
 usb_f_dm.ko
 usb_f_dm1.ko
 usb_f_etr_miu.ko
-usb_f_rndis.ko
 usb_psy.ko
 usbc_cooling_dev.ko
 vh_cgroup.ko

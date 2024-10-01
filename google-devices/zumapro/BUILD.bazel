@@ -9,9 +9,9 @@ package(
 exports_files([
     # keep sorted
     "build.config.zumapro",
-    "build.config.zumapro.gki.fragment",
     "vendor_dlkm.blocklist.zumapro",
     "vendor_dlkm.props.zumapro",
     "vendor_dlkm_modules.zumapro",
     "vendor_kernel_boot_modules.zumapro",
+    "zumapro_defconfig",
 ])

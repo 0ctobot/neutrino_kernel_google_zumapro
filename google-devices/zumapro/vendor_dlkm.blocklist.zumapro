@@ -1,3 +1,4 @@
+blocklist aoc_unit_test_dev
 blocklist bcmdhd4398
 blocklist bcmdhd4390
 blocklist bcmdhd4383
@@ -6,6 +7,7 @@ blocklist ftm5
 blocklist goodix_brl_touch
 blocklist mali_kutf
 blocklist mali_kutf_clk_rate_trace_test_portal
+blocklist nvt_touch
 blocklist sec_touch
 blocklist sscoredump_sample_test.ko
 blocklist sscoredump_test.ko

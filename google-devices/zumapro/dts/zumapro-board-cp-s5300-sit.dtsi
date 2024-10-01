@@ -57,7 +57,7 @@
 				gpio_ap2cp_pda_active =	<&gpp16 2 0x1>;
 				gpio_ap2cp_nreset_n =	<&gpp12 3 0x1>;
 				gpio_ap2cp_cp_wrst_n =	<&gpp16 3 0x1>;
-				gpio_cp2ap_cp_wrst_n =  <&gpp8 2 0x1>;
+				gpio_cp2ap_cp_wrst_n =  <&gpa7 3 0x1>;
 				gpio_ap2cp_pm_wrst_n =	<&gpp8 3 0x1>;
 
 				gpio_cp2ap_phone_active = <&gpa5 2 0x1>;
@@ -71,10 +71,19 @@
 				*/
 				mif,cp2ap_active_not_alive = <0>;
 
+				mif_off_during_volte = <1>;
 				/* phandle used for shutdown calls to s5910 clk-buffer*/
 				google,clk-buffer = <&s5910>;
 			};
 		};
+	};
+};
+
+&pinctrl_0 {
+	s5100_cp2ap_cp_wrst_n: s5100_cp2ap_cp_wrst_n {
+		samsung,pins = "gpa7-3"; /* XEINT_17 */
+		samsung,pin-function = <EXYNOS_PIN_FUNC_INPUT>;
+		samsung,pin-pud = <EXYNOS_PIN_PULL_DOWN>;
 	};
 };
 
@@ -98,12 +107,6 @@
 };
 
 &pinctrl_11 {
-	s5100_cp2ap_cp_wrst_n: s5100_cp2ap_cp_wrst_n {
-		samsung,pins = "gpp8-2";
-		samsung,pin-function = <EXYNOS_PIN_FUNC_INPUT>;
-		samsung,pin-pud = <EXYNOS_PIN_PULL_NONE>;
-	};
-
 	s5100_ap2cp_pm_wrst_n: s5100_ap2cp_pm_wrst_n {
 		samsung,pins = "gpp8-3";
 		samsung,pin-function = <EXYNOS_PIN_FUNC_OUTPUT>;

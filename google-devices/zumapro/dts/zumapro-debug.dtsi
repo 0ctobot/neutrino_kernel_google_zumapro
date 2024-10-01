@@ -415,6 +415,8 @@
 		compatible = "arm,embedded-trace-extension";
 		cpu = <&cpu0>;
 
+		arm,coresight-loses-context-with-cpu;
+
 		out-ports {
 			port {
 				ete0_out_port: endpoint {
@@ -427,6 +429,8 @@
 	ete1 {
 		compatible = "arm,embedded-trace-extension";
 		cpu = <&cpu1>;
+
+		arm,coresight-loses-context-with-cpu;
 
 		out-ports {
 			port {
@@ -441,6 +445,8 @@
 		compatible = "arm,embedded-trace-extension";
 		cpu = <&cpu2>;
 
+		arm,coresight-loses-context-with-cpu;
+
 		out-ports {
 			port {
 				ete2_out_port: endpoint {
@@ -453,6 +459,8 @@
 	ete3 {
 		compatible = "arm,embedded-trace-extension";
 		cpu = <&cpu3>;
+
+		arm,coresight-loses-context-with-cpu;
 
 		out-ports {
 			port {
@@ -467,6 +475,8 @@
 		compatible = "arm,embedded-trace-extension";
 		cpu = <&cpu4>;
 
+		arm,coresight-loses-context-with-cpu;
+
 		out-ports {
 			port {
 				ete4_out_port: endpoint {
@@ -479,6 +489,8 @@
 	ete5 {
 		compatible = "arm,embedded-trace-extension";
 		cpu = <&cpu5>;
+
+		arm,coresight-loses-context-with-cpu;
 
 		out-ports {
 			port {
@@ -493,6 +505,8 @@
 		compatible = "arm,embedded-trace-extension";
 		cpu = <&cpu6>;
 
+		arm,coresight-loses-context-with-cpu;
+
 		out-ports {
 			port {
 				ete6_out_port: endpoint {
@@ -505,6 +519,8 @@
 	ete7 {
 		compatible = "arm,embedded-trace-extension";
 		cpu = <&cpu7>;
+
+		arm,coresight-loses-context-with-cpu;
 
 		out-ports {
 			port {
