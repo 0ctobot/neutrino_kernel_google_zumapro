@@ -6,4 +6,4 @@ extfs_rsv_pct=0
 journal_size=0
 partition_name=system_dlkm
 mount_point=system_dlkm
-selinux_fc=prebuilts/boot-artifacts/selinux/system_file_contexts
+selinux_fc=private/devices/google/common/sepolicy/system_dlkm_file_contexts

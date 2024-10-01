@@ -50,7 +50,7 @@ max77759_fg:max77759fg@36 {
 
 	maxim,psy-type-unknown;
 	maxim,fg-data {
-		#include "google-dts-ripcurrent/zuma-ripcurrent-battery-data.dtsi"
+		#include <zuma-ripcurrent-battery-data.dtsi>
 	};
 };
 

@@ -10,7 +10,6 @@ ra9530: ra9530@3b {
 	compatible = "idt,ra9530";
 	reg = <0x3b>;
 
-	dev-name = "ra9530";
 
 	/* RTX */
 	idt,hw_ocp_det;

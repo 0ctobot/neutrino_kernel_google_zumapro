@@ -87,7 +87,7 @@
 	};
 
 	chosen: chosen {
-		bootargs = "earlycon=exynos4210,mmio32,0x10870000 console=ttySAC0,115200n8 root=/dev/ram0 rw clocksource=arch_sys_counter androidboot.hardware=zuma androidboot.hardware.platform=zuma androidboot.debug_level=0x4948 clk_ignore_unused loop.max_part=7 loop.hw_queue_depth=31 coherent_pool=4M firmware_class.path=/vendor/firmware irqaffinity=0 androidboot.slot_suffix=_a androidboot.secure_boot=NONE sysrq_always_enabled no_console_suspend softlockup_panic=1 kasan_multi_shot kvm-arm.protected_modules=exynos-pd,pkvm_s2mpu-v9";
+		bootargs = "earlycon=exynos4210,mmio32,0x10870000 console=ttySAC0,115200n8 root=/dev/ram0 rw clocksource=arch_sys_counter androidboot.hardware=zuma androidboot.hardware.platform=zuma androidboot.debug_level=0x4948 clk_ignore_unused loop.max_part=7 loop.hw_queue_depth=31 coherent_pool=4M firmware_class.path=/vendor/firmware irqaffinity=0 androidboot.slot_suffix=_a androidboot.secure_boot=NONE no_console_suspend softlockup_panic=1 kasan_multi_shot kvm-arm.protected_modules=exynos-pd,pkvm_s2mpu-v9";
 	};
 
 	odm: odm {

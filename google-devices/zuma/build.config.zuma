@@ -7,8 +7,6 @@ DEFCONFIG=zuma_gki_defconfig
 PRE_DEFCONFIG_CMDS="mkdir -p \${OUT_DIR}/arch/arm64/configs/ && KCONFIG_CONFIG=\${OUT_DIR}/arch/arm64/configs/${DEFCONFIG} ${ROOT_DIR}/${KERNEL_DIR}/scripts/kconfig/merge_config.sh -m -r ${ROOT_DIR}/${KERNEL_DIR}/arch/arm64/configs/gki_defconfig ${ROOT_DIR}/${FRAGMENT_CONFIG} && true"
 POST_DEFCONFIG_CMDS=""
 
-MAKE_GOALS=
-
 LZ4_RAMDISK=1
 BOOT_IMAGE_HEADER_VERSION=4
 TRIM_UNUSED_MODULES=1

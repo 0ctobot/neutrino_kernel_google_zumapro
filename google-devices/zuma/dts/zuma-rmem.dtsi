@@ -26,7 +26,7 @@
 
 		ect_binary: ect_binary {
 			compatible = "exynos,ect_rmem";
-			reg = <0x0 0x90000000 0x0003A000>;
+			reg = <0x0 0x90000000 0x00060000>;
 		};
 
 		gsa_reserved_protected: gsa@90200000 {

@@ -425,6 +425,336 @@
 		tmc_buf_size = <0x10000000>;
 	};
 
+	ete0 {
+		compatible = "arm,embedded-trace-extension";
+		cpu = <&cpu0>;
+
+		arm,coresight-loses-context-with-cpu;
+
+		out-ports {
+			port {
+				ete0_out_port: endpoint {
+					remote-endpoint = <&funnel0_in_port0>;
+				};
+			};
+		};
+	};
+
+	ete1 {
+		compatible = "arm,embedded-trace-extension";
+		cpu = <&cpu1>;
+
+		arm,coresight-loses-context-with-cpu;
+
+		out-ports {
+			port {
+				ete1_out_port: endpoint {
+					remote-endpoint = <&funnel0_in_port1>;
+				};
+			};
+		};
+	};
+
+	ete2 {
+		compatible = "arm,embedded-trace-extension";
+		cpu = <&cpu2>;
+
+		arm,coresight-loses-context-with-cpu;
+
+		out-ports {
+			port {
+				ete2_out_port: endpoint {
+					remote-endpoint = <&funnel0_in_port2>;
+				};
+			};
+		};
+	};
+
+	ete3 {
+		compatible = "arm,embedded-trace-extension";
+		cpu = <&cpu3>;
+
+		arm,coresight-loses-context-with-cpu;
+
+		out-ports {
+			port {
+				ete3_out_port: endpoint {
+					remote-endpoint = <&funnel0_in_port3>;
+				};
+			};
+		};
+	};
+
+	ete4 {
+		compatible = "arm,embedded-trace-extension";
+		cpu = <&cpu4>;
+
+		arm,coresight-loses-context-with-cpu;
+
+		out-ports {
+			port {
+				ete4_out_port: endpoint {
+					remote-endpoint = <&funnel0_in_port4>;
+				};
+			};
+		};
+	};
+
+	ete5 {
+		compatible = "arm,embedded-trace-extension";
+		cpu = <&cpu5>;
+
+		arm,coresight-loses-context-with-cpu;
+
+		out-ports {
+			port {
+				ete5_out_port: endpoint {
+					remote-endpoint = <&funnel0_in_port5>;
+				};
+			};
+		};
+	};
+
+	ete6 {
+		compatible = "arm,embedded-trace-extension";
+		cpu = <&cpu6>;
+
+		arm,coresight-loses-context-with-cpu;
+
+		out-ports {
+			port {
+				ete6_out_port: endpoint {
+					remote-endpoint = <&funnel0_in_port6>;
+				};
+			};
+		};
+	};
+
+	ete7 {
+		compatible = "arm,embedded-trace-extension";
+		cpu = <&cpu7>;
+
+		arm,coresight-loses-context-with-cpu;
+
+		out-ports {
+			port {
+				ete7_out_port: endpoint {
+					remote-endpoint = <&funnel0_in_port7>;
+				};
+			};
+		};
+	};
+
+	ete8 {
+		compatible = "arm,embedded-trace-extension";
+		cpu = <&cpu8>;
+
+		arm,coresight-loses-context-with-cpu;
+
+		out-ports {
+			port {
+				ete8_out_port: endpoint {
+					remote-endpoint = <&funnel0_in_port8>;
+				};
+			};
+		};
+	};
+
+	funnel0 {
+		compatible = "arm,coresight-static-funnel";
+
+		coresight-name = "coresight-funnel0";
+
+		out-ports {
+			port {
+				funnel0_out_port: endpoint {
+					remote-endpoint = <&funnel1_in_port0>;
+				};
+			};
+		};
+
+		in-ports {
+			#address-cells = <1>;
+			#size-cells = <0>;
+
+			port@0 {
+				reg = <0>;
+				funnel0_in_port0: endpoint {
+					remote-endpoint = <&ete0_out_port>;
+				};
+			};
+
+			port@1 {
+				reg = <1>;
+				funnel0_in_port1: endpoint {
+					remote-endpoint = <&ete1_out_port>;
+				};
+			};
+
+			port@2 {
+				reg = <2>;
+				funnel0_in_port2: endpoint {
+					remote-endpoint = <&ete2_out_port>;
+				};
+			};
+
+			port@3 {
+				reg = <3>;
+				funnel0_in_port3: endpoint {
+					remote-endpoint = <&ete3_out_port>;
+				};
+			};
+
+			port@4 {
+				reg = <4>;
+				funnel0_in_port4: endpoint {
+					remote-endpoint = <&ete4_out_port>;
+				};
+			};
+
+			port@5 {
+				reg = <5>;
+				funnel0_in_port5: endpoint {
+					remote-endpoint = <&ete5_out_port>;
+				};
+			};
+
+			port@6 {
+				reg = <6>;
+				funnel0_in_port6: endpoint {
+					remote-endpoint = <&ete6_out_port>;
+				};
+			};
+
+			port@7 {
+				reg = <7>;
+				funnel0_in_port7: endpoint {
+					remote-endpoint = <&ete7_out_port>;
+				};
+			};
+
+			port@8 {
+				reg = <8>;
+				funnel0_in_port8: endpoint {
+					remote-endpoint = <&ete8_out_port>;
+				};
+			};
+		};
+	};
+
+	funnel1: funnel@2a007000 {
+		compatible = "arm,primecell";
+		arm,primecell-periphid = <0x000bb908>;
+
+		reg = <0 0x2a007000 0x1000>;
+		reg-names = "funnel-base";
+
+		coresight-name = "coresight-funnel1";
+
+		clocks = <&clock ATCLK>;
+		clock-names = "apb_pclk";
+
+		out-ports {
+			port {
+				funnel1_out_port: endpoint {
+					remote-endpoint = <&etf0_in_port>;
+				};
+			};
+		};
+
+		in-ports {
+			#address-cells = <1>;
+			#size-cells = <0>;
+
+			port@0 {
+				reg = <0>;
+				funnel1_in_port0: endpoint {
+					remote-endpoint = <&funnel0_out_port>;
+				};
+			};
+		};
+	};
+
+	funnel2: funnel@2a009000 {
+		compatible = "arm,primecell";
+		arm,primecell-periphid = <0x000bb908>;
+
+		reg = <0 0x2a009000 0x1000>;
+		reg-names = "funnel-base";
+
+		coresight-name = "coresight-funnel2";
+
+		clocks = <&clock ATCLK>;
+		clock-names = "apb_pclk";
+
+		out-ports {
+			port {
+				funnel2_out_port: endpoint {
+					remote-endpoint = <&etr_in_port>;
+				};
+			};
+		};
+
+		in-ports {
+			#address-cells = <1>;
+			#size-cells = <0>;
+
+			port@0 {
+				reg = <0>;
+				funnel2_in_port0: endpoint {
+					remote-endpoint = <&etf0_out_port>;
+				};
+			};
+		};
+	};
+
+	etf0: etf@2a004000 {
+		compatible = "arm,coresight-tmc", "arm,primecell";
+		arm,primecell-periphid = <0x001bb961>;
+		reg = <0 0x2a004000 0x1000>;
+
+		coresight-name = "coresight-etf0";
+
+		clocks = <&clock ATCLK>;
+		clock-names = "apb_pclk";
+
+		in-ports {
+			port {
+				etf0_in_port: endpoint {
+					remote-endpoint = <&funnel1_out_port>;
+				};
+			};
+		};
+
+		out-ports {
+			port {
+				etf0_out_port: endpoint {
+					remote-endpoint = <&funnel2_in_port0>;
+				};
+			};
+		};
+	};
+
+	etr: etr@2a00a000 {
+		compatible = "arm,coresight-tmc", "arm,primecell";
+		arm,primecell-periphid = <0x001bb961>;
+		reg = <0 0x2a00a000 0x1000>;
+
+		coresight-name = "coresight-etr";
+		arm,scatter-gather;
+
+		clocks = <&clock ATCLK>;
+		clock-names = "apb_pclk";
+
+		in-ports {
+			port {
+				etr_in_port: endpoint {
+					remote-endpoint = <&funnel2_out_port>;
+				};
+			};
+		};
+	};
+
 	exynos-adv_tracer {
 		compatible = "google,exynos-adv-tracer";
 		reg = <0x0 0x15260000 0x1000>;

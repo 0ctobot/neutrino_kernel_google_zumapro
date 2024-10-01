@@ -97,3 +97,18 @@
 	regulator-always-on;
 	regulator-initial-mode = <SEC_OPMODE_ON>;
 };
+
+/ {
+	fragment@bbd_pps {
+		target-path = "/";
+		__overlay__ {
+			bbd_pps {
+				compatible = "bbd-pps-gpio";
+				status = "okay";
+				gpios = <&gpp14 1 GPIO_ACTIVE_HIGH>;
+				pinctrl-names = "default";
+				assert-falling-edge = <0>;
+			};
+		};
+	};
+};

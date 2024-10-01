@@ -57,6 +57,7 @@
 			 455000 1492
 			 226000  562
 		>;
+		use-kernel-vii;
 	};
 
 	tpu_cooling: tpu-cooling {

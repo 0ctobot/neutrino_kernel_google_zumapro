@@ -15,4 +15,8 @@
 
 		s2mpu = <&s2mpu_s0_gsa>;
 	};
+
+	tzprot: tzprot {
+		compatible = "google,gsoc-tzprot-v1";
+	};
 };
