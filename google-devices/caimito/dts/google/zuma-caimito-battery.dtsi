@@ -39,7 +39,6 @@
 	#size-cells = <0>;
 	status = "okay";
 	clock-frequency = <950000>;
-	pinctrl-0 = <&hsi2c6_bus>;
 
 	#include "google-dts-zuma/zuma-max777xx.dtsi"
 };
@@ -50,9 +49,6 @@
 	#size-cells = <0>;
 	status = "okay";
 	clock-frequency = <400000>;
-
-	pinctrl-names = "default";
-	pinctrl-0 = <&hsi2c10_bus>;
 
 	#include "google-dts-zuma/zuma-max777xx-eeprom.dtsi"
 };

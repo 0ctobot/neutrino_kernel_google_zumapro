@@ -80,4 +80,7 @@
 
 	/* TXID: Phone type */
 	idt,tx_id_phone_type = /bits/ 8 <5>;
+
+	/* High dissipation adapter */
+	google,hda-tz-wlc;
 };

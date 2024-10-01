@@ -2,38 +2,35 @@
 
 load("@bazel_skylib//lib:paths.bzl", "paths")
 load("@bazel_skylib//rules:write_file.bzl", "write_file")
-load("//aosp:modules.bzl", "get_gki_modules_list")
 load("//build/bazel_common_rules/dist:dist.bzl", "copy_to_dist_dir")
 load("//build/kernel/kleaf:hermetic_tools.bzl", "hermetic_genrule")
 load(
     "//build/kernel/kleaf:kernel.bzl",
     "kernel_abi",
     "kernel_build",
+    "kernel_build_config",
     "kernel_images",
+    "kernel_module",
     "kernel_module_group",
     "kernel_modules_install",
     "kernel_unstripped_modules_archive",
     "merged_kernel_uapi_headers",
 )
-load(
-    "//private/devices/google/common:device_build_configs.bzl",
-    "device_build_configs",
-    "extracted_system_dlkm",
-    "lto_dependant_kernel_module",
-)
+load("//common:modules.bzl", "get_gki_modules_list")
+load("//private/devices/google/common/kleaf:device.bzl", "extracted_system_dlkm")
 
-device_build_configs(
-    name = "build.config.caimito",
-    base_build_config = ":build.config.caimito",
-    device_name = "caimito",
+kernel_build_config(
+    name = "caimito_build_config",
+    srcs = [
+        # do not sort
+        "//common:set_kernel_dir_build_config",
+        "build.config.caimito",
+    ],
 )
 
 filegroup(
     name = "gki_aarch64_boot_lz4",
-    srcs = select({
-        "//private/devices/google/common:gki_aosp": ["//aosp:kernel_aarch64_gki_artifacts_download_or_build"],
-        "//private/devices/google/common:gki_aosp_staging": ["//aosp-staging:kernel_aarch64_gki_artifacts_download_or_build"],
-    }),
+    srcs = ["//common:kernel_aarch64_gki_artifacts_download_or_build"],
 )
 
 hermetic_genrule(
@@ -228,7 +225,7 @@ kernel_build(
         "caimito*.fragment",
     ]) + [
         # keep sorted
-        "//private/devices/google/common:debug_build_configs",
+        "//common:kernel_aarch64_sources",
         "//private/devices/google/zumapro:build.config.zumapro",
         "//private/google-modules/bms/misc:bms-misc.kconfig",
         "//private/google-modules/display/common:common.kconfig",
@@ -244,31 +241,18 @@ kernel_build(
         "//private/google-modules/touch/sec:sec.kconfig",
         "//private/google-modules/trusty:trusty.kconfig",
         "//private/google-modules/wlan/wlan_ptracker:wlan_ptracker.kconfig",
-    ] + select({
-        "//private/devices/google/common:gki_aosp": ["//aosp:kernel_aarch64_sources"],
-        "//private/devices/google/common:gki_aosp_staging": ["//aosp-staging:kernel_aarch64_sources"],
-    }),
+    ],
     outs = ["google/google-dts-zuma/zuma-{}.dtb".format(soc_rev) for soc_rev in ZUMA_SOC_REVS] +
            ["google/google-dts-zumapro/zumapro-{}.dtb".format(soc_rev) for soc_rev in ZUMAPRO_SOC_REVS] +
            _ZUMA_CAIMITO_DTBOS + _ZUMAPRO_CAIMITO_DTBOS +
            _ZUMA_CAIMITO_DPM_DTBOS + _ZUMAPRO_CAIMITO_DPM_DTBOS,
-    # TODO(b/221278445): Use real GKI
-    base_kernel = select({
-        "//private/devices/google/common:gki_aosp": "//aosp:kernel_aarch64_download_or_build",
-        "//private/devices/google/common:gki_aosp_staging": "//aosp-staging:kernel_aarch64_download_or_build",
-    }),
-    build_config = ":device_build_config",
+    base_kernel = "//common:kernel_aarch64_download_or_build",
+    build_config = ":caimito_build_config",
     collect_unstripped_modules = True,
-    defconfig_fragments = select({
-        "//private/devices/google/common:kunit_enabled": ["kunit_defconfig"],
-        "//conditions:default": [],
-    }),
+    defconfig_fragments = ["//private/devices/google/zumapro:zumapro_defconfig"],
     dtstree = "//private/devices/google/caimito/dts:caimito.dt",
-    kconfig_ext = "//private/google-modules/soc/gs:Kconfig.ext",
-    kmi_symbol_list = select({
-        "//private/devices/google/common:gki_aosp": "//aosp:android/abi_gki_aarch64_pixel",
-        "//private/devices/google/common:gki_aosp_staging": "//aosp-staging:android/abi_gki_aarch64_pixel",
-    }),
+    kconfig_ext = "Kconfig.ext",
+    kmi_symbol_list = "//common:android/abi_gki_aarch64_pixel",
     make_goals = _PIXEL_MAKE_GOALS,
     module_outs = [
         # keep sorted
@@ -295,7 +279,7 @@ kernel_abi(
     module_grouping = False,
 )
 
-lto_dependant_kernel_module(
+kernel_module(
     name = "zumapro_soc.caimito",
     srcs = [
         "//private/google-modules/soc/gs:gs_soc_sources",
@@ -402,6 +386,7 @@ lto_dependant_kernel_module(
         "drivers/soc/google/gsa/gsa_gsc.ko",
         "drivers/soc/google/hardlockup-debug.ko",
         "drivers/soc/google/hardlockup-watchdog.ko",
+        "drivers/soc/google/kernel-top.ko",
         "drivers/soc/google/pa_kill/pa_kill.ko",
         "drivers/soc/google/perf_trace_counters.ko",
         "drivers/soc/google/pixel_stat/mm/pixel_stat_mm.ko",
@@ -428,11 +413,11 @@ lto_dependant_kernel_module(
         "drivers/thermal/samsung/gs_thermal.ko",
         "drivers/tty/serial/exynos_tty.ko",
         "drivers/ufs/ufs-exynos-gs.ko",
+        "drivers/ufs/ufs-pixel-fips140.ko",
         "drivers/usb/dwc3/dwc3-exynos-usb.ko",
         "drivers/usb/gadget/function/usb_f_dm.ko",
         "drivers/usb/gadget/function/usb_f_dm1.ko",
         "drivers/usb/gadget/function/usb_f_etr_miu.ko",
-        "drivers/usb/gadget/function/usb_f_rndis.ko",
         "drivers/usb/host/xhci-exynos.ko",
         "drivers/usb/typec/tcpm/google/bc_max77759.ko",
         "drivers/usb/typec/tcpm/google/google_tcpci_shim.ko",
@@ -446,14 +431,7 @@ lto_dependant_kernel_module(
         "drivers/watchdog/s3c2410_wdt.ko",
     ],
     kernel_build = "//private/google-modules/soc/gs:gs_kernel_build",
-    lto_outs = [
-        "drivers/ufs/ufs-pixel-fips140.ko",
-    ],
     makefile = ["//private/google-modules/soc/gs:Makefile"],
-    test_outs = [
-        # TODO(b/323263169) enable this.
-        # "drivers/soc/google/gsa/gsa_test.ko"
-    ],
     visibility = [
         # keep sorted
         "//private/devices/google:__subpackages__",
@@ -510,10 +488,7 @@ write_file(
 
 kernel_images(
     name = "zumapro_caimito_images",
-    base_kernel_images = select({
-        "//private/devices/google/common:gki_aosp": "//aosp:kernel_aarch64_images_download_or_build",
-        "//private/devices/google/common:gki_aosp_staging": "//aosp-staging:kernel_aarch64_images_download_or_build",
-    }),
+    base_kernel_images = "//common:kernel_aarch64_images_download_or_build",
     boot_image_outs = ["dtb.img"],
     build_boot = False,
     build_dtbo = True,
@@ -538,8 +513,7 @@ kernel_images(
     deps = [
         # Keep the following in sync with (vendor|system)_dlkm.props.zumapro:
         # selinux_fc
-        "//prebuilts/boot-artifacts/selinux:file_contexts",
-        "//prebuilts/boot-artifacts/selinux:system_file_contexts",
+        "//private/devices/google/common:sepolicy",
     ],
 )
 
@@ -585,18 +559,10 @@ _zumapro_caimito_dist_targets = [
     ":zumapro_caimito_unstripped_modules_archive",
     ":insmod_cfgs",
     ":zuma_caimito_extracted_system_dlkm",
+    "//common:android/abi_gki_aarch64_pixel",
+    "//common:kernel_aarch64_download_or_build",
+    "//common:kernel_aarch64_headers_download_or_build",
 ] + select({
-    "//private/devices/google/common:gki_aosp": [
-        "//aosp:android/abi_gki_aarch64_pixel",
-        "//aosp:kernel_aarch64_download_or_build",
-        "//aosp:kernel_aarch64_headers_download_or_build",
-    ],
-    "//private/devices/google/common:gki_aosp_staging": [
-        "//aosp-staging:android/abi_gki_aarch64_pixel",
-        "//aosp-staging:kernel_aarch64_download_or_build",
-        "//aosp-staging:kernel_aarch64_headers_download_or_build",
-    ],
-}) + select({
     "//private/devices/google/common:enable_download_fips140": ["@gki_prebuilt_fips140//fips140.ko"],
     "//private/devices/google/common:disable_download_fips140": [],
 })
@@ -604,10 +570,7 @@ _zumapro_caimito_dist_targets = [
 extracted_system_dlkm(
     name = "zuma_caimito_extracted_system_dlkm",
     gki_modules = [paths.basename(m) for m in _GKI_MODULES],
-    images = select({
-        "//private/devices/google/common:gki_aosp": "//aosp:kernel_aarch64_images_download_or_build",
-        "//private/devices/google/common:gki_aosp_staging": "//aosp-staging:kernel_aarch64_images_download_or_build",
-    }),
+    images = "//common:kernel_aarch64_images_download_or_build",
 )
 
 copy_to_dist_dir(
