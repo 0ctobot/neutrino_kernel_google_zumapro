@@ -405,9 +405,6 @@ static int max77779_fg_model_reload(struct max77779_fg_chip *chip, bool force)
 	if (!force && (pending || disabled))
 		return -EEXIST;
 
-	if (!force && max77779_fg_model_check_version(chip->model_data))
-		return -EINVAL;
-
 	gbms_logbuffer_devlog(chip->ce_log, chip->dev, LOGLEVEL_INFO, 0, LOGLEVEL_INFO,
 			      "Schedule Load FG Model, ID=%d, ver:%d->%d",
 			      chip->batt_id, max77779_model_read_version(chip->model_data),
@@ -1341,11 +1338,12 @@ static void max77779_fg_dynrelax(struct max77779_fg_chip *chip)
 				dr_state->mark_last = fstat;
 				dr_state->sticky_cnt = 0;
 			}
+
+			maxfg_dynrel_log(mon, chip->dev, fstat, dr_state);
 		} else {
 			mon = NULL; /* do not pollute the logbuffer */
 		}
 
-		maxfg_dynrel_log(mon, chip->dev, fstat, dr_state);
 		return;
 	}
 
@@ -2426,6 +2424,66 @@ static ssize_t max77779_fg_set_custom_model(struct file *filp, const char __user
 BATTERY_DEBUG_ATTRIBUTE(debug_custom_model_fops, max77779_fg_show_custom_model,
 			max77779_fg_set_custom_model);
 
+static ssize_t max77779_fg_show_custom_param(struct file *filp, char __user *buf,
+					     size_t count, loff_t *ppos)
+{
+	struct max77779_fg_chip *chip = (struct max77779_fg_chip *)filp->private_data;
+	char *tmp;
+	int len;
+
+	if (!chip->model_data)
+		return -EINVAL;
+
+	tmp = kmalloc(PAGE_SIZE, GFP_KERNEL);
+	if (!tmp)
+		return -ENOMEM;
+
+	mutex_lock(&chip->model_lock);
+	len = max77779_fg_param_cstr(tmp, PAGE_SIZE, chip->model_data);
+	mutex_unlock(&chip->model_lock);
+
+	if (len > 0)
+		len = simple_read_from_buffer(buf, count,  ppos, tmp, len);
+
+	kfree(tmp);
+
+	return len;
+}
+
+static ssize_t max77779_fg_set_custom_param(struct file *filp, const char __user *user_buf,
+					    size_t count, loff_t *ppos)
+{
+	struct max77779_fg_chip *chip = (struct max77779_fg_chip *)filp->private_data;
+	char *tmp;
+	int ret;
+
+	if (!chip->model_data)
+		return -EINVAL;
+
+	tmp = kmalloc(PAGE_SIZE, GFP_KERNEL);
+	if (!tmp)
+		return -ENOMEM;
+
+	ret = simple_write_to_buffer(tmp, PAGE_SIZE, ppos, user_buf, count);
+	if (!ret) {
+		kfree(tmp);
+		return -EFAULT;
+	}
+
+	mutex_lock(&chip->model_lock);
+	ret = max77779_fg_param_sscan(chip->model_data, tmp, count);
+	if (ret < 0)
+		count = ret;
+	mutex_unlock(&chip->model_lock);
+
+	kfree(tmp);
+
+	return count;
+}
+
+BATTERY_DEBUG_ATTRIBUTE(debug_custom_param_fops, max77779_fg_show_custom_param,
+			max77779_fg_set_custom_param);
+
 static int debug_sync_model(void *data, u64 val)
 {
 	struct max77779_fg_chip *chip = data;
@@ -2866,6 +2924,7 @@ static void max77779_fg_init_sysfs(struct max77779_fg_chip *chip, struct dentry 
 					&debug_reglog_writes_fops);
 
 	debugfs_create_file("fg_model", 0444, de, chip, &debug_custom_model_fops);
+	debugfs_create_file("fg_param", 0444, de, chip, &debug_custom_param_fops);
 	debugfs_create_bool("model_ok", 0444, de, &chip->model_ok);
 	debugfs_create_file("sync_model", 0400, de, chip, &debug_sync_model_fops);
 	debugfs_create_file("model_version", 0600, de, chip, &debug_model_version_fops);
@@ -3176,9 +3235,10 @@ static int max77779_fg_init_model_data(struct max77779_fg_chip *chip)
 	if (ret < 0)
 		dev_warn(chip->dev, "Error on Next Update, Will retry\n");
 
-	dev_info(chip->dev, "FG Model OK, ver=%d next_update=%d\n",
-		 max77779_model_read_version(chip->model_data),
-		 chip->model_next_update);
+	gbms_logbuffer_devlog(chip->ce_log, chip->dev, LOGLEVEL_INFO, 0, LOGLEVEL_INFO,
+			      "FG Model OK, ver=%d next_update=%d",
+			      max77779_model_read_version(chip->model_data),
+			      chip->model_next_update);
 
 	chip->reg_prop_capacity_raw = MAX77779_FG_RepSOC;
 	chip->model_ok = true;

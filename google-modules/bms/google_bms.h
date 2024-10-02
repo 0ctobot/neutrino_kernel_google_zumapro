@@ -392,6 +392,8 @@ struct gbms_charging_event {
 	ktime_t first_update;
 	ktime_t last_update;
 	bool bd_clear_trickle;
+	uint16_t csi_aggregate_status;
+	uint16_t csi_aggregate_type;
 
 	/* health based charging */
 	struct batt_chg_health		ce_health;	/* updated on close */

@@ -109,7 +109,6 @@ struct rt9471_desc {
 	bool en_safe_tmr;
 	bool en_te;
 	bool en_jeita;
-	bool ceb_invert;
 	bool dis_i2c_tout;
 	bool en_qon_rst;
 	bool auto_aicr;
@@ -130,7 +129,6 @@ static struct rt9471_desc rt9471_default_desc = {
 	.en_safe_tmr = true,
 	.en_te = true,
 	.en_jeita = true,
-	.ceb_invert = false,
 	.dis_i2c_tout = false,
 	.en_qon_rst = true,
 	.auto_aicr = true,
@@ -1496,7 +1494,6 @@ static int rt9471_parse_dt(struct rt9471_chip *chip)
 	desc->en_safe_tmr = of_property_read_bool(np, "en-safe-tmr");
 	desc->en_te = of_property_read_bool(np, "en-te");
 	desc->en_jeita = of_property_read_bool(np, "en-jeita");
-	desc->ceb_invert = of_property_read_bool(np, "ceb-invert");
 	desc->dis_i2c_tout = of_property_read_bool(np, "dis-i2c-tout");
 	desc->en_qon_rst = of_property_read_bool(np, "en-qon-rst");
 	desc->auto_aicr = of_property_read_bool(np, "auto-aicr");
@@ -1547,6 +1544,11 @@ static int rt9471_sw_workaround(struct rt9471_chip *chip)
 out:
 	rt9471_enable_hidden_mode(chip, false);
 	return ret;
+}
+
+static int rt9471_enable_wdt(struct rt9471_chip *chip, bool en)
+{
+	return __rt9471_set_wdt(chip, en ? chip->desc->wdt : 0);
 }
 
 static int rt9471_init_setting(struct rt9471_chip *chip)
@@ -1771,6 +1773,8 @@ static void rt9471_gpio_set(struct gpio_chip *chip, unsigned int offset, int val
 	switch (offset) {
 	case RT9471_GPIO_USB_OTG_EN:
 		ret = __rt9471_enable_otg(data, value);
+		if (ret == 0)
+			ret = rt9471_enable_wdt(data, value > 0);
 		break;
 
 	default:
@@ -1942,6 +1946,8 @@ static int rt9471_psy_set_property(struct power_supply *psy,
 		break;
 	case POWER_SUPPLY_PROP_CONSTANT_CHARGE_CURRENT_MAX:
 		ret = __rt9471_set_ichg(chip, val->intval);
+		if (ret == 0)
+			ret = rt9471_enable_wdt(chip, val->intval > 0);
 		break;
 	case POWER_SUPPLY_PROP_CONSTANT_CHARGE_VOLTAGE_MAX:
 		ret = __rt9471_set_cv(chip, val->intval);
@@ -1983,8 +1989,8 @@ static int rt9471_register_psy(struct rt9471_chip *chip)
 	chip->psy_desc.property_is_writeable = rt9471_psy_is_writeable;
 	chip->psy_cfg.of_node = chip->dev->of_node;
 	chip->psy_cfg.drv_data = chip;
-	chip->psy = power_supply_register(chip->dev, &chip->psy_desc,
-					  &chip->psy_cfg);
+	chip->psy = devm_power_supply_register(chip->dev, &chip->psy_desc,
+					       &chip->psy_cfg);
 	if (IS_ERR(chip->psy))
 		return PTR_ERR(chip->psy);
 	return 0;
@@ -2105,7 +2111,6 @@ static void rt9471_shutdown(struct i2c_client *client)
 
 	dev_info(chip->dev, "%s\n", __func__);
 	disable_irq(chip->irq);
-	power_supply_unregister(chip->psy);
 	rt9471_reset_register(chip);
 }
 
@@ -2116,7 +2121,6 @@ static void rt9471_remove(struct i2c_client *client)
 	dev_info(chip->dev, "%s\n", __func__);
 	disable_irq(chip->irq);
 	disable_irq_wake(chip->irq);
-	power_supply_unregister(chip->psy);
 	mutex_destroy(&chip->io_lock);
 	mutex_destroy(&chip->bc12_lock);
 	mutex_destroy(&chip->hidden_mode_lock);

@@ -81,8 +81,10 @@
 #define LN8411_TA_CUR_MAX_OFFSET	200000 /* uA */
 
 /* maximum retry counter for restarting charging */
-#define LN8411_MAX_RETRY_CNT		3	/* retries */
-#define LN8411_MAX_IBUS_UCP_RETRY_CNT	10	/* retries */
+#define LN8411_MAX_RETRY_CNT			3	/* retries */
+#define LN8411_MAX_IBUS_UCP_RETRY_CNT		10	/* retries */
+#define LN8411_MAX_IBUS_UCP_DEBOUNCE_COUNT	3
+
 /* TA IIN tolerance */
 #define LN8411_TA_IIN_OFFSET		100000	/* uA */
 
@@ -1013,11 +1015,20 @@ int ln8411_check_active(struct ln8411_charger *ln8411)
 static int ln8411_check_error(struct ln8411_charger *ln8411)
 {
 	int ret = -EINVAL, vbatt;
+	const int debounce_cnt = ln8411->ibus_ucp_debounce_cnt;
 
 	/* LN8411 is active state */
 	if (ln8411_check_active(ln8411) == 1) {
-		dev_dbg(ln8411->dev, "%s: Active Status ok\n", __func__);
-		ln8411->ibus_ucp_retry_cnt = LN8411_MAX_IBUS_UCP_RETRY_CNT;
+		if (ln8411->ibus_ucp_debounce_cnt &&
+		    (ln8411->ibus_ucp_retry_cnt != LN8411_MAX_IBUS_UCP_RETRY_CNT)) {
+			ln8411->ibus_ucp_debounce_cnt--;
+		} else if (!ln8411->ibus_ucp_debounce_cnt) {
+			ln8411->ibus_ucp_retry_cnt = LN8411_MAX_IBUS_UCP_RETRY_CNT;
+			ln8411->ibus_ucp_debounce_cnt = LN8411_MAX_IBUS_UCP_DEBOUNCE_COUNT;
+		}
+		dev_dbg(ln8411->dev, "%s: Active Status ok. debounce_cnt:%d->%d\n", __func__,
+			debounce_cnt, ln8411->ibus_ucp_debounce_cnt);
+
 		return 0;
 	}
 
@@ -2522,7 +2533,7 @@ done:
 }
 
 /* called on loop inactive */
-static int ln8411_ajdust_ccmode_wireless(struct ln8411_charger *ln8411, int iin)
+static void ln8411_adjust_ccmode_wireless(struct ln8411_charger *ln8411, int iin)
 {
 	/* IIN_ADC > IIN_CC -20mA ? */
 	if (iin > (ln8411->iin_cc - LN8411_IIN_ADC_OFFSET)) {
@@ -2567,12 +2578,10 @@ static int ln8411_ajdust_ccmode_wireless(struct ln8411_charger *ln8411, int iin)
 		ln8411->timer_id = TIMER_PDMSG_SEND;
 		ln8411->timer_period = 0;
 	}
-
-	return 0;
 }
 
 /* called on loop inactive */
-static int ln8411_ajdust_ccmode_wired(struct ln8411_charger *ln8411, int iin)
+static void ln8411_adjust_ccmode_wired(struct ln8411_charger *ln8411, int iin)
 {
 
 	/* USBPD TA is connected */
@@ -2707,8 +2716,6 @@ static int ln8411_ajdust_ccmode_wired(struct ln8411_charger *ln8411, int iin)
 		ln8411->timer_id = TIMER_PDMSG_SEND;
 		ln8411->timer_period = 0;
 	}
-
-	return 0;
 }
 
 static int ln8411_vote_dc_avail(struct ln8411_charger *ln8411, int vote, int enable)
@@ -2819,17 +2826,12 @@ static int ln8411_charge_adjust_ccmode(struct ln8411_charger *ln8411)
 			break;
 
 		if (ln8411->ta_type == TA_TYPE_WIRELESS) {
-			ret = ln8411_ajdust_ccmode_wireless(ln8411, iin);
+			ln8411_adjust_ccmode_wireless(ln8411, iin);
 		} else {
-			ret = ln8411_ajdust_ccmode_wired(ln8411, iin);
+			ln8411_adjust_ccmode_wired(ln8411, iin);
 		}
 
-		if (ret < 0) {
-			dev_err(ln8411->dev, "%s: %d", __func__, ret);
-		} else {
-			ln8411->prev_iin = iin;
-		}
-
+		ln8411->prev_iin = iin;
 		break;
 
 	case STS_MODE_VIN_UVLO:
@@ -4106,6 +4108,7 @@ error:
 
 	if (ret == -EAGAIN && ln8411->ibus_ucp_retry_cnt) { /* Retry for IBUS UCP case */
 		ln8411->ibus_ucp_retry_cnt--;
+		ln8411->ibus_ucp_debounce_cnt = LN8411_MAX_IBUS_UCP_DEBOUNCE_COUNT;
 		ret = ln8411_set_status_disable_charging(ln8411);
 		if (ret) {
 			dev_err(ln8411->dev, "%s: unable to disable charging for retry (%d)\n",
@@ -5014,10 +5017,15 @@ static int ln8411_gbms_mains_set_property(struct power_supply *psy,
 	case GBMS_PROP_CHARGE_DISABLE:
 		dev_dbg(ln8411->dev, "%s: ChargeDisable %d, chg_state:%d\n", __func__,
 			val->prop.intval, ln8411->charging_state);
+
+		/* Reset state on disconnect event */
 		if (val->prop.intval) {
 			if (ln8411->charging_state == DC_STATE_ERROR)
 				ln8411->charging_state = DC_STATE_NO_CHARGING;
 			ln8411_vote_dc_avail(ln8411, 1, 1);
+
+			ln8411->ibus_ucp_retry_cnt = LN8411_MAX_IBUS_UCP_RETRY_CNT;
+			ln8411->ibus_ucp_debounce_cnt = LN8411_MAX_IBUS_UCP_DEBOUNCE_COUNT;
 		}
 		break;
 
@@ -5489,6 +5497,7 @@ static int ln8411_probe(struct i2c_client *client,
 	ln8411_charger->wlc_ramp_out_delay = 300; /* 300 ms default */
 	ln8411_charger->hw_init_done = false;
 	ln8411_charger->ibus_ucp_retry_cnt = LN8411_MAX_IBUS_UCP_RETRY_CNT;
+	ln8411_charger->ibus_ucp_debounce_cnt = LN8411_MAX_IBUS_UCP_DEBOUNCE_COUNT;
 
 	/* Create a work queue for the direct charger */
 	ln8411_charger->dc_wq = alloc_ordered_workqueue("ln8411_dc_wq", WQ_MEM_RECLAIM);

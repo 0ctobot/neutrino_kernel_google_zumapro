@@ -120,12 +120,6 @@ static int adc_gain[16] = { 0,  1,  2,  3,  4,  5,  6,  7,
 
 #define PCA9468_OTV_MARGIN		12000	/* uV */
 
-/* irdrop default limit */
-#define PCA9468_IRDROP_LIMIT_CNT	3	/* tiers */
-#define PCA9468_IRDROP_LIMIT_TIER1	105000	/* uV */
-#define PCA9468_IRDROP_LIMIT_TIER2	75000	/* uV */
-#define PCA9468_IRDROP_LIMIT_TIER3	0	/* uV */
-
 /* Spread Spectrum default settings */
 #define PCA9468_SC_CLK_DITHER_RATE_DEF	0	/* 25kHz */
 #define PCA9468_SC_CLK_DITHER_LIMIT_DEF	0xF	/* 10% */
@@ -957,7 +951,6 @@ static int pca9468_get_iin(struct pca9468_charger *pca9468, int *iin)
 	return 0;
 }
 
-/* only needed for irdrop compensation ane maybe not even that... */
 static int pca9468_get_batt_info(struct pca9468_charger *pca9468, int info_type, int *info)
 {
 	union power_supply_propval val;
@@ -981,7 +974,6 @@ static int pca9468_get_batt_info(struct pca9468_charger *pca9468, int info_type,
 	return ret;
 }
 
-/* only needed for irdrop compensation ane maybe not even that... */
 static int pca9468_get_ibatt(struct pca9468_charger *pca9468, int *info)
 {
 	return pca9468_get_batt_info(pca9468, BATT_CURRENT, info);
@@ -1031,93 +1023,7 @@ static int pca9468_read_status(struct pca9468_charger *pca9468)
 	return ret;
 }
 
-/*
- * TODO: add formula and/or use device tree entries to configure. Can use
- * delta = PCA9468_COMP_VFLOAT_MAX to reduce the limit as float voltage
- * increases.
- * NOTE: how does this change with temperature, battery age?
- */
-static int pca9468_irdrop_limit(struct pca9468_charger *pca9468, int fv_uv)
-{
-	int delta = pca9468->pdata->irdrop_limits[1];
-
-	if (fv_uv < 4300000)
-		delta = pca9468->pdata->irdrop_limits[0];
-	if (fv_uv >= PCA9468_COMP_VFLOAT_MAX)
-		delta = pca9468->pdata->irdrop_limits[2];
-
-	return delta;
-}
-
-/* use max limit,  */
-static int pca9468_apply_irdrop(struct pca9468_charger *pca9468, int fv_uv)
-{
-	const int delta_limit = pca9468_irdrop_limit(pca9468, fv_uv);
-	int ret = -1, vbat, pca_vbat = 0, delta = 0;
-	const bool adaptive = false;
-
-	/* use classic irdrop */
-	if (!pca9468->pdata->pca_irdrop)
-		goto error_done;
-
-	ret = pca9468_get_batt_info(pca9468, BATT_VOLTAGE, &vbat);
-	if (ret < 0)
-		goto error_done;
-
-	pca_vbat = pca9468_read_adc(pca9468, ADCCH_VBAT);
-	if (pca_vbat < 0 || pca_vbat < vbat)
-		goto error_done;
-
-	if (adaptive) {
-		delta = pca_vbat - vbat;
-		if (delta > delta_limit)
-			delta = delta_limit;
-	} else {
-		delta = delta_limit;
-	}
-
-	if (fv_uv + delta > PCA9468_COMP_VFLOAT_MAX)
-		delta = PCA9468_COMP_VFLOAT_MAX - fv_uv;
-
-error_done:
-	pr_debug("%s: fv_uv=%d->%d pca_vbat=%d, vbat=%d delta_v=%d\n",
-		 __func__, fv_uv, fv_uv + delta, pca_vbat,
-		 ret < 0 ? ret : vbat, delta);
-
-	if (fv_uv + delta < pca_vbat) {
-		pr_err("%s: fv_uv=%d, comp_fv_uv=%d is lower than VBAT=%d\n",
-		       __func__, fv_uv, fv_uv + delta, pca_vbat);
-		return -EINVAL;
-	}
-
-	return fv_uv + delta;
-}
-
 static int pca9468_const_charge_voltage(struct pca9468_charger *pca9468);
-
-/* irdrop compensation for the pca9468 V_FLOAT, will only raise it */
-static int pca9468_comp_irdrop(struct pca9468_charger *pca9468)
-{
-	int ret = 0, v_float, fv_uv;
-
-	v_float = pca9468_const_charge_voltage(pca9468);
-	if (v_float < 0)
-		return -EIO;
-
-	fv_uv = pca9468_apply_irdrop(pca9468, pca9468->fv_uv);
-	if (fv_uv < 0)
-		return -EIO;
-
-	/* do not back down */
-	if (fv_uv > v_float) {
-		ret = pca9468_set_vfloat(pca9468, fv_uv);
-		logbuffer_prlog(pca9468, LOGLEVEL_DEBUG,
-				"%s: v_float=%u->%u (%d)", __func__,
-				v_float, fv_uv, ret);
-	}
-
-	return ret;
-}
 
 static int pca9468_check_status(struct pca9468_charger *pca9468)
 {
@@ -2412,24 +2318,19 @@ done:
  */
 static int pca9468_apply_new_vfloat(struct pca9468_charger *pca9468)
 {
-	int fv_uv, ret = 0;
+	int ret = 0;
 
-	/* compensated float voltage, -EINVAL if under pca_vbat */
-	fv_uv = pca9468_apply_irdrop(pca9468, pca9468->new_vfloat);
-	if (fv_uv < 0)
-		return fv_uv;
-
-	if (pca9468->fv_uv == fv_uv)
+	if (pca9468->fv_uv == pca9468->new_vfloat)
 		goto error_done;
 
 	/* actually change the hardware */
-	ret = pca9468_set_vfloat(pca9468, fv_uv);
+	ret = pca9468_set_vfloat(pca9468, pca9468->new_vfloat);
 	if (ret < 0)
 		goto error_done;
 
 	/* Restart the process if tier switch happened (either direction) */
 	if (pca9468->charging_state == DC_STATE_CV_MODE &&
-	    abs(fv_uv - pca9468->fv_uv) > PCA9468_TIER_SWITCH_DELTA) {
+	    abs(pca9468->new_vfloat - pca9468->fv_uv) > PCA9468_TIER_SWITCH_DELTA) {
 		ret = pca9468_reset_dcmode(pca9468);
 		if (ret < 0) {
 			pr_err("%s: cannot reset dcmode (%d)\n", __func__, ret);
@@ -2443,12 +2344,12 @@ static int pca9468_apply_new_vfloat(struct pca9468_charger *pca9468)
 		}
 	}
 
-	pca9468->fv_uv = fv_uv;
+	pca9468->fv_uv = pca9468->new_vfloat;
 
 error_done:
 	logbuffer_prlog(pca9468, LOGLEVEL_INFO,
-			"%s: new_vfloat=%d, fv_uv=%d ret=%d", __func__,
-			pca9468->new_vfloat, fv_uv, ret);
+			"%s: new_vfloat=%d, ret=%d", __func__,
+			pca9468->new_vfloat, ret);
 
 	if (ret == 0)
 		pca9468->new_vfloat = 0;
@@ -2487,7 +2388,7 @@ done:
 }
 
 /* called on loop inactive */
-static int pca9468_ajdust_ccmode_wireless(struct pca9468_charger *pca9468, int iin)
+static void pca9468_adjust_ccmode_wireless(struct pca9468_charger *pca9468, int iin)
 {
 	/* IIN_ADC > IIN_CC -20mA ? */
 	if (iin > (pca9468->iin_cc - PCA9468_IIN_ADC_OFFSET)) {
@@ -2532,12 +2433,10 @@ static int pca9468_ajdust_ccmode_wireless(struct pca9468_charger *pca9468, int i
 		pca9468->timer_id = TIMER_PDMSG_SEND;
 		pca9468->timer_period = 0;
 	}
-
-	return 0;
 }
 
 /* called on loop inactive */
-static int pca9468_ajdust_ccmode_wired(struct pca9468_charger *pca9468, int iin)
+static void pca9468_adjust_ccmode_wired(struct pca9468_charger *pca9468, int iin)
 {
 
 	/* USBPD TA is connected */
@@ -2672,8 +2571,6 @@ static int pca9468_ajdust_ccmode_wired(struct pca9468_charger *pca9468, int iin)
 		pca9468->timer_id = TIMER_PDMSG_SEND;
 		pca9468->timer_period = 0;
 	}
-
-	return 0;
 }
 
 static int pca9468_vote_dc_avail(struct pca9468_charger *pca9468, int vote, int enable)
@@ -2703,7 +2600,6 @@ static int pca9468_vote_dc_avail(struct pca9468_charger *pca9468, int vote, int 
 static int pca9468_charge_adjust_ccmode(struct pca9468_charger *pca9468)
 {
 	int  iin, ccmode, vbatt, vin_vol;
-	bool apply_ircomp = false;
 	int ret = 0;
 
 	mutex_lock(&pca9468->lock);
@@ -2732,8 +2628,6 @@ static int pca9468_charge_adjust_ccmode(struct pca9468_charger *pca9468)
 		pca9468->chg_data.iin_loop_count++;
 		fallthrough;
 	case STS_MODE_CHG_LOOP:	/* CHG_LOOP does't exist */
-		apply_ircomp = true;
-
 		if (pca9468->ta_type == TA_TYPE_WIRELESS) {
 			/* Decrease RX voltage (100mV) */
 			pca9468->ta_vol = pca9468->ta_vol - WCRX_VOL_STEP;
@@ -2788,18 +2682,12 @@ static int pca9468_charge_adjust_ccmode(struct pca9468_charger *pca9468)
 			break;
 
 		if (pca9468->ta_type == TA_TYPE_WIRELESS) {
-			ret = pca9468_ajdust_ccmode_wireless(pca9468, iin);
+			pca9468_adjust_ccmode_wireless(pca9468, iin);
 		} else {
-			ret = pca9468_ajdust_ccmode_wired(pca9468, iin);
+			pca9468_adjust_ccmode_wired(pca9468, iin);
 		}
 
-		if (ret < 0) {
-			pr_err("%s: %d", __func__, ret);
-		} else {
-			pca9468->prev_iin = iin;
-			apply_ircomp = true;
-		}
-
+		pca9468->prev_iin = iin;
 		break;
 
 	case STS_MODE_VIN_UVLO:
@@ -2816,15 +2704,6 @@ static int pca9468_charge_adjust_ccmode(struct pca9468_charger *pca9468)
 
 	default:
 		goto error;
-	}
-
-	if (pca9468->pdata->pca_irdrop && apply_ircomp) {
-		int rc;
-
-		rc = pca9468_comp_irdrop(pca9468);
-		if (rc < 0)
-			pr_err("%s: cannot apply ircomp (%d)\n",
-			       __func__, rc);
 	}
 
 	mod_delayed_work(pca9468->dc_wq, &pca9468->timer_work,
@@ -2863,7 +2742,6 @@ static int pca9468_apply_new_limits(struct pca9468_charger *pca9468)
 static int pca9468_charge_ccmode(struct pca9468_charger *pca9468)
 {
 	int ccmode = -1, vin_vol, iin, ret = 0;
-	bool apply_ircomp = false;
 
 	pr_debug("%s: ======START======= \n", __func__);
 
@@ -2930,9 +2808,6 @@ static int pca9468_charge_ccmode(struct pca9468_charger *pca9468)
 					pca9468->ta_cur,
 					pca9468->ta_vol);
 		}
-
-		if (ret == 0)
-			apply_ircomp = true;
 		break;
 
 	case STS_MODE_VFLT_LOOP:
@@ -2994,15 +2869,6 @@ static int pca9468_charge_ccmode(struct pca9468_charger *pca9468)
 
 	default:
 		break;
-	}
-
-	if (pca9468->pdata->pca_irdrop && apply_ircomp) {
-		int rc;
-
-		rc = pca9468_comp_irdrop(pca9468);
-		if (rc < 0)
-			pr_err("%s: cannot apply ircomp (%d)\n",
-			       __func__, rc);
 	}
 
 done:
@@ -4910,30 +4776,6 @@ static int of_pca9468_dt(struct device *dev,
 	if (ret)
 		pdata->iin_cc_comp_offset = PCA9468_IIN_CC_COMP_OFFSET;
 	pr_info("%s: pca9468,iin_cc_comp_offset is %u\n", __func__, pdata->iin_cc_comp_offset);
-
-	/* irdrop limits */
-	pdata->irdrop_limit_cnt =
-	    of_property_count_elems_of_size(np_pca9468, "google,irdrop-limits", sizeof(u32));
-	if (pdata->irdrop_limit_cnt < PCA9468_IRDROP_LIMIT_CNT) {
-		pr_info("%s: google,irdrop-limits size get failed, use default irdrop limits %d\n",
-			__func__, pdata->irdrop_limit_cnt);
-		ret = -EINVAL;
-	} else {
-		ret = of_property_read_u32_array(np_pca9468, "google,irdrop-limits",
-						 (u32 *)pdata->irdrop_limits,
-						 PCA9468_IRDROP_LIMIT_CNT);
-		if (ret)
-			pr_info("%s: google,irdrop-limits get failed, use default irdrop limits",
-				__func__);
-	}
-	if (ret) {
-		pdata->irdrop_limits[0] = PCA9468_IRDROP_LIMIT_TIER1;
-		pdata->irdrop_limits[1] = PCA9468_IRDROP_LIMIT_TIER2;
-		pdata->irdrop_limits[2] = PCA9468_IRDROP_LIMIT_TIER3;
-	}
-	pdata->pca_irdrop = of_property_read_bool(np_pca9468, "google,pca-irdrop");
-	if (pdata->pca_irdrop)
-		pr_info("%s: google,pca-irdrop is set, run irdrop in pca\n", __func__);
 
 	/* Spread Spectrum settings */
 	ret = of_property_read_u32(np_pca9468, "pca9468,sc-clk-dither-rate",

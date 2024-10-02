@@ -1009,7 +1009,7 @@ int maxfg_dynrel_mark_det(struct maxfg_dynrel_state *dr_state,
 		dr_state->temp_det = 0xffff;
 	ret = maxfg_reg_read(regmap, MAXFG_TAG_vfocv, &dr_state->vfocv_det);
 	if (ret < 0)
-		dr_state->temp_det = 0xffff;
+		dr_state->vfocv_det = 0xffff;
 
 	return 0;
 }
@@ -1074,20 +1074,20 @@ void maxfg_dynrel_init(struct maxfg_dynrel_state *dr_state,
 		value = MAXFG_DR_LEARN_STAGE_MIN_DEFAULT;
 	dr_state->learn_stage_min = value;
 
-	ret = of_property_read_u16(node, "maxfg,dr_min_deci_temp_c", &value16);
+	ret = of_property_read_u32(node, "maxfg,dr_min_deci_temp_c", &value);
 	if (ret < 0)
 		value = MAXFG_DR_TEMP_MIN_DEFAULT;
 	dr_state->temp_qual.min = deci_deg_cel_to_reg(value);
-	ret = of_property_read_u16(node, "maxfg,dr_max_deci_temp_c", &value16);
+	ret = of_property_read_u32(node, "maxfg,dr_max_deci_temp_c", &value);
 	if (ret < 0)
 		value = MAXFG_DR_TEMP_MAX_DEFAULT;
 	dr_state->temp_qual.max = deci_deg_cel_to_reg(value);
 
-	ret = of_property_read_u16(node, "maxfg,vfocv_inhibit_min_mv", &value16);
+	ret = of_property_read_u32(node, "maxfg,vfocv_inhibit_min_mv", &value);
 	if (ret < 0)
 		value = MAXFG_DR_VFOCV_MV_INHIB_MIN_DEFAULT;
 	dr_state->vfocv_inhibit.min = micro_volt_to_reg(value * 1000);
-	ret = of_property_read_u16(node, "maxfg,vfocv_inhibit_max_mv", &value16);
+	ret = of_property_read_u32(node, "maxfg,vfocv_inhibit_max_mv", &value);
 	if (ret < 0)
 		value = MAXFG_DR_VFOCV_MV_INHIB_MAX_DEFAULT;
 	dr_state->vfocv_inhibit.max = micro_volt_to_reg(value * 1000);

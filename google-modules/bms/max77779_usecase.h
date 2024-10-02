@@ -18,6 +18,7 @@ struct max77779_usecase_data {
 	bool rx_otg_en;		/* enable WLC_RX -> WLC_RX + OTG case */
 	bool ext_otg_only;	/* use external OTG only */
 	int dc_sw_gpio;		/* WLC-DC switch enable */
+	int pogo_vout_en;	/* pogo 5V vout */
 
 	int vin_is_valid;	/* MAX20339 STATUS1.vinvalid */
 
@@ -67,6 +68,9 @@ enum gsu_usecases {
 	GSU_MODE_USB_WLC_RX	= 13,
 
 	GSU_MODE_DOCK		= 14,
+	GSU_MODE_POGO_VOUT	= 15,
+	GSU_MODE_USB_CHG_POGO_VOUT	= 16,
+	GSU_MODE_USB_OTG_POGO_VOUT	= 17,
 
 	GSU_MODE_FWUPDATE	= 18,   /* boost mode for frimware update */
 };

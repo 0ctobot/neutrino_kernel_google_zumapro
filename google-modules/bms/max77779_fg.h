@@ -90,7 +90,6 @@ static const struct maxfg_reg max77779_debug_fg[] = {
 
 struct max77779_fg_chip {
 	struct device *dev;
-	struct i2c_client *primary;
 	struct i2c_client *secondary;
 	struct device *pmic_dev;
 
@@ -338,6 +337,8 @@ int max77779_model_check_state(struct max77779_model_data *model_data);
 int max77779_load_gauge_model(struct max77779_model_data *model_data, int fw_rev, int fw_sub_rev);
 
 ssize_t max77779_model_state_cstr(char *buf, int max, struct max77779_model_data *model_data);
+int max77779_fg_param_cstr(char *buf, int max, const struct max77779_model_data *model_data);
+int max77779_fg_param_sscan(struct max77779_model_data *model_data, const char *buf, int max);
 int max77779_fg_model_cstr(char *buf, int max, const struct max77779_model_data *model_data);
 int max77779_fg_model_sscan(struct max77779_model_data *model_data, const char *buf, int max);
 bool max77779_fg_check_state(struct max77779_model_data *model_data);

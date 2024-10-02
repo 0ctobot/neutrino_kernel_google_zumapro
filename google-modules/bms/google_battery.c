@@ -1954,6 +1954,10 @@ static void batt_chg_stats_update(struct batt_drv *batt_drv, int temp_idx,
 		soc_in = -1;
 	}
 
+	/* Log CSI info into chg_stats */
+	ce_data->csi_aggregate_status = batt_drv->csi_stats.aggregate_status;
+	ce_data->csi_aggregate_type = batt_drv->csi_stats.aggregate_type;
+
 	/* Note: To log new voltage tiers, add to list in go/pixel-vtier-defs */
 	/* ---  Log tiers in PARALLEL below ---  */
 
@@ -2002,6 +2006,18 @@ static void batt_chg_stats_update(struct batt_drv *batt_drv, int temp_idx,
 		gbms_stats_update_tier(temp_idx, ibatt_ma, temp, elap, cc,
 				       &batt_drv->chg_state, msc_state, soc_in,
 				       &ce_data->health_stats);
+
+	} else if (batt_drv->temp_filter.enable) {
+		struct batt_temp_filter *temp_filter = &batt_drv->temp_filter;
+		int no_filter_temp;
+
+		mutex_lock(&temp_filter->lock);
+		no_filter_temp = temp_filter->sample[temp_filter->last_idx];
+		mutex_unlock(&temp_filter->lock);
+
+		gbms_stats_update_tier(temp_idx, ibatt_ma, no_filter_temp, elap, cc,
+				       &batt_drv->chg_state, msc_state, soc_in,
+				       &ce_data->temp_filter_stats);
 	} else {
 		const qnum_t soc = ssoc_get_capacity_raw(&batt_drv->ssoc_state);
 
@@ -2034,15 +2050,6 @@ static void batt_chg_stats_update(struct batt_drv *batt_drv, int temp_idx,
 		gbms_stats_update_tier(temp_idx, ibatt_ma, temp, elap, cc,
 				       &batt_drv->chg_state, msc_state, soc_in,
 				       &ce_data->cc_lvl_stats);
-		tier = NULL;
-	}
-
-	if (batt_drv->temp_filter.enable) {
-		struct batt_temp_filter *temp_filter = &batt_drv->temp_filter;
-		int no_filter_temp = temp_filter->sample[temp_filter->last_idx];
-		gbms_stats_update_tier(temp_idx, ibatt_ma, no_filter_temp, elap, cc,
-				       &batt_drv->chg_state, msc_state, soc_in,
-				       &ce_data->temp_filter_stats);
 		tier = NULL;
 	}
 
@@ -2197,7 +2204,8 @@ static bool batt_chg_stats_close(struct batt_drv *batt_drv,
 		/* all charge tiers including health */
 		memcpy(ce_qual, &batt_drv->ce_data, sizeof(*ce_qual));
 
-		pr_info("MSC_STAT %s: elap=%lld ssoc=%d->%d v=%d->%d c=%d->%d hdl=%lld hrs=%d hti=%d/%d\n",
+		pr_info("MSC_STAT %s: elap=%lld ssoc=%d->%d v=%d->%d c=%d->%d hdl=%lld hrs=%d"
+			" hti=%d/%d csi=%d/%d\n",
 			reason,
 			ce_qual->last_update - ce_qual->first_update,
 			ce_qual->charging_stats.ssoc_in,
@@ -2209,7 +2217,9 @@ static bool batt_chg_stats_close(struct batt_drv *batt_drv,
 			ce_qual->ce_health.rest_deadline,
 			ce_qual->ce_health.rest_state,
 			ce_qual->health_stats.vtier_idx,
-			ce_qual->health_pause_stats.vtier_idx);
+			ce_qual->health_pause_stats.vtier_idx,
+			ce_qual->csi_aggregate_status,
+			ce_qual->csi_aggregate_type);
 	}
 
 	return publish;
@@ -2351,13 +2361,15 @@ static int batt_chg_stats_cstr(char *buff, int size,
 				ce_data->adapter_details.ad_voltage * 100,
 				ce_data->adapter_details.ad_amperage * 100);
 
-	len += scnprintf(&buff[len], size - len, "%s%hu,%hu, %hu,%hu %d",
+	len += scnprintf(&buff[len], size - len, "%s%hu,%hu, %hu,%hu %d %hu,%hu",
 				(verbose) ?  "\nS: " : ", ",
 				ce_data->charging_stats.ssoc_in,
 				ce_data->charging_stats.voltage_in,
 				ce_data->charging_stats.ssoc_out,
 				ce_data->charging_stats.voltage_out,
-				state_capacity);
+				state_capacity,
+				ce_data->csi_aggregate_status,
+				ce_data->csi_aggregate_type);
 
 
 	if (verbose) {
@@ -3781,7 +3793,8 @@ done_exit:
 
 done_no_op:
 	/* send a power supply event when rest_state changes */
-	changed = rest->rest_state != rest_state;
+	changed = rest->rest_state != rest_state ||
+		  rest->rest_cc_max != cc_max || rest->rest_fv_uv != fv_uv;
 
 	/* msc_logic_* will vote on cc_max and fv_uv. */
 	rest->rest_cc_max = cc_max;
@@ -9092,7 +9105,7 @@ static bool gbatt_check_critical_level(const struct batt_drv *batt_drv,
 			return false;
 
 		vbatt = PSY_GET_PROP(batt_drv->fg_psy, POWER_SUPPLY_PROP_VOLTAGE_NOW);
-		if (vbatt <= 0)
+		if (vbatt <= -EAGAIN)
 			return false;
 
 		/* disable the check */
@@ -9102,7 +9115,6 @@ static bool gbatt_check_critical_level(const struct batt_drv *batt_drv,
 
 		if (vbatt >= batt_drv->batt_critical_voltage)
 			return false;
-
 exit_done:
 		/* dump log for tuning parameters */
 		pr_info("%s: vbatt: %d, v_th:%d, fg_status: %d, now: %lld\n",

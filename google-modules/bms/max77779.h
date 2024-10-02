@@ -125,6 +125,9 @@ struct max77779_foreach_cb_data {
 
 	bool fwupdate_on; /* enter firmware update mode */
 
+	bool pogo_vin;	/* power in, pogo */
+	bool pogo_vout;	/* power out, pogo */
+
 	u8 reg;
 
 	struct gvotable_election *dc_avail_votable;	/* DC_AVAIL */

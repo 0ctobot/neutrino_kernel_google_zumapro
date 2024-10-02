@@ -40,11 +40,6 @@ struct pca9468_platform_data {
 	unsigned int	ta_max_vol;
 	unsigned int	ta_max_vol_cp;
 
-	/* irdrop */
-	unsigned int	irdrop_limits[3];
-	int		irdrop_limit_cnt;
-	bool		pca_irdrop;
-
 	/* Spread Spectrum settings */
 	unsigned int	sc_clk_dither_rate;
 	unsigned int	sc_clk_dither_limit;
@@ -259,7 +254,6 @@ struct pca9468_charger {
 	int	fv_uv;
 	int	cc_max;
 	ktime_t	dc_start_time;
-	bool	irdrop_comp_ok;
 
 	/* monitoring */
 	struct power_supply	*batt_psy;

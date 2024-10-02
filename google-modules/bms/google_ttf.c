@@ -646,6 +646,11 @@ static void ttf_soc_update(struct batt_ttf_stats *stats,
 		if (cc)
 			stats->soc_stats.cc[i] = cc;
 	}
+
+	/* need to manually update cc[99] by adding ref_cc because it's not inclusive */
+	if (last_soc == 98 && ttf_cc_check(&stats->soc_ref, 98))
+		stats->soc_stats.cc[99] = stats->soc_stats.cc[98] +
+					  (stats->soc_ref.cc[99] - stats->soc_ref.cc[98]);
 }
 
 void ttf_soc_init(struct ttf_soc_stats *dst)

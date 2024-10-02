@@ -34,7 +34,7 @@
 #define PD_CURRENT_MAX_UA	3000000	/* 3A */
 
 #define GCCD_MAIN_CHARGE_CURRENT_MAX	4000000		/* 4A */
-#define GCCD_BUCK_CHARGE_CURRENT_MAX	1000000		/* 1A */
+#define GCCD_BUCK_CHARGE_CURRENT_MAX	900000		/* 0.9A */
 #define GCCD_BUCK_CHARGE_PWR_THRESHOLD	27000000	/* 27W */
 #define GCCD_MAIN_CHGIN_ILIM		2200000		/* 2.2A */
 
@@ -53,7 +53,7 @@ struct gccd_drv {
 	int voltage_max;
 	int current_max;
 	int buck_chg_en;
-	int enable_buck_chg_only;
+	bool ftm_mode; /* factory test, force enable buck charger */
 
 };
 
@@ -62,11 +62,13 @@ struct gccd_drv {
 static int gccd_get_charge_current_max(struct gccd_drv *gccd);
 static int gccd_set_charge_current_max(struct gccd_drv *gccd, int chg_current, bool pwr_changed);
 
+/* this function is only for debug */
 static int gccd_set_buck_active(struct gccd_drv *gccd, int enabled)
 {
 	int cc_max, ret;
 
-	gccd->enable_buck_chg_only = enabled;
+	/* convert type to boolean */
+	gccd->ftm_mode = !!enabled;
 	cc_max = gccd_get_charge_current_max(gccd);
 	pr_info("%s: charge_current=%d (0)\n", __func__, cc_max);
 	ret = gccd_set_charge_current_max(gccd, cc_max, false);
@@ -74,15 +76,15 @@ static int gccd_set_buck_active(struct gccd_drv *gccd, int enabled)
 	return ret;
 }
 
-static int debug_buck_active_read(void *data, u64 *val)
+static int debug_buck_active_get(void *data, u64 *val)
 {
 	struct gccd_drv *gccd = (struct gccd_drv *)data;
 
-	*val = gccd->enable_buck_chg_only;
+	*val = gccd->ftm_mode;
 	return 0;
 }
 
-static int debug_buck_active_write(void *data, u64 val)
+static int debug_buck_active_set(void *data, u64 val)
 {
 	struct gccd_drv *gccd = (struct gccd_drv *)data;
 	int ret;
@@ -97,8 +99,8 @@ static int debug_buck_active_write(void *data, u64 val)
 	return 0;
 }
 
-DEFINE_SIMPLE_ATTRIBUTE(debug_buck_active_fops, debug_buck_active_read,
-			debug_buck_active_write, "%llu\n");
+DEFINE_SIMPLE_ATTRIBUTE(debug_buck_active_fops, debug_buck_active_get,
+			debug_buck_active_set, "%llu\n");
 
 static int gccd_init_fs(struct gccd_drv *gccd)
 {
@@ -207,13 +209,18 @@ static int gccd_set_charge_current_max(struct gccd_drv *gccd,
 	int main_chg_current = chg_current, buck_chg_current = 0;
 	int watt = gccd->voltage_max * gccd->current_max;
 	int fv_uv = gccd_get_charge_voltage_max(gccd);
+	struct power_supply *main_psy = gccd->main_chg_psy;
 	bool pwr_ok = false;
 	int ret;
 
-	if (gccd->enable_buck_chg_only == 1) {
-		/* enable buck_chg only */
-		main_chg_current = 0;
-		buck_chg_current = GCCD_BUCK_CHARGE_CURRENT_MAX;
+	if (gccd->ftm_mode) {
+		/* set CHGIN_ILIM (CHG_CNFG_09) to 2200mA in ftm_mode */
+		ret = PSY_SET_PROP(main_psy, POWER_SUPPLY_PROP_CURRENT_MAX,
+				   GCCD_MAIN_CHGIN_ILIM);
+
+		/* force enable buck_chg*/
+		if (ret == 0)
+			pwr_ok = true;
 
 		goto set_current_max;
 	}
@@ -245,22 +252,21 @@ set_current_max:
 		__func__, chg_current, main_chg_current, buck_chg_current,
 		gccd->voltage_max, gccd->current_max);
 
-	ret = PSY_SET_PROP(gccd->main_chg_psy,
-			    POWER_SUPPLY_PROP_CONSTANT_CHARGE_CURRENT_MAX,
-			    main_chg_current);
+	ret = PSY_SET_PROP(main_psy, POWER_SUPPLY_PROP_CONSTANT_CHARGE_CURRENT_MAX,
+			   main_chg_current);
 
 	/*
 	 * enable buck charging by pull charging gpio high active when
 	 * buck_chg_current is non-zero
 	 */
 	if (ret == 0 && gccd->buck_chg_en >= 0) {
+		struct power_supply *buck_psy = gccd->buck_chg_psy;
 		int en = (buck_chg_current > 0);
 
 		pr_info("%s: buck_charger enable=%d\n", __func__, en);
 
-		ret = PSY_SET_PROP(gccd->buck_chg_psy,
-				    POWER_SUPPLY_PROP_CONSTANT_CHARGE_CURRENT_MAX,
-				    buck_chg_current);
+		ret = PSY_SET_PROP(buck_psy, POWER_SUPPLY_PROP_CONSTANT_CHARGE_CURRENT_MAX,
+				   buck_chg_current);
 		if (ret == 0)
 			gpio_direction_output(gccd->buck_chg_en, en);
 	}
@@ -373,9 +379,12 @@ static int gccd_psy_set_property(struct power_supply *psy,
 	mutex_lock(&gccd->gccd_lock);
 
 	switch (psp) {
-	case POWER_SUPPLY_PROP_CURRENT_MAX:
+	case POWER_SUPPLY_PROP_CURRENT_MAX: {
+		bool is_adapter_9v3a = gccd->voltage_max == PD_VOLTAGE_MAX_MV &&
+				       pval->intval == PD_CURRENT_MAX_UA;
+
 		/* set CHGIN_ILIM (CHG_CNFG_09) to 2200mA for 9V/3A adapter */
-		if (gccd->voltage_max == PD_VOLTAGE_MAX_MV && pval->intval == PD_CURRENT_MAX_UA)
+		if (is_adapter_9v3a || gccd->ftm_mode)
 			ret = PSY_SET_PROP(gccd->main_chg_psy, psp, GCCD_MAIN_CHGIN_ILIM);
 		else
 			ret = PSY_SET_PROP(gccd->main_chg_psy, psp, pval->intval);
@@ -384,12 +393,12 @@ static int gccd_psy_set_property(struct power_supply *psy,
 
 		current_max = pval->intval / 1000;
 		if (gccd->current_max != current_max) {
-			pr_info("%s, current_max: %d->%d\n", __func__,
-				gccd->current_max, current_max);
+			dev_dbg(gccd->device, "current_max: %d->%d\n", gccd->current_max, current_max);
 			changed = true;
 			gccd->current_max = current_max;
 		}
 		break;
+	}
 	case POWER_SUPPLY_PROP_VOLTAGE_MAX:
 		ret = PSY_SET_PROP(gccd->main_chg_psy, psp, pval->intval);
 		if (ret)
@@ -397,8 +406,7 @@ static int gccd_psy_set_property(struct power_supply *psy,
 
 		voltage_max = pval->intval / 1000;
 		if (gccd->voltage_max != voltage_max) {
-			pr_info("%s, voltage_max: %d->%d\n", __func__,
-				gccd->voltage_max, voltage_max);
+			dev_dbg(gccd->device, "voltage_max: %d->%d\n", gccd->voltage_max, voltage_max);
 			changed = true;
 			gccd->voltage_max = voltage_max;
 		}
@@ -661,6 +669,12 @@ static int google_ccd_remove(struct platform_device *pdev)
 	struct gccd_drv *gccd = platform_get_drvdata(pdev);
 
 	cancel_delayed_work(&gccd->init_work);
+
+	if (gccd->main_chg_psy)
+		power_supply_put(gccd->main_chg_psy);
+
+	if (gccd->buck_chg_psy)
+		power_supply_put(gccd->buck_chg_psy);
 
 	return 0;
 }

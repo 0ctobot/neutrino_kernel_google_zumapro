@@ -211,7 +211,7 @@ struct gcpm_drv  {
 	int out_uv;
 
 	int dcen_gpio;
-	u32 dcen_gpio_default;
+	bool dcen_gpio_default;
 
 	/* >0 when enabled, pps charger to use */
 	int pps_index;
@@ -243,7 +243,9 @@ struct gcpm_drv  {
 	u32 dc_limit_soc_high;		/* DC will not start over high */
 	/* policy: power demand limit for DC charging */
 	u32 dc_limit_vbatt_low;		/* DC will not stop until low */
+	u32 wlc_dc_limit_vbatt_low;	/* WLC DC will not stop until low */
 	u32 dc_limit_vbatt_min;		/* DC will start at min */
+	u32 wlc_dc_limit_vbatt_min;	/* WLC DC will start at min */
 	u32 dc_limit_vbatt_high;	/* DC will not start over high */
 	u32 dc_limit_vbatt_max;		/* DC stop at max */
 	u32 dc_limit_demand;
@@ -959,14 +961,22 @@ static int gcpm_chg_select_by_soc(struct power_supply *psy,
 
 /* call holding mutex_lock(&gcpm->chg_psy_lock) */
 static int gcpm_chg_select_by_voltage(struct power_supply *psy,
-				      const struct gcpm_drv *gcpm)
+				      struct gcpm_drv *gcpm)
 {
-	const int vbatt_min = gcpm->dc_limit_vbatt_min;
+	int vbatt_min = gcpm->dc_limit_vbatt_min;
 	const int vbatt_max = gcpm->dc_limit_vbatt_max;
 	const int vbatt_high = gcpm->dc_limit_vbatt_high;
-	const int vbatt_low = gcpm->dc_limit_vbatt_low;
+	int vbatt_low = gcpm->dc_limit_vbatt_low;
 	int index = GCPM_DEFAULT_CHARGER;
 	int vbatt = -1;
+	int online = 0;
+	int in_idx;
+
+	in_idx = gcpm_mdis_match_cp_source(gcpm, &online);
+	if (gcpm_mdis_in_is_wireless(gcpm, in_idx)) {
+		vbatt_min = gcpm->wlc_dc_limit_vbatt_min;
+		vbatt_low = gcpm->wlc_dc_limit_vbatt_low;
+	}
 
 	if (!vbatt_min && !vbatt_max)
 		return GCPM_INDEX_DC_ENABLE;
@@ -2585,6 +2595,32 @@ static ssize_t dc_limit_vbatt_min_store(struct device *dev,
 }
 static DEVICE_ATTR_RW(dc_limit_vbatt_min);
 
+static ssize_t wlc_dc_limit_vbatt_min_show(struct device *dev,
+				       struct device_attribute *attr,
+				       char *buf)
+{
+	struct gcpm_drv *gcpm = dev_get_drvdata(dev);
+
+	return sysfs_emit(buf, "%d\n", gcpm->wlc_dc_limit_vbatt_min);
+}
+static ssize_t wlc_dc_limit_vbatt_min_store(struct device *dev,
+					struct device_attribute *attr,
+					const char *buf, size_t count)
+{
+	struct gcpm_drv *gcpm = dev_get_drvdata(dev);
+	int ret = 0;
+	u32 val;
+
+	ret = kstrtou32(buf, 0, &val);
+	if (ret < 0)
+		return ret;
+
+	gcpm->wlc_dc_limit_vbatt_min = val;
+
+	return count;
+}
+static DEVICE_ATTR_RW(wlc_dc_limit_vbatt_min);
+
 static ssize_t dc_ctl_show(struct device *dev,
 				struct device_attribute *attr,
 				char *buf)
@@ -3810,24 +3846,6 @@ static void gcpm_init_work(struct work_struct *work)
 		return;
 	}
 
-	if (gcpm->cop_supported) {
-		int irq_in = platform_get_irq(gcpm->pdev, 0);
-
-		if (irq_in < 0) {
-			dev_err(gcpm->device, "%s failed to get irq ret = %d\n", __func__, irq_in);
-		} else {
-			ret = devm_request_threaded_irq(gcpm->device, irq_in, NULL,
-							google_cpm_cop_warn_irq_handler,
-							IRQF_TRIGGER_LOW |
-							IRQF_SHARED |
-							IRQF_ONESHOT,
-							"google_cpm_cop_warn",
-							gcpm);
-			if (ret < 0)
-				dev_err(gcpm->device, "Error setting up cop warn irq\n");
-		}
-	}
-
 	pr_info("google_cpm init_work done %d/%d pps=%d wlc_dc=%d\n",
 		found, gcpm->chg_psy_count,
 		!!gcpm->tcpm_psy, !!gcpm->wlc_dc_psy);
@@ -4464,8 +4482,8 @@ static int google_cpm_probe(struct platform_device *pdev)
 	if (gcpm->dcen_gpio >= 0) {
 		unsigned long init_flags = GPIOF_OUT_INIT_LOW;
 
-		of_property_read_u32(pdev->dev.of_node, "google,dc-en-value",
-				     &gcpm->dcen_gpio_default);
+		gcpm->dcen_gpio_default = of_property_read_bool(pdev->dev.of_node,
+								"google,dc-en-value");
 		if (gcpm->dcen_gpio_default)
 			init_flags = GPIOF_OUT_INIT_HIGH;
 
@@ -4504,6 +4522,19 @@ static int google_cpm_probe(struct platform_device *pdev)
 					   GCPM_DEFAULT_DC_LIMIT_DELTA_LOW;
 	if (gcpm->dc_limit_vbatt_low > gcpm->dc_limit_vbatt_min)
 		gcpm->dc_limit_vbatt_low = gcpm->dc_limit_vbatt_min;
+
+	/* WLC voltage lower bound */
+	ret = of_property_read_u32(pdev->dev.of_node, "google,wlc_dc_limit-vbatt_min",
+				   &gcpm->wlc_dc_limit_vbatt_min);
+	if (ret < 0)
+		gcpm->wlc_dc_limit_vbatt_min = gcpm->dc_limit_vbatt_min;
+	ret = of_property_read_u32(pdev->dev.of_node, "google,wlc_dc_limit-vbatt_low",
+				   &gcpm->wlc_dc_limit_vbatt_low);
+	if (ret < 0)
+		gcpm->wlc_dc_limit_vbatt_low = gcpm->wlc_dc_limit_vbatt_min -
+					   GCPM_DEFAULT_DC_LIMIT_DELTA_LOW;
+	if (gcpm->wlc_dc_limit_vbatt_low > gcpm->wlc_dc_limit_vbatt_min)
+		gcpm->wlc_dc_limit_vbatt_low = gcpm->wlc_dc_limit_vbatt_min;
 
 	/* voltage upper bound */
 	ret = of_property_read_u32(pdev->dev.of_node, "google,dc_limit-vbatt_max",
@@ -4565,6 +4596,29 @@ static int google_cpm_probe(struct platform_device *pdev)
 
 	gcpm->cop_supported = of_property_read_bool(pdev->dev.of_node, "google,cop-supported");
 	gcpm->cop_warn_trigger = COP_WARN_DEFAULT_TRIGGER_COUNT;
+
+	if (gcpm->cop_supported) {
+		int irq_in = platform_get_irq(gcpm->pdev, 0);
+
+		if (irq_in < 0) {
+			if (irq_in == -EPROBE_DEFER) {
+				dev_warn(gcpm->device, "IRQ wait, deferring probe.\n");
+				return irq_in;
+			}
+
+			dev_err(gcpm->device, "%s failed to get irq ret = %d\n", __func__, irq_in);
+		} else {
+			ret = devm_request_threaded_irq(gcpm->device, irq_in, NULL,
+							google_cpm_cop_warn_irq_handler,
+							IRQF_TRIGGER_LOW |
+							IRQF_SHARED |
+							IRQF_ONESHOT,
+							"google_cpm_cop_warn",
+							gcpm);
+			if (ret < 0)
+				dev_err(gcpm->device, "Error setting up cop warn irq\n");
+		}
+	}
 
 	dev_info(gcpm->device, "taper ts_m=%d ts_ccs=%d ts_i=%d ts_cnt=%d ts_g=%d ts_v=%d ts_c=%d\n",
 		 gcpm->taper_step_fv_margin, gcpm->taper_step_cc_step,
@@ -4673,6 +4727,10 @@ static int google_cpm_probe(struct platform_device *pdev)
 	ret = device_create_file(gcpm->device, &dev_attr_dc_limit_vbatt_min);
 	if (ret)
 		dev_err(gcpm->device, "Failed to create dc_limit_vbatt_min\n");
+
+	ret = device_create_file(gcpm->device, &dev_attr_wlc_dc_limit_vbatt_min);
+	if (ret)
+		dev_warn(gcpm->device, "Failed to create wlc_dc_limit_vbatt_min\n");
 
 	ret = device_create_file(gcpm->device, &dev_attr_dc_ctl);
 	if (ret)

@@ -7,6 +7,11 @@ title: max77779_i2cm i2c bridge driver
 
 maintainers:
   - James Wylder <jwylder@google.com>
+  - Daniel Okazaki <dtokazaki@google.com>
+  - Prasanna Prapancham <prapancham@google.com>
+  - Jack Wu <wjack@google.com>
+  - Ken Yang <yangken@google.com>
+  - Baltazar Ortiz <baltazarortiz@google.com>
 
 description: |
 

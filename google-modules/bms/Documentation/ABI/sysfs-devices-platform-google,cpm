@@ -1,3 +1,12 @@
+What:		/sys/devices/platform/google,cpm/wlc_dc_limit_vbatt_min
+Date:		Jun 2024
+KernelVersion:	6.1
+Contact:	"Daniel Okazaki" <dtokazaki@google.com>
+Description:
+		Battery min voltage where HPP wireless charging is allowed
+
+Users:		Debug
+
 What:		/sys/devices/platform/google,cpm/mdis_vote
 Date:		May 2023
 KernelVersion:	5.15

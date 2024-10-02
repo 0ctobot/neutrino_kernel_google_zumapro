@@ -2592,7 +2592,154 @@ static int p9xxx_check_alignment(struct p9221_charger_data *charger)
 	return ret;
 }
 
-/* < 0 error, 0 = no changes, > 1 changed */
+static int p9xxx_check_fast_charge(struct p9221_charger_data *charger)
+{
+	const bool feat_enable = feature_check_fast_charge(charger);
+
+	mutex_lock(&charger->auth_lock);
+
+	if (feat_enable) {
+		pr_debug("%s: Feature check OK\n", __func__);
+		mutex_unlock(&charger->auth_lock);
+		return 0;
+	}
+
+	if (charger->auth_delay || !charger->set_auth_icl) {
+		dev_info(&charger->client->dev, "Auth delay\n");
+		mutex_unlock(&charger->auth_lock);
+		return -EAGAIN;
+	}
+
+	dev_warn(&charger->client->dev, "Feature check failed\n");
+	p9221_set_auth_dc_icl(charger, false);
+	mutex_unlock(&charger->auth_lock);
+	return -EOPNOTSUPP;
+}
+
+/*
+ * return 1          : in WLC-DC mode
+ * return -EAGAIN    : retry due to not ready
+ * return -EOPNOTSUPP: WLC-DC not support, WLC offline
+ */
+static int p9221_enable_wlc_dc(struct p9221_charger_data *charger)
+{
+	const u32 req_pwr = charger->de_hpp_neg_pwr > 0 ?
+			    charger->de_hpp_neg_pwr : charger->pdata->hpp_neg_pwr;
+	const int extben_gpio = charger->pdata->ext_ben_gpio;
+	int ret;
+	u8 val8;
+
+	/* not there, must return not supp */
+	if (!charger->pdata->has_wlc_dc || !p9221_is_online(charger) || !p9221_is_epp(charger))
+		return -EOPNOTSUPP;
+
+	/* prevent 3p charger for compat mode */
+	if (charger->mfg == 0) {
+		dev_warn(&charger->client->dev, "mfg not ready for HPP\n");
+		return -EAGAIN;
+	}
+
+	if (!charger->is_mfg_google) {
+		dev_warn(&charger->client->dev, "HPP not allowed, mfg: 0x%x\n", charger->mfg);
+		return -EOPNOTSUPP;
+	}
+
+	/*
+	 * Lower DC_ICL for HPP to improve communications while
+	 * the charger ramps up the voltage to the limit.
+	 */
+	ret = p9221_set_hpp_dc_icl(charger, true);
+	if (ret < 0)
+		dev_warn(&charger->client->dev, "cannot set HPP DC ICL: %d\n", ret);
+
+	if (charger->last_capacity < 0) {
+		schedule_delayed_work(&charger->soc_work, 0);
+		dev_dbg(&charger->client->dev, "retry, last_capacity=%d\n",
+			charger->last_capacity);
+		return -EAGAIN;
+	}
+	if (charger->last_capacity > WLC_HPP_SOC_LIMIT)
+		goto not_hpp;
+
+
+	/* need to check calibration is done before re-negotiate */
+	if (!charger->chip_is_calibrated(charger)) {
+		dev_warn(&charger->client->dev, "Calibrating\n");
+		return -EAGAIN;
+	}
+
+	ret = charger->reg_read_8(charger, P9221R5_EPP_TX_GUARANTEED_POWER_REG, &val8);
+	if (ret < 0 || val8 < P9XXX_TX_GUAR_PWR_15W) {
+		dev_warn(&charger->client->dev, "Tx guar_pwr=%dW\n", ret == 0 ? val8 / 2 : ret);
+		goto not_hpp;
+	}
+
+	ret = p9xxx_check_fast_charge(charger);
+	if (ret == -EAGAIN)
+		return ret;
+	if (ret == -EOPNOTSUPP)
+		goto not_hpp;
+
+	/* Check alignment before enabling proprietary mode */
+	ret = p9xxx_check_alignment(charger);
+	if (ret == -EAGAIN)
+		return ret;
+	if (ret == -EOPNOTSUPP)
+		goto not_hpp;
+
+	if (charger->prop_mode_en && p9xxx_is_capdiv_en(charger))
+		return 1;
+	/*
+	 * run ->chip_prop_mode_en() if proprietary mode or cap divider
+	 * mode isn't enabled (i.e. with p9412_prop_mode_enable())
+	 *
+	 * return 0      : WLC-DC is not enabled
+	 * return 1      : success enter WLC-DC
+	 * return -ENODEV: WLC is offline
+	 */
+	ret = set_renego_state(charger, P9XXX_ENABLE_PROPMODE);
+	if (ret == -EAGAIN) {
+		dev_dbg(&charger->client->dev, "Set renego state retry\n");
+		return ret;
+	}
+	charger->chip_set_ovp(charger, OVSET_HPP);
+	ret = charger->chip_prop_mode_en(charger, req_pwr);
+	if (ret == -ENODEV) {
+		dev_err(&charger->client->dev, "Offline during PROP Mode\n");
+		goto not_hpp;
+	}
+	set_renego_state(charger, P9XXX_AVAILABLE);
+
+	/* Only returns 1 for success */
+	if (ret != 1) {
+		ret = p9221_reset_wlc_dc(charger);
+		if (ret < 0)
+			dev_err(&charger->client->dev, "%s: HPP not supported\n", __func__);
+		return -EOPNOTSUPP;
+	}
+
+	p9221_write_fod(charger);
+
+	charger->wlc_dc_enabled = true;
+
+	if (extben_gpio)
+		p9xxx_gpio_set_value(charger, extben_gpio, 1);
+
+	p9221_set_switch_reg(charger, true);
+
+	ret = p9xxx_chip_set_cmfet_reg(charger, charger->wlc_dc_comcap);
+	if (ret < 0 && ret != -ENOTSUPP)
+		dev_warn(&charger->client->dev, "Fail to set comm cap(%d)\n", ret);
+
+	return 1;
+not_hpp:
+	ret = p9221_set_hpp_dc_icl(charger, false);
+	if (ret < 0)
+		dev_warn(&charger->client->dev, "Cannot disable HPP_ICL (%d)\n", ret);
+	return -EOPNOTSUPP;
+}
+
+/* < 0 error, 0 = no changes, 1 = changed */
 static int p9221_set_psy_online(struct p9221_charger_data *charger, int online)
 {
 	const bool wlc_dc_enabled = charger->wlc_dc_enabled;
@@ -2607,9 +2754,7 @@ static int p9221_set_psy_online(struct p9221_charger_data *charger, int online)
 		charger->prop_mode_en);
 	/* online = 2 enable LL, return < 0 if NOT on LL */
 	if (online == PPS_PSY_PROG_ONLINE) {
-		const int extben_gpio = charger->pdata->ext_ben_gpio;
 		const bool feat_enable = feature_check_fast_charge(charger);
-		u8 val8;
 
 		if (!enabled) {
 			dev_warn(&charger->client->dev,
@@ -2629,136 +2774,14 @@ static int p9221_set_psy_online(struct p9221_charger_data *charger, int online)
 			return 0;
 		}
 
-		/* not there, must return not supp */
-		if (!charger->pdata->has_wlc_dc || !p9221_is_online(charger)
-		    || !p9221_is_epp(charger))
-			return -EOPNOTSUPP;
-
-		/* prevent 3p charger for compat mode */
-		if (charger->mfg == 0) {
-			dev_warn(&charger->client->dev, "mfg not ready for HPP\n");
-			return -EAGAIN;
-		}
-
-		if (!charger->is_mfg_google) {
-			dev_warn(&charger->client->dev, "HPP not allowed, mfg: 0x%x\n", charger->mfg);
-			return -EOPNOTSUPP;
-		}
-
 		/*
-		 * Lower DC_ICL for HPP to improve communications while
-		 * the charger ramps up the voltage to the limit.
+		 * p9221_enable_wlc_dc()
+		 * return 1          : in WLC-DC mode
+		 * return -EAGAIN    : retry due to not ready
+		 * return -EOPNOTSUPP: WLC-DC not support, WLC offline
 		 */
-		ret = p9221_set_hpp_dc_icl(charger, true);
-		if (ret < 0)
-			dev_err(&charger->client->dev, "cannot set HPP DC ICL: %d\n", ret);
-
-		if (charger->last_capacity < 0) {
-			schedule_delayed_work(&charger->soc_work, 0);
-			dev_dbg(&charger->client->dev, "retry, last_capacity=%d\n",
-				charger->last_capacity);
-			return -EAGAIN;
-		}
-		if (charger->last_capacity > WLC_HPP_SOC_LIMIT)
-			  goto not_hpp;
-
-		/* need to check calibration is done before re-negotiate */
-		if (!charger->chip_is_calibrated(charger)) {
-			dev_warn(&charger->client->dev, "Calibrating\n");
-			return -EAGAIN;
-		}
-
-		ret = charger->reg_read_8(charger, P9221R5_EPP_TX_GUARANTEED_POWER_REG, &val8);
-		if (ret < 0)
-			return -EINVAL;
-		if (val8 < P9XXX_TX_GUAR_PWR_15W) {
-			dev_warn(&charger->client->dev, "Tx guar_pwr=%dW\n", val8 / 2);
-			goto not_hpp;
-		}
-
-		/* will return -EAGAIN until the feature is supported */
-		mutex_lock(&charger->auth_lock);
-
-		if (feat_enable) {
-			pr_debug("%s: Feature check OK\n", __func__);
-		} else if (charger->auth_delay || !charger->set_auth_icl) {
-			mutex_unlock(&charger->auth_lock);
-			dev_info(&charger->client->dev, "Auth delay\n");
-			return -EAGAIN;
-		} else {
-			dev_warn(&charger->client->dev, "Feature check failed\n");
-			p9221_set_auth_dc_icl(charger, false);
-			mutex_unlock(&charger->auth_lock);
-			goto not_hpp;
-		}
-
-		mutex_unlock(&charger->auth_lock);
-
-		/* Check alignment before enabling proprietary mode */
-		ret = p9xxx_check_alignment(charger);
-		if (ret == -EAGAIN)
-			return ret;
-		if (ret == -EOPNOTSUPP)
-			goto not_hpp;
-
-		/*
-		 * run ->chip_prop_mode_en() if proprietary mode or cap divider
-		 * mode isn't enabled (i.e. with p9412_prop_mode_enable())
-		 */
-		if (!(charger->prop_mode_en && p9xxx_is_capdiv_en(charger))) {
-			const u32 req_pwr = charger->de_hpp_neg_pwr > 0 ?
-					    charger->de_hpp_neg_pwr : charger->pdata->hpp_neg_pwr;
-			ret = set_renego_state(charger, P9XXX_ENABLE_PROPMODE);
-			if (ret == -EAGAIN) {
-				dev_dbg(&charger->client->dev, "Set renego state retry\n");
-				return ret;
-			}
-			charger->chip_set_ovp(charger, OVSET_HPP);
-			ret = charger->chip_prop_mode_en(charger, req_pwr);
-			if (ret == -EAGAIN) {
-				dev_warn(&charger->client->dev, "PROP Mode retry\n");
-				charger->chip_set_ovp(charger, OVSET_EPP);
-				return ret;
-			}
-			if (ret == -ENODEV) {
-				dev_warn(&charger->client->dev, "Offline during PROP Mode\n");
-				return ret;
-			}
-			set_renego_state(charger, P9XXX_AVAILABLE);
-		}
-
-		if (!(charger->prop_mode_en && p9xxx_is_capdiv_en(charger))) {
-			ret = p9221_reset_wlc_dc(charger);
-			if (ret < 0)
-				dev_warn(&charger->client->dev,
-					 "Cannot change to bypass mode (%d)\n", ret);
-			ret = p9221_set_hpp_dc_icl(charger, false);
-			if (ret < 0)
-				dev_warn(&charger->client->dev,
-					 "Cannot disable HPP_ICL (%d)\n", ret);
-			ret = gvotable_cast_int_vote(charger->dc_icl_votable,
-					P9221_HPP_VOTER, 0, false);
-			if (ret < 0)
-				dev_warn(&charger->client->dev,
-					 "Cannot disable HPP_VOTER (%d)\n", ret);
-
-			dev_dbg(&charger->client->dev, "%s: HPP not supported\n", __func__);
-			goto not_hpp;
-		}
-
-		p9221_write_fod(charger);
-
-		charger->wlc_dc_enabled = true;
-		if (extben_gpio)
-			p9xxx_gpio_set_value(charger, extben_gpio, 1);
-
-		p9221_set_switch_reg(charger, true);
-
-		ret = p9xxx_chip_set_cmfet_reg(charger, charger->wlc_dc_comcap);
-		if (ret < 0 && ret != -ENOTSUPP)
-			dev_warn(&charger->client->dev, "Fail to set comm cap(%d)\n", ret);
-
-		return 1;
+		ret = p9221_enable_wlc_dc(charger);
+		return ret;
 	}
 	if (wlc_dc_enabled) {
 		/* TODO: thermals might come in and disable with 0 */
@@ -2788,12 +2811,6 @@ static int p9221_set_psy_online(struct p9221_charger_data *charger, int online)
 				P9221_WLC_VOTER, !charger->enabled);
 
 	return 1;
-
-not_hpp:
-	ret = p9221_set_hpp_dc_icl(charger, false);
-	if (ret < 0)
-		dev_warn(&charger->client->dev, "Cannot disable HPP_ICL (%d)\n", ret);
-	return -EOPNOTSUPP;
 }
 
 /* 400 seconds debounce for auth per WPC spec */
@@ -3728,6 +3745,10 @@ static int p9xxx_set_vout_iop(struct p9221_charger_data *charger)
 		ret = charger->chip_set_vout_max(charger, charger->pdata->set_iop_vout_bpp);
 	else if (charger->pdata->set_iop_vout_epp > 0 && vout_mv == P9XXX_VOUT_10000MV)
 		ret = charger->chip_set_vout_max(charger, charger->pdata->set_iop_vout_epp);
+
+	if (charger->pdata->freq_109_vout > 0 && is_ping_freq_fixed_at(charger, 109) &&
+	    !p9221_is_epp(charger))
+		ret = charger->chip_set_vout_max(charger, charger->pdata->freq_109_vout);
 exit:
 	if (ret < 0)
 		dev_dbg(&charger->client->dev, "Fail to change VOUT\n");
@@ -3827,6 +3848,8 @@ static void p9221_notifier_check_dc(struct p9221_charger_data *charger)
 		charger->chip_magsafe_optimized(charger);
 		p9221_set_dc_icl(charger);
 		p9xxx_set_vout_iop(charger);
+		if (!p9221_is_epp(charger))
+			p9xxx_chip_set_ask_mod_fet(charger, charger->pdata->ask_mod_fet);
 		charger->fod_mode = -1;
 		p9221_write_fod(charger);
 		if (!charger->dc_icl_bpp)
@@ -7269,16 +7292,6 @@ static int p9221_parse_dt(struct device *dev,
 			 pdata->irq_det_gpio, pdata->irq_det_int);
 	}
 
-	ret = of_get_named_gpio(node, "google,wcin_inlim_en", 0);
-	pdata->wcin_inlim_en_gpio = ret;
-	if (ret == -EPROBE_DEFER)
-		return ret;
-	if (ret > 0) {
-		pdata->wcin_inlim_en_gpio = ret;
-		dev_info(dev, "WCIN_INLIM_EN gpio: %d\n", pdata->wcin_inlim_en_gpio);
-		gpio_direction_output(pdata->wcin_inlim_en_gpio, 0);
-	}
-
 	/* Optional VOUT max */
 	pdata->max_vout_mv = P9221_MAX_VOUT_SET_MV_DEFAULT;
 	ret = of_property_read_u32(node, "idt,max_vout_mv", &data);
@@ -7656,6 +7669,18 @@ static int p9221_parse_dt(struct device *dev,
 
 	pdata->freq_108_disable_ramp = of_property_read_bool(node,
 						"google,bpp-freq108-disable-ramp");
+
+	ret = of_property_read_u8(node, "google,bpp_ask_mod_fet", &pdata->ask_mod_fet);
+	if (ret < 0)
+		pdata->ask_mod_fet = 0;
+
+	ret = of_property_read_u32(node, "google,bpp_freq109_icl_ma", &data);
+	if (ret == 0)
+		pdata->freq_109_icl = data;
+
+	ret = of_property_read_u32(node, "google,bpp_freq109_vout_mv", &data);
+	if (ret == 0)
+		pdata->freq_109_vout = data;
 
 	return 0;
 }
@@ -8205,18 +8230,26 @@ static int p9221_charger_probe(struct i2c_client *client,
 				   &charger->rtx_total_delay);
 		debugfs_create_bool("needs_align_check", 0644, charger->debug_entry,
 				    &charger->pdata->needs_align_check);
-		debugfs_create_file("irq_det", 0444, charger->debug_entry, charger, &debug_irq_det_fops);
-		debugfs_create_u32("det_on_debounce", 0644, charger->debug_entry, &charger->det_on_debounce);
-		debugfs_create_u32("det_off_debounce", 0644, charger->debug_entry, &charger->det_off_debounce);
-		debugfs_create_u32("de_hpp_neg_pwr", 0644, charger->debug_entry, &charger->de_hpp_neg_pwr);
-		debugfs_create_u32("de_epp_neg_pwr", 0644, charger->debug_entry, &charger->de_epp_neg_pwr);
-		debugfs_create_u32("de_wait_prop_irq_ms", 0644, charger->debug_entry, &charger->de_wait_prop_irq_ms);
+		debugfs_create_file("irq_det", 0444, charger->debug_entry, charger,
+				    &debug_irq_det_fops);
+		debugfs_create_u32("det_on_debounce", 0644, charger->debug_entry,
+				   &charger->det_on_debounce);
+		debugfs_create_u32("det_off_debounce", 0644, charger->debug_entry,
+				   &charger->det_off_debounce);
+		debugfs_create_u32("de_hpp_neg_pwr", 0644, charger->debug_entry,
+				   &charger->de_hpp_neg_pwr);
+		debugfs_create_u32("de_epp_neg_pwr", 0644, charger->debug_entry,
+				   &charger->de_epp_neg_pwr);
+		debugfs_create_u32("de_wait_prop_irq_ms", 0644, charger->debug_entry,
+				   &charger->de_wait_prop_irq_ms);
 		debugfs_create_u16("de_rtx_ocp_ma", 0644, charger->debug_entry,
 				   &charger->rtx_ocp);
 		debugfs_create_u16("de_rtx_api_limit_ma", 0644, charger->debug_entry,
 				   &charger->rtx_api_limit);
-		debugfs_create_u16("de_rtx_freq_low_khz", 0644, charger->debug_entry,
-				   &charger->rtx_freq_low_limit);
+		debugfs_create_u16("de_rtx_fb_freq_low_khz", 0644, charger->debug_entry,
+				   &charger->rtx_fb_freq_low_limit);
+		debugfs_create_u16("de_rtx_hb_freq_low_khz", 0644, charger->debug_entry,
+				   &charger->rtx_hb_freq_low_limit);
 		debugfs_create_u16("de_rtx_fod_thrsh_mw", 0644, charger->debug_entry,
 				   &charger->rtx_fod_thrsh);
 		debugfs_create_u16("de_rtx_plim_ma", 0644, charger->debug_entry,

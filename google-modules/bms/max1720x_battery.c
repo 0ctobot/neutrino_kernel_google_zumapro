@@ -796,13 +796,11 @@ static int max1720x_model_reload(struct max1720x_chip *chip, bool force)
 	if (!force && version_now == version_load)
 		return -EEXIST;
 
-	/* REQUEST -> IDLE or set to the number of retries */
-	dev_info(chip->dev, "Schedule Load FG Model, ID=%d, ver:%d->%d cap_lsb:%d->%d\n",
-			chip->batt_id,
-			version_now,
-			version_load,
-			max_m5_model_get_cap_lsb(chip->model_data),
-			max_m5_cap_lsb(chip->model_data));
+	gbms_logbuffer_devlog(chip->ce_log, chip->dev,  LOGLEVEL_INFO, 0, LOGLEVEL_INFO,
+			      "Schedule Load FG Model, ID=%d, ver:%d->%d cap_lsb:%d->%d",
+			      chip->batt_id, version_now, version_load,
+			      max_m5_model_get_cap_lsb(chip->model_data),
+			      max_m5_cap_lsb(chip->model_data));
 
 	chip->model_reload = MAX_M5_LOAD_MODEL_REQUEST;
 	chip->model_ok = false;
@@ -1349,7 +1347,7 @@ static int max1720x_check_history(struct max1720x_chip *chip)
 
 	gbms_logbuffer_devlog(chip->monitor_log, chip->dev,
 			      LOGLEVEL_INFO, 0, LOGLEVEL_INFO,
-			      "0x%04X 00:%4X 01:%4X 02:%4X 03:%4X", MONITOR_TAG_HV,
+			      "0x%04X 00:%04X 01:%04X 02:%04X 03:%04X", MONITOR_TAG_HV,
 			      first_empty, misplaced_count, chip->cycle_count, est_cycle);
 
 	return 0;
@@ -2638,8 +2636,10 @@ static irqreturn_t max1720x_fg_irq_thread_fn(int irq, void *obj)
 		if (no_battery) {
 			fg_status_clr &= ~MAX1720X_STATUS_POR;
 		} else {
-			dev_warn(chip->dev, "POR is set(%04x), model reload:%d\n",
-				 fg_status, chip->model_reload);
+			gbms_logbuffer_devlog(chip->ce_log, chip->dev,
+					      LOGLEVEL_INFO, 0, LOGLEVEL_INFO,
+					      "POR is set(%04x), model reload:%d",
+					      fg_status, chip->model_reload);
 			/*
 			 * trigger model load if not on-going, clear POR only when
 			 * model loading done successfully
@@ -4136,10 +4136,10 @@ static void max1720x_model_work(struct work_struct *work)
 		rc = max1720x_model_load(chip);
 		if (rc == 0) {
 			rc = max1720x_clear_por(chip);
-
-			dev_info(chip->dev, "Model OK, Clear Power-On Reset (%d)\n", rc);
-			/* TODO: keep trying to clear POR if the above fail */
-
+			gbms_logbuffer_devlog(chip->ce_log, chip->dev,
+					      LOGLEVEL_INFO, 0, LOGLEVEL_INFO,
+					      "Model loading complete, rc=%d, reload=%d",
+					      rc, chip->model_reload);
 			if (max_m5_recal_state(chip->model_data) == RE_CAL_STATE_IDLE) {
 				rc = max1720x_restore_battery_cycle(chip);
 				if (rc < 0)

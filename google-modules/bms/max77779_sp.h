@@ -12,6 +12,7 @@
 #define RSOC_ADDR				10
 #define FWHI_ADDR				12
 #define FWSF_ADDR				16
+#define MDLV_ADDR				20
 #define RS_TAG_LENGTH				4
 #define SU_TAG_LENGTH				1
 #define RSOC_TAG_LENGTH				2
@@ -21,6 +22,7 @@
 #define OPCODE_USER_SPACE_R_RES_LEN 32
 #define FWHI_TAG_LENGTH				4
 #define FWSF_TAG_LENGTH				4
+#define MDLV_TAG_LENGTH				1
 
 
 #define MAX77779_SP_DATA		0x80

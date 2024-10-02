@@ -391,6 +391,8 @@ static int max77779_read_vbatt(struct max77779_chgr_data *data, int *vbatt)
 	return ret;
 }
 
+#define MAX77779_WCIN_RAW_TO_UV 625
+
 static int max77779_read_wcin(struct max77779_chgr_data *data, int *vbyp)
 {
 	u16 tmp;
@@ -402,8 +404,7 @@ static int max77779_read_wcin(struct max77779_chgr_data *data, int *vbyp)
 		return ret;
 	}
 
-	/* LSB: 0.625 */
-	*vbyp = div_u64((u64) tmp * 625, 1000);
+	*vbyp = tmp * MAX77779_WCIN_RAW_TO_UV;
 	return 0;
 }
 
@@ -525,12 +526,22 @@ static int max77779_foreach_callback(void *data, const char *reason,
 		pr_debug("%s: WLC_TX vote=%x\n", __func__, mode);
 		cb_data->wlc_tx += 1;
 		break;
-
 	case GBMS_CHGR_MODE_FWUPDATE_BOOST_ON:
 		pr_debug("%s: FWUPDATE vote=%x\n", __func__, mode);
 		cb_data->fwupdate_on = true;
 		break;
-
+	case GBMS_POGO_VIN:
+		if (!cb_data->pogo_vin)
+			cb_data->reason = reason;
+		pr_debug("%s: POGO VIN vote=%x\n", __func__, mode);
+		cb_data->pogo_vin += 1;
+		break;
+	case GBMS_POGO_VOUT:
+		if (!cb_data->pogo_vout)
+			cb_data->reason = reason;
+		pr_debug("%s: POGO VOUT vote=%x\n", __func__, mode);
+		cb_data->pogo_vout += 1;
+		break;
 	default:
 		pr_err("mode=%x not supported\n", mode);
 		break;
@@ -577,7 +588,10 @@ static int max77779_get_otg_usecase(struct max77779_foreach_cb_data *cb_data,
 		return -EINVAL;
 	}
 
-	if (!cb_data->wlc_rx && !cb_data->wlc_tx) {
+	if (cb_data->pogo_vout) {
+		usecase = GSU_MODE_USB_OTG_POGO_VOUT;
+		mode = MAX77779_CHGR_MODE_BOOST_UNO_ON;
+	} else if (!cb_data->wlc_rx && !cb_data->wlc_tx) {
 		/* 9: USB_OTG or  10: USB_OTG_FRS */
 		if (cb_data->frs_on) {
 			usecase = GSU_MODE_USB_OTG_FRS;
@@ -670,6 +684,17 @@ static int max77779_get_usecase(struct max77779_foreach_cb_data *cb_data,
 		/* USB+WLC for factory and testing */
 		usecase = GSU_MODE_USB_WLC_RX;
 		mode = MAX77779_CHGR_MODE_CHGR_BUCK_ON;
+	} else if (cb_data->pogo_vout) {
+		if (!buck_on) {
+			mode = MAX77779_CHGR_MODE_ALL_OFF;
+			usecase = GSU_MODE_POGO_VOUT;
+		} else if (chgr_on) {
+			mode = MAX77779_CHGR_MODE_CHGR_BUCK_ON;
+			usecase = GSU_MODE_USB_CHG_POGO_VOUT;
+		} else {
+			mode = MAX77779_CHGR_MODE_BUCK_ON;
+			usecase = GSU_MODE_USB_CHG_POGO_VOUT;
+		}
 	} else if (!buck_on && !wlc_rx) {
 		mode = MAX77779_CHGR_MODE_ALL_OFF;
 
@@ -801,8 +826,11 @@ static int max77779_set_insel(struct max77779_chgr_data *data,
 		force_wlc = true;
 	}
 
-	/* always disable USB when Dock is present */
-	if (uc_data->dcin_is_dock && max77779_wcin_is_valid(data) && !cb_data->wlcin_off) {
+	if (cb_data->pogo_vout) {
+		/* always disable WCIN when pogo power out */
+		insel_value &= ~MAX77779_CHG_CNFG_12_WCINSEL;
+	} else if (cb_data->pogo_vin && !cb_data->wlcin_off) {
+		/* always disable USB when Dock is present */
 		insel_value &= ~MAX77779_CHG_CNFG_12_CHGINSEL;
 		insel_value |= MAX77779_CHG_CNFG_12_WCINSEL;
 	}
@@ -955,6 +983,11 @@ static int max77779_mode_callback(struct gvotable_election *el,
 	/* read directly instead of using the vote */
 	cb_data.wlc_rx = (max77779_wcin_is_online(data) &&
 			 !data->wcin_input_suspend) || data->wlc_spoof;
+	/* Block wlc_rx for POGO_VIN if it is from POGO_VOUT */
+	cb_data.wlc_rx = cb_data.wlc_rx &&
+			 from_use_case != GSU_MODE_POGO_VOUT &&
+			 from_use_case != GSU_MODE_USB_CHG_POGO_VOUT &&
+			 from_use_case != GSU_MODE_USB_OTG_POGO_VOUT;
 	cb_data.wlcin_off = !!data->wcin_input_suspend;
 
 	pr_debug("%s: wcin_is_online=%d data->wcin_input_suspend=%d data->wlc_spoof=%d\n", __func__,
@@ -967,7 +1000,8 @@ static int max77779_mode_callback(struct gvotable_election *el,
 	       !cb_data.chgr_on && !cb_data.buck_on &&
 	       !cb_data.otg_on && !cb_data.wlc_tx &&
 	       !cb_data.wlc_rx && !cb_data.wlcin_off && !cb_data.chgin_off &&
-	       !cb_data.usb_wlc && !cb_data.fwupdate_on;
+	       !cb_data.usb_wlc && !cb_data.fwupdate_on &&
+	       !cb_data.pogo_vout && !cb_data.pogo_vin;
 	if (nope) {
 		pr_debug("%s: nope callback\n", __func__);
 		goto unlock_done;
@@ -975,12 +1009,14 @@ static int max77779_mode_callback(struct gvotable_election *el,
 
 	dev_info(data->dev, "%s:%s full=%d raw=%d stby_on=%d, dc_on=%d, chgr_on=%d, buck_on=%d,"
 		" otg_on=%d, wlc_tx=%d wlc_rx=%d usb_wlc=%d"
-		" chgin_off=%d wlcin_off=%d frs_on=%d fwupdate=%d\n",
+		" chgin_off=%d wlcin_off=%d frs_on=%d fwupdate=%d"
+		" pogo_vout=%d, pogo_vin=%d\n",
 		__func__, trigger ? trigger : "<>",
 		data->charge_done, cb_data.use_raw, cb_data.stby_on, cb_data.dc_on,
 		cb_data.chgr_on, cb_data.buck_on, cb_data.otg_on,
 		cb_data.wlc_tx, cb_data.wlc_rx, cb_data.usb_wlc,
-		cb_data.chgin_off, cb_data.wlcin_off, cb_data.frs_on, cb_data.fwupdate_on);
+		cb_data.chgin_off, cb_data.wlcin_off, cb_data.frs_on, cb_data.fwupdate_on,
+		cb_data.pogo_vout, cb_data.pogo_vin);
 
 	/* just use raw "as is", no changes to switches etc */
 	if (unlikely(cb_data.fwupdate_on)) {

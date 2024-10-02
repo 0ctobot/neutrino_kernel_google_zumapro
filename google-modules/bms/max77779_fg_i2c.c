@@ -54,19 +54,18 @@ static int max77779_max17x0x_i2c_regmap_init(struct maxfg_regmap *regmap, struct
 }
 
 /* NOTE: NEED TO COME BEFORE REGISTER ACCESS */
-static int max77779_fg_i2c_regmap_init(struct max77779_fg_chip *chip)
+static int max77779_fg_i2c_regmap_init(struct max77779_fg_chip *chip, struct i2c_client *primary)
 {
 	int ret;
 
-	if (!chip->primary || !chip->secondary) {
+	if (!primary || !chip->secondary) {
 		dev_err(chip->dev, "Error i2c client not valid. primary:%p secondary:%p",
-			chip->primary, chip->secondary);
+			primary, chip->secondary);
 		return -EINVAL;
 	}
 
-	ret = max77779_max17x0x_i2c_regmap_init(&chip->regmap, chip->primary,
-						    &max77779_fg_regmap_cfg,
-						    true);
+	ret = max77779_max17x0x_i2c_regmap_init(&chip->regmap, primary,
+						&max77779_fg_regmap_cfg, true);
 	if (ret < 0) {
 		dev_err(chip->dev, "Failed to re-initialize regmap (%ld)\n",
 			IS_ERR_VALUE(chip->regmap.regmap));
@@ -98,11 +97,10 @@ static int max77779_fg_i2c_probe(struct i2c_client *client, const struct i2c_dev
 		return -ENOMEM;
 
 	chip->dev = dev;
-	chip->primary = client;
 	chip->irq = client->irq;
 	i2c_set_clientdata(client, chip);
 
-	chip->secondary = i2c_new_ancillary_device(chip->primary, "ndbg",
+	chip->secondary = i2c_new_ancillary_device(client, "ndbg",
 						   MAX77779_FG_NDGB_ADDRESS);
 	if (IS_ERR(chip->secondary)) {
 		dev_err(dev, "Error setting up ancillary i2c bus(%ld)\n",
@@ -112,8 +110,8 @@ static int max77779_fg_i2c_probe(struct i2c_client *client, const struct i2c_dev
 	}
 	i2c_set_clientdata(chip->secondary, chip);
 
-	/* needs chip->primary and chip->secondary */
-	ret = max77779_fg_i2c_regmap_init(chip);
+	/* needs chip->secondary */
+	ret = max77779_fg_i2c_regmap_init(chip, client);
 	if (ret < 0) {
 		dev_err(dev, "Failed to initialize regmap(s)\n");
 		goto error;

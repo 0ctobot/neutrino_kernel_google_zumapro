@@ -125,6 +125,11 @@ static int max77779_sp_info(gbms_tag_t tag, size_t *addr, size_t size)
 			return -EINVAL;
 		*addr = FWSF_ADDR;
 		break;
+	case GBMS_TAG_MDLV:
+		if (size && size > MDLV_TAG_LENGTH)
+			return -EINVAL;
+		*addr = MDLV_ADDR;
+		break;
 	default:
 		return -ENOENT;
 	}
@@ -136,7 +141,7 @@ static int max77779_sp_iter(int index, gbms_tag_t *tag, void *ptr)
 {
 	static gbms_tag_t keys[] = {GBMS_TAG_RS32, GBMS_TAG_RSBM, GBMS_TAG_RSBR,
 				    GBMS_TAG_SUFG, GBMS_TAG_RSOC, GBMS_TAG_FWHI,
-				    GBMS_TAG_FWSF};
+				    GBMS_TAG_FWSF, GBMS_TAG_MDLV};
 	const int count = ARRAY_SIZE(keys);
 
 	if (index >= 0 && index < count) {
