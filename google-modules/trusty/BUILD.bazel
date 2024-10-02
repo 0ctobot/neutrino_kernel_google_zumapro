@@ -17,9 +17,9 @@ filegroup(
 
 filegroup(
     name = "trusty.kconfig",
-    srcs = glob([
+    srcs = [
         "drivers/trusty/Kconfig",
-    ]),
+    ],
     visibility = [
         "//private/devices/google:__subpackages__",
         "//private/google-modules/soc/gs:__pkg__",
@@ -32,9 +32,9 @@ kernel_module(
         "drivers/trusty/*.c",
         "drivers/trusty/*.h",
         "drivers/trusty/*.S",
-        "drivers/trusty/Kbuild",
-        "Kbuild",
     ]) + [
+        "Kbuild",
+        "drivers/trusty/Kbuild",
         "//private/google-modules/soc/gs:gs_soc_headers",
         "//private/google-modules/trusty:headers",
     ],
