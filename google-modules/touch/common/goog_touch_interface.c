@@ -19,11 +19,9 @@
 
 #if IS_ENABLED(CONFIG_GS_DRM_PANEL_UNIFIED)
 #include <gs_drm/gs_drm_connector.h>
-#include <gs_panel/gs_panel.h>
-#else
+#endif
 #include <samsung/exynos_drm_connector.h>
 #include <samsung/panel/panel-samsung-drv.h>
-#endif
 
 #include "goog_touch_interface.h"
 #include "touch_bus_negotiator.h"
@@ -219,7 +217,7 @@ static int goog_proc_dump_show(struct seq_file *m, void *v)
 {
 	char trace_tag[128];
 	u64 i, hc_cnt, input_cnt;
-	int ret;
+	int ret, slot;
 	ktime_t delta_time;
 	time64_t time64_utc;
 	s32 remainder;
@@ -281,6 +279,17 @@ static int goog_proc_dump_show(struct seq_file *m, void *v)
 			input_history[i].pressed.irq_index, input_history[i].released.irq_index,
 			input_history[i].released.coord.x - input_history[i].pressed.coord.x,
 			input_history[i].released.coord.y - input_history[i].pressed.coord.y);
+	}
+	seq_puts(m, "\n");
+
+	seq_puts(m, "\t### Unreleased Coordinate(s) ###\n");
+	seq_printf(m, "%8s %12s %12s %12s %12s %12s\n", "SLOT#", "X", "Y",
+		"PRESSURE", "MAJOR", "MINOR");
+	for_each_set_bit(slot, &gti->slot_bit_active, MAX_SLOTS) {
+		seq_printf(m, "%8d %12u %12u %12u %12u %12u\n", slot,
+			gti->offload.coords[slot].x, gti->offload.coords[slot].y,
+			gti->offload.coords[slot].pressure,
+			gti->offload.coords[slot].major, gti->offload.coords[slot].minor);
 	}
 	seq_puts(m, "\n");
 
@@ -2088,7 +2097,9 @@ void gti_debug_input_dump(struct goog_touch_interface *gti)
 	}
 	/* Extra check for unexpected case. */
 	for_each_set_bit(slot, &gti->slot_bit_active, MAX_SLOTS) {
-		GOOG_INFO(gti, "slot #%d is active!\n", slot);
+		GOOG_INFO(gti, "slot #%d(%u, %u, %u) is active!\n", slot,
+			gti->offload.coords[slot].x, gti->offload.coords[slot].y,
+			gti->offload.coords[slot].pressure);
 	}
 }
 #endif /* GTI_DEBUG_INPUT_KFIFO_LEN */
@@ -2147,7 +2158,7 @@ static int panel_notifier_call(
 				queue_work(gti->event_wq, &gti->set_op_hz_work);
 		}
 	}
-#else
+#endif
 	if (is_exynos_drm_connector(gti->connector)) {
 		if (id == EXYNOS_PANEL_NOTIFIER_SET_OP_HZ) {
 			gti->panel_op_hz = *(unsigned int*)data;
@@ -2155,7 +2166,6 @@ static int panel_notifier_call(
 				queue_work(gti->event_wq, &gti->set_op_hz_work);
 		}
 	}
-#endif
 
 	return 0;
 }
@@ -2177,11 +2187,10 @@ static int panel_bridge_attach(struct drm_bridge *bridge, enum drm_bridge_attach
 		gti->panel_notifier.notifier_call = panel_notifier_call;
 #if IS_ENABLED(CONFIG_GS_DRM_PANEL_UNIFIED)
 		if (is_gs_drm_connector(gti->connector))
-			gs_panel_register_op_hz_notifier(gti->connector, &gti->panel_notifier);
-#else
+			gs_connector_register_op_hz_notifier(gti->connector, &gti->panel_notifier);
+#endif
 		if (is_exynos_drm_connector(gti->connector))
 			exynos_panel_register_notifier(gti->connector, &gti->panel_notifier);
-#endif
 	}
 
 	return 0;
@@ -2200,11 +2209,10 @@ static void panel_bridge_detach(struct drm_bridge *bridge)
 
 #if IS_ENABLED(CONFIG_GS_DRM_PANEL_UNIFIED)
 		if (is_gs_drm_connector(gti->connector))
-			gs_panel_unregister_op_hz_notifier(gti->connector, &gti->panel_notifier);
-#else
+			gs_connector_unregister_op_hz_notifier(gti->connector, &gti->panel_notifier);
+#endif
 		if (is_exynos_drm_connector(gti->connector))
 			exynos_panel_unregister_notifier(gti->connector, &gti->panel_notifier);
-#endif
 	}
 }
 
@@ -2246,14 +2254,13 @@ static bool panel_bridge_is_lp_mode(struct drm_connector *connector)
 
 			return s->gs_mode.is_lp_mode;
 		}
-#else
+#endif
 		if (is_exynos_drm_connector(connector)) {
 			struct exynos_drm_connector_state *s =
 				to_exynos_connector_state(connector->state);
 
 			return s->exynos_mode.is_lp_mode;
 		}
-#endif
 	}
 	return false;
 }
@@ -3482,7 +3489,7 @@ int gti_charger_state_change(struct notifier_block *nb, unsigned long action,
 
 int goog_offload_probe(struct goog_touch_interface *gti)
 {
-	int ret;
+	int ret = 0;
 	int err = 0;
 	u16 values[2];
 	struct device_node *np = gti->vendor_dev->of_node;
@@ -3540,14 +3547,10 @@ int goog_offload_probe(struct goog_touch_interface *gti)
 	gti->offload.caps.touch_offload_major_version = TOUCH_OFFLOAD_INTERFACE_MAJOR_VERSION;
 	gti->offload.caps.touch_offload_minor_version = TOUCH_OFFLOAD_INTERFACE_MINOR_VERSION;
 	gti->offload.caps.device_id = gti->offload_id;
-
-	if (of_property_read_u16_array(np, "goog,display-resolution",
-					  values, 2) == 0) {
-		gti->offload.caps.display_width = values[0];
-		gti->offload.caps.display_height = values[1];
-	} else {
-		GOOG_ERR(gti, "Please set \"goog,display-resolution\" in dts!");
-	}
+	gti->offload.caps.touch_width =
+		input_abs_get_max(gti->vendor_input_dev, ABS_MT_POSITION_X) + 1;
+	gti->offload.caps.touch_height =
+		input_abs_get_max(gti->vendor_input_dev, ABS_MT_POSITION_Y) + 1;
 
 	if (of_property_read_u16_array(np, "goog,channel-num",
 					  values, 2) == 0) {
@@ -3610,8 +3613,8 @@ int goog_offload_probe(struct goog_touch_interface *gti)
 	}
 
 	gti->offload_enabled = of_property_read_bool(np, "goog,offload-enabled");
-	GOOG_INFO(gti, "offload.caps: display W/H: %d * %d (Tx/Rx: %d * %d).\n",
-		gti->offload.caps.display_width, gti->offload.caps.display_height,
+	GOOG_INFO(gti, "offload.caps: W/H: %d * %d (Tx/Rx: %d * %d).\n",
+		gti->offload.caps.touch_width, gti->offload.caps.touch_height,
 		gti->offload.caps.tx_size, gti->offload.caps.rx_size);
 
 	GOOG_INFO(gti, "offload ID: \"%c%c%c%c\" / 0x%08X, offload_enabled=%d.\n",
@@ -4257,6 +4260,8 @@ void goog_init_options(struct goog_touch_interface *gti,
 		struct gti_optional_configuration *options)
 {
 	u32 coords[4];
+	int touch_max_x = 0;
+	int display_max_x = 0;
 
 	/* Initialize the common features. */
 	gti->mf_mode = GTI_MF_MODE_DEFAULT;
@@ -4285,6 +4290,16 @@ void goog_init_options(struct goog_touch_interface *gti,
 			gti->lptw_track_max_x = coords[1];
 			gti->lptw_track_min_y = coords[2];
 			gti->lptw_track_max_y = coords[3];
+			/* Scale the tracking area to touch resolution. */
+			touch_max_x = input_abs_get_max(gti->vendor_input_dev, ABS_MT_POSITION_X) + 1;
+			display_max_x = gti->lptw_track_min_x + gti->lptw_track_max_x;
+			gti->lptw_track_min_x = gti->lptw_track_min_x * touch_max_x / display_max_x;
+			gti->lptw_track_max_x = gti->lptw_track_max_x * touch_max_x / display_max_x;
+			gti->lptw_track_min_y = gti->lptw_track_min_y * touch_max_x / display_max_x;
+			gti->lptw_track_max_y = gti->lptw_track_max_y * touch_max_x / display_max_x;
+			GOOG_LOGI(gti, "goog,lptw-tracking-area %d, %d, %d, %d\n",
+					gti->lptw_track_min_x, gti->lptw_track_max_x,
+					gti->lptw_track_min_y, gti->lptw_track_max_y);
 			INIT_DELAYED_WORK(&gti->lptw_cancel_delayed_work, goog_lptw_cancel_delayed_work);
 		}
 		gti->panel_notifier_enabled = of_property_read_bool(np,

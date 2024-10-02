@@ -71,8 +71,14 @@ struct TouchOffloadCaps {
 
 	/* Device info */
 	__u32 device_id;
-	__u16 display_width;
-	__u16 display_height;
+	union {
+	__u16 display_width;  /* obsolete */
+	__u16 touch_width;
+	};
+	union {
+	__u16 display_height; /* obsolete */
+	__u16 touch_height;
+	};
 	__u16 tx_size;
 	__u16 rx_size;
 	__u8 bus_type;

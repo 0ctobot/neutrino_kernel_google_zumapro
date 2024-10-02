@@ -6,7 +6,6 @@ M ?= $(shell pwd)
 EXTRA_CFLAGS	+= -DDYNAMIC_DEBUG_MODULE
 EXTRA_SYMBOLS	+= $(OUT_DIR)/../private/google-modules/aoc/Module.symvers
 EXTRA_SYMBOLS	+= $(OUT_DIR)/../private/google-modules/display/common/gs_drm/Module.symvers
-EXTRA_SYMBOLS	+= $(OUT_DIR)/../private/google-modules/display/common/gs_panel/Module.symvers
 EXTRA_SYMBOLS	+= $(OUT_DIR)/../private/google-modules/display/samsung/Module.symvers
 ifneq ("$(wildcard $(OUT_DIR)/../private/google-modules/fingerprint/qcom/qfs4008/Module.symvers)","")
 EXTRA_SYMBOLS   += $(OUT_DIR)/../private/google-modules/fingerprint/qcom/qfs4008/Module.symvers

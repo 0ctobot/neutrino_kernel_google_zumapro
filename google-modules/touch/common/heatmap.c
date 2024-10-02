@@ -228,7 +228,7 @@ static int heatmap_vidioc_querycap(struct file *file, void *priv,
 	struct v4l2_heatmap *v4l2 = video_drvdata(file);
 	strlcpy(cap->driver, v4l2->parent_dev->driver->name,
 		sizeof(cap->driver));
-	if (v4l2->input_dev != NULL) {
+	if (v4l2->input_dev != NULL && v4l2->input_dev->name != NULL) {
 		strlcpy(cap->card, v4l2->input_dev->name, sizeof(cap->card));
 	} else {
 		strlcpy(cap->card, KBUILD_MODNAME, sizeof(cap->card));

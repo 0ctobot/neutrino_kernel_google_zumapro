@@ -73,7 +73,6 @@ kernel_module(
     deps = [
         "//private/google-modules/aoc",
         "//private/google-modules/display/common/gs_drm",
-        "//private/google-modules/display/common/gs_panel",
         "//private/google-modules/display/samsung:display.samsung",
         "//private/google-modules/soc/gs:gs_soc_module",
     ] + select({

@@ -46,3 +46,18 @@ config GOOG_TOUCH_INTERFACE
 	  Say Y here if you want to enable the Google Touch Interface driver.
 
 	  If unsure, say N.
+
+config TOUCHSCREEN_SPI_FLASH
+        bool "Touchscreen with flash support"
+        default n
+        help
+          Say Y here if you have the touchscreen with flash support.
+
+          If unsure, say N.
+
+config GOOG_USI_STYLUS
+	tristate "Google USI Stylus Subsystem"
+	help
+	  Say Y here if you want to enable the Google USI Stylus Subsystem.
+
+	  If unsure, Say N.
