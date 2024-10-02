@@ -2,7 +2,7 @@
 /*
  * Wrapper for GSA related APIs.
  *
- * Copyright (C) 2023 Google LLC
+ * Copyright (C) 2023-2024 Google LLC
  */
 
 #ifndef __GXP_GSA_H__

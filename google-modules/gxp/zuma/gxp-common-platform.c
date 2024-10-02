@@ -31,18 +31,19 @@
 #include "gxp-client.h"
 #include "gxp-config.h"
 #include "gxp-core-telemetry.h"
+#include "gxp-dci.h"
 #include "gxp-debug-dump.h"
 #include "gxp-dma-fence.h"
 #include "gxp-dma.h"
 #include "gxp-dmabuf.h"
 #include "gxp-domain-pool.h"
-#include "gxp-firmware.h"
 #include "gxp-firmware-data.h"
 #include "gxp-firmware-loader.h"
+#include "gxp-firmware.h"
 #include "gxp-internal.h"
 #include "gxp-lpm.h"
-#include "gxp-mailbox.h"
 #include "gxp-mailbox-driver.h"
+#include "gxp-mailbox.h"
 #include "gxp-mapping.h"
 #include "gxp-notification.h"
 #include "gxp-pm.h"
@@ -55,11 +56,6 @@
 #include <soc/google/tpu-ext.h>
 #endif
 
-#if GXP_USE_LEGACY_MAILBOX
-#include "gxp-mailbox-impl.h"
-#else
-#include "gxp-dci.h"
-#endif
 
 /* We will only have one gxp device */
 #define GXP_DEV_COUNT 1
@@ -590,206 +586,6 @@ static int gxp_ioctl_allocate_vd(struct gxp_client *client,
 	return 0;
 }
 
-static int gxp_ioctl_etm_trace_start_command(struct gxp_client *client,
-					     struct gxp_etm_trace_start_ioctl __user *argp)
-{
-	struct gxp_dev *gxp = client->gxp;
-	struct gxp_etm_trace_start_ioctl ibuf;
-	int phys_core;
-	int ret = 0;
-
-	if (copy_from_user(&ibuf, argp, sizeof(ibuf)))
-		return -EFAULT;
-
-	ibuf.trace_ram_enable &= ETM_TRACE_LSB_MASK;
-	ibuf.atb_enable &= ETM_TRACE_LSB_MASK;
-
-	if (!ibuf.trace_ram_enable && !ibuf.atb_enable)
-		return -EINVAL;
-
-	if (!(ibuf.sync_msg_period == 0 ||
-	    (ibuf.sync_msg_period <= ETM_TRACE_SYNC_MSG_PERIOD_MAX &&
-	     ibuf.sync_msg_period >= ETM_TRACE_SYNC_MSG_PERIOD_MIN &&
-	     is_power_of_2(ibuf.sync_msg_period))))
-		return -EINVAL;
-
-	if (ibuf.pc_match_mask_length > ETM_TRACE_PC_MATCH_MASK_LEN_MAX)
-		return -EINVAL;
-
-	/* Caller must hold VIRTUAL_DEVICE wakelock */
-	down_read(&client->semaphore);
-
-	if (!check_client_has_available_vd_wakelock(
-		    client, "GXP_ETM_TRACE_START_COMMAND")) {
-		ret = -ENODEV;
-		goto out_unlock_client_semaphore;
-	}
-
-	down_read(&gxp->vd_semaphore);
-
-	phys_core =
-		gxp_vd_virt_core_to_phys_core(client->vd, ibuf.virtual_core_id);
-	if (phys_core < 0) {
-		dev_err(gxp->dev, "Trace start failed: Invalid virtual core id (%u)\n",
-			ibuf.virtual_core_id);
-		ret = -EINVAL;
-		goto out;
-	}
-
-out:
-	up_read(&gxp->vd_semaphore);
-out_unlock_client_semaphore:
-	up_read(&client->semaphore);
-
-	return ret;
-}
-
-static int gxp_ioctl_etm_trace_sw_stop_command(struct gxp_client *client, __u16 __user *argp)
-{
-	struct gxp_dev *gxp = client->gxp;
-	u16 virtual_core_id;
-	int phys_core;
-	int ret = 0;
-
-	if (copy_from_user(&virtual_core_id, argp, sizeof(virtual_core_id)))
-		return -EFAULT;
-
-	/* Caller must hold VIRTUAL_DEVICE wakelock */
-	down_read(&client->semaphore);
-
-	if (!check_client_has_available_vd_wakelock(
-		    client, "GXP_ETM_TRACE_SW_STOP_COMMAND")) {
-		ret = -ENODEV;
-		goto out_unlock_client_semaphore;
-	}
-
-	down_read(&gxp->vd_semaphore);
-
-	phys_core = gxp_vd_virt_core_to_phys_core(client->vd, virtual_core_id);
-	if (phys_core < 0) {
-		dev_err(gxp->dev, "Trace stop via software trigger failed: Invalid virtual core id (%u)\n",
-			virtual_core_id);
-		ret = -EINVAL;
-		goto out;
-	}
-out:
-	up_read(&gxp->vd_semaphore);
-out_unlock_client_semaphore:
-	up_read(&client->semaphore);
-
-	return ret;
-}
-
-static int gxp_ioctl_etm_trace_cleanup_command(struct gxp_client *client, __u16 __user *argp)
-{
-	struct gxp_dev *gxp = client->gxp;
-	u16 virtual_core_id;
-	int phys_core;
-	int ret = 0;
-
-	if (copy_from_user(&virtual_core_id, argp, sizeof(virtual_core_id)))
-		return -EFAULT;
-
-	/* Caller must hold VIRTUAL_DEVICE wakelock */
-	down_read(&client->semaphore);
-
-	if (!check_client_has_available_vd_wakelock(
-		    client, "GXP_ETM_TRACE_CLEANUP_COMMAND")) {
-		ret = -ENODEV;
-		goto out_unlock_client_semaphore;
-	}
-
-	down_read(&gxp->vd_semaphore);
-
-	phys_core = gxp_vd_virt_core_to_phys_core(client->vd, virtual_core_id);
-	if (phys_core < 0) {
-		dev_err(gxp->dev, "Trace cleanup failed: Invalid virtual core id (%u)\n",
-			virtual_core_id);
-		ret = -EINVAL;
-		goto out;
-	}
-out:
-	up_read(&gxp->vd_semaphore);
-out_unlock_client_semaphore:
-	up_read(&client->semaphore);
-
-	return ret;
-}
-
-static int gxp_ioctl_etm_get_trace_info_command(struct gxp_client *client,
-						struct gxp_etm_get_trace_info_ioctl __user *argp)
-{
-	struct gxp_dev *gxp = client->gxp;
-	struct gxp_etm_get_trace_info_ioctl ibuf;
-	int phys_core;
-	u32 *trace_header;
-	u32 *trace_data;
-	int ret = 0;
-
-	if (copy_from_user(&ibuf, argp, sizeof(ibuf)))
-		return -EFAULT;
-
-	if (ibuf.type > 1)
-		return -EINVAL;
-
-	/* Caller must hold VIRTUAL_DEVICE wakelock */
-	down_read(&client->semaphore);
-
-	if (!check_client_has_available_vd_wakelock(
-		    client, "GXP_ETM_GET_TRACE_INFO_COMMAND")) {
-		ret = -ENODEV;
-		goto out_unlock_client_semaphore;
-	}
-
-	down_read(&gxp->vd_semaphore);
-
-	phys_core = gxp_vd_virt_core_to_phys_core(client->vd, ibuf.virtual_core_id);
-	if (phys_core < 0) {
-		dev_err(gxp->dev, "Get trace info failed: Invalid virtual core id (%u)\n",
-			ibuf.virtual_core_id);
-		ret = -EINVAL;
-		goto out;
-	}
-
-	trace_header = kzalloc(GXP_TRACE_HEADER_SIZE, GFP_KERNEL);
-	if (!trace_header) {
-		ret = -ENOMEM;
-		goto out;
-	}
-
-	trace_data = kzalloc(GXP_TRACE_RAM_SIZE, GFP_KERNEL);
-	if (!trace_data) {
-		ret = -ENOMEM;
-		goto out_free_header;
-	}
-
-	if (copy_to_user((void __user *)ibuf.trace_header_addr, trace_header,
-			 GXP_TRACE_HEADER_SIZE)) {
-		ret = -EFAULT;
-		goto out_free_data;
-	}
-
-	if (ibuf.type == 1) {
-		if (copy_to_user((void __user *)ibuf.trace_data_addr,
-				 trace_data, GXP_TRACE_RAM_SIZE)) {
-			ret = -EFAULT;
-			goto out_free_data;
-		}
-	}
-
-out_free_data:
-	kfree(trace_data);
-out_free_header:
-	kfree(trace_header);
-
-out:
-	up_read(&gxp->vd_semaphore);
-out_unlock_client_semaphore:
-	up_read(&client->semaphore);
-
-	return ret;
-}
-
 #if HAS_TPU_EXT
 
 /*
@@ -1117,7 +913,7 @@ static int gxp_ioctl_acquire_wake_lock(struct gxp_client *client,
 	 * We intentionally don't call `gcip_pm_*` functions while holding @client->semaphore.
 	 *
 	 * As the `gcip_pm_put` function cancels KCI works synchronously and the KCI works may hold
-	 * @client->semaphore in some logics such as MCU FW crash handler, it can cause deadlock
+	 * @client->semaphore in some logic such as MCU FW crash handler, it can cause deadlock
 	 * issues potentially if we call `gcip_pm_put` after holding @client->semaphore.
 	 *
 	 * Therefore, we decided to decouple calling the `gcip_pm_put` function from holding
@@ -1733,18 +1529,6 @@ static long gxp_ioctl(struct file *file, uint cmd, ulong arg)
 	case GXP_ALLOCATE_VIRTUAL_DEVICE:
 		ret = gxp_ioctl_allocate_vd(client, argp);
 		break;
-	case GXP_ETM_TRACE_START_COMMAND:
-		ret = gxp_ioctl_etm_trace_start_command(client, argp);
-		break;
-	case GXP_ETM_TRACE_SW_STOP_COMMAND:
-		ret = gxp_ioctl_etm_trace_sw_stop_command(client, argp);
-		break;
-	case GXP_ETM_TRACE_CLEANUP_COMMAND:
-		ret = gxp_ioctl_etm_trace_cleanup_command(client, argp);
-		break;
-	case GXP_ETM_GET_TRACE_INFO_COMMAND:
-		ret = gxp_ioctl_etm_get_trace_info_command(client, argp);
-		break;
 	case GXP_MAP_TPU_MBX_QUEUE:
 		ret = gxp_ioctl_map_tpu_mbx_queue(client, argp);
 		break;
@@ -2236,19 +2020,14 @@ static int gxp_common_platform_probe(struct platform_device *pdev, struct gxp_de
 		dev_err(dev, "Failed to create mailbox manager: %d\n", ret);
 		goto err_dma_exit;
 	}
-	if (gxp_is_direct_mode(gxp)) {
-#if GXP_USE_LEGACY_MAILBOX
-		gxp_mailbox_init(gxp->mailbox_mgr);
-#else
+	if (gxp_is_direct_mode(gxp))
 		gxp_dci_init(gxp->mailbox_mgr);
-#endif
-	}
 
 #if IS_ENABLED(CONFIG_SUBSYSTEM_COREDUMP)
 	ret = gxp_debug_dump_init(gxp, &gxp_sscd_dev, &gxp_sscd_pdata);
 #else
 	ret = gxp_debug_dump_init(gxp, NULL, NULL);
-#endif  // !CONFIG_SUBSYSTEM_COREDUMP
+#endif  /* !CONFIG_SUBSYSTEM_COREDUMP */
 	if (ret)
 		dev_warn(dev, "Failed to initialize debug dump\n");
 
@@ -2330,11 +2109,6 @@ static int gxp_common_platform_probe(struct platform_device *pdev, struct gxp_de
 		if (ret)
 			goto err_dma_fence_destroy;
 	}
-	/*
-	 * We only know where the system config region is after after_probe is
-	 * done so this can't be called earlier.
-	 */
-	gxp_fw_data_populate_system_config(gxp);
 
 	ret = gxp_device_add(gxp);
 	if (ret)

@@ -2,7 +2,7 @@
 /*
  * Implementation of DCI (Direct Command Interface) using mailbox.
  *
- * Copyright (C) 2022 Google LLC
+ * Copyright (C) 2022-2024 Google LLC
  */
 
 #ifndef __GXP_DCI_H__

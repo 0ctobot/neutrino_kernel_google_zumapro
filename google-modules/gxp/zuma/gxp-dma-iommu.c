@@ -38,28 +38,25 @@ static int sysmmu_fault_handler(struct iommu_fault *fault, void *token)
 	switch (fault->type) {
 	case IOMMU_FAULT_DMA_UNRECOV:
 		dev_err(gxp->dev, "Unrecoverable IOMMU fault!\n");
+		dev_err(gxp->dev, "reason = %08X\n", fault->event.reason);
+		dev_err(gxp->dev, "flags = %08X\n", fault->event.flags);
+		dev_err(gxp->dev, "pasid = %08X\n", fault->event.pasid);
+		dev_err(gxp->dev, "perm = %08X\n", fault->event.perm);
+		dev_err(gxp->dev, "addr = %llX\n", fault->event.addr);
+		dev_err(gxp->dev, "fetch_addr = %llX\n", fault->event.fetch_addr);
 		break;
 	case IOMMU_FAULT_PAGE_REQ:
 		dev_err(gxp->dev, "IOMMU page request fault!\n");
+		dev_err(gxp->dev, "flags = %08X\n", fault->prm.flags);
+		dev_err(gxp->dev, "pasid = %08X\n", fault->prm.pasid);
+		dev_err(gxp->dev, "grpid = %08X\n", fault->prm.grpid);
+		dev_err(gxp->dev, "perm = %08X\n", fault->prm.perm);
+		dev_err(gxp->dev, "addr = %llX\n", fault->prm.addr);
 		break;
 	default:
 		dev_err(gxp->dev, "Unexpected IOMMU fault type (%d)\n",
 			fault->type);
-		return -EAGAIN;
 	}
-
-	/*
-	 * Normally the iommu driver should fill out the `event` struct for
-	 * unrecoverable errors, and the `prm` struct for page request faults.
-	 * The SysMMU driver, instead, always fills out the `event` struct.
-	 *
-	 * Note that the `fetch_addr` and `perm` fields are never filled out,
-	 * so we skip printing them.
-	 */
-	dev_err(gxp->dev, "reason = %08X\n", fault->event.reason);
-	dev_err(gxp->dev, "flags = %08X\n", fault->event.flags);
-	dev_err(gxp->dev, "pasid = %08X\n", fault->event.pasid);
-	dev_err(gxp->dev, "addr = %llX\n", fault->event.addr);
 
 	// Tell the IOMMU driver to carry on
 	return -EAGAIN;

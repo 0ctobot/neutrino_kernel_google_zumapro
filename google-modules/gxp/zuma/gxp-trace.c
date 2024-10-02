@@ -2,7 +2,7 @@
 /*
  * GXP ftrace support.
  *
- * Copyright (C) 2023 Google LLC
+ * Copyright (C) 2023-2024 Google LLC
  */
 
 #define CREATE_TRACE_POINTS

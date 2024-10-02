@@ -183,11 +183,11 @@ static int map_sys_cfg_resource(struct gxp_virtual_device *vd,
 {
 	struct gxp_dev *gxp = vd->gxp;
 	int ret;
-	const size_t ro_size = PAGE_SIZE;
+	const size_t ro_size = res->size / 2;
 
 	if (res->daddr == 0)
 		return 0;
-	if (res->size != GXP_FW_DATA_SYSCFG_SIZE) {
+	if (!res->size || !IS_ALIGNED(res->size, gcip_iommu_domain_granule(vd->domain) * 2)) {
 		dev_err(gxp->dev, "invalid system cfg size: %#llx", res->size);
 		return -EINVAL;
 	}
@@ -239,8 +239,7 @@ static void assign_resource(struct gxp_mapped_resource *res,
  * To keep compatibility, if not both mapping[0, 1] present then this function
  * falls back to map the MCU-core shared region with hard-coded IOVA and size.
  */
-static int map_cfg_regions(struct gxp_virtual_device *vd,
-			   struct gcip_image_config *img_cfg)
+static int map_cfg_regions(struct gxp_virtual_device *vd, struct gcip_image_config *img_cfg)
 {
 	struct gxp_dev *gxp = vd->gxp;
 	struct gxp_mapped_resource pool;
@@ -318,53 +317,25 @@ static void unmap_cfg_regions(struct gxp_virtual_device *vd)
 }
 
 static int gxp_vd_imgcfg_map(void *data, dma_addr_t daddr, phys_addr_t paddr,
-			     size_t size, unsigned int flags)
+			     size_t size, unsigned int cfg_map_flags, unsigned int cfg_op_flags)
 {
 	struct gxp_virtual_device *vd = data;
 
-	if (flags & GCIP_IMAGE_CONFIG_FLAGS_SECURE)
+	if (cfg_op_flags & GCIP_IMAGE_CONFIG_FLAGS_SECURE)
 		return 0;
 
 	return map_ns_region(vd, daddr, size);
 }
 
 static void gxp_vd_imgcfg_unmap(void *data, dma_addr_t daddr, size_t size,
-				unsigned int flags)
+				unsigned int cfg_map_flags, unsigned int cfg_op_flags)
 {
 	struct gxp_virtual_device *vd = data;
 
-	if (flags & GCIP_IMAGE_CONFIG_FLAGS_SECURE)
+	if (cfg_op_flags & GCIP_IMAGE_CONFIG_FLAGS_SECURE)
 		return;
 
 	unmap_ns_region(vd, daddr);
-}
-
-/* TODO(b/299037074): Remove core's accesses to LPM. */
-static int map_remote_lpm(struct gxp_virtual_device *vd,
-			  struct gcip_image_config *img_cfg)
-{
-	struct gxp_mapped_resource res;
-	int ret;
-
-	if (img_cfg->num_iommu_mappings != REMOTE_LPM_IDX + 1)
-		/* Core doesn't require remote lpm */
-		return 0;
-
-	res.daddr = img_cfg->iommu_mappings[REMOTE_LPM_IDX].virt_address;
-	res.paddr = (img_cfg->iommu_mappings[REMOTE_LPM_IDX].image_config_value) &
-		    GCIP_IMG_CFG_ADDR_MASK;
-	res.size = gcip_config_to_size(img_cfg->iommu_mappings[REMOTE_LPM_IDX].image_config_value);
-	ret = map_resource(vd, &res);
-	if (ret)
-		return ret;
-
-	vd->lpm = res;
-	return 0;
-}
-
-static void unmap_remote_lpm(struct gxp_virtual_device *vd)
-{
-	unmap_resource(vd, &vd->lpm);
 }
 
 static int
@@ -395,13 +366,6 @@ map_fw_image_config(struct gxp_dev *gxp, struct gxp_virtual_device *vd,
 		goto err;
 	}
 
-	ret = map_remote_lpm(vd, cfg);
-	if (ret) {
-		dev_err(gxp->dev, "Remote LPM mapping failed");
-		unmap_cfg_regions(vd);
-		goto err;
-	}
-
 	return 0;
 err:
 	gcip_image_config_clear(&vd->cfg_parser);
@@ -411,7 +375,6 @@ err:
 static void unmap_fw_image_config(struct gxp_dev *gxp,
 				  struct gxp_virtual_device *vd)
 {
-	unmap_remote_lpm(vd);
 	unmap_cfg_regions(vd);
 	gcip_image_config_clear(&vd->cfg_parser);
 }
@@ -699,6 +662,8 @@ struct gxp_virtual_device *gxp_vd_allocate(struct gxp_dev *gxp,
 	mutex_init(&vd->fence_list_lock);
 	INIT_LIST_HEAD(&vd->gxp_fence_list);
 	mutex_init(&vd->debug_dump_lock);
+	init_waitqueue_head(&vd->finished_dump_processing_waitq);
+	atomic_set(&vd->core_dump_generated_list, 0);
 
 #ifdef GXP_USE_DEFAULT_DOMAIN
 	vd->domain = gxp_iommu_get_domain_for_dev(gxp);
@@ -1050,8 +1015,46 @@ void gxp_vd_stop(struct gxp_virtual_device *vd)
 	debug_dump_unlock(vd);
 }
 
-static inline uint select_core(struct gxp_virtual_device *vd, uint virt_core,
-			       uint phys_core)
+void gxp_vd_check_and_wait_for_debug_dump(struct gxp_virtual_device *vd)
+{
+	struct gxp_dev *gxp = vd->gxp;
+	bool vd_crashed = 0;
+	uint phys_core;
+	uint remaining_time;
+
+	if (!gxp_is_direct_mode(gxp))
+		return;
+
+	/*
+	 * Check if any of the cores for the given virtual device has generated the debug dump or
+	 * has been requested to generate the forced debug dump.
+	 */
+	for (phys_core = 0; phys_core < GXP_NUM_CORES; phys_core++) {
+		if (!(vd->core_list & BIT(phys_core)))
+			continue;
+
+		vd_crashed |= gxp_firmware_get_generate_debug_dump(gxp, vd, phys_core) |
+			      gxp_firmware_get_debug_dump_generated(gxp, vd, phys_core);
+	}
+
+	if (vd_crashed) {
+		/*
+		 * Successive prccessing of debug dumps demand a delay a second. This
+		 * delay is due to the current implementation of the SSCD module which
+		 * generates the dump files whose names are at precision of a second i.e.
+		 * coredump_<SUBSYSTEM_NAME>_<%Y-%m-%d_%H-%M-%S>.bin Thus max wait time is
+		 * kept to be GXP_NUM_CORES seconds.
+		 */
+		remaining_time = wait_event_timeout(
+			vd->finished_dump_processing_waitq,
+			atomic_read(&vd->core_dump_generated_list) == vd->core_list,
+			msecs_to_jiffies(GXP_NUM_CORES * SSCD_REPORT_WAIT_TIME));
+		if (!remaining_time)
+			dev_warn(gxp->dev, "Debug dump processing timedout.\n");
+	}
+}
+
+static inline uint select_core(struct gxp_virtual_device *vd, uint virt_core, uint phys_core)
 {
 	return virt_core;
 }

@@ -2,21 +2,19 @@
 /*
  * SoC specific function definitions for GSx01.
  *
- * Copyright (C) 2023 Google LLC
+ * Copyright (C) 2023-2024 Google LLC
  */
 
 #include <linux/acpm_dvfs.h>
 #include <linux/slab.h>
 #include <soc/google/exynos_pm_qos.h>
 
-#include <gcip/gcip-kci.h>
 #include <gcip/gcip-slc.h>
 
 #include "gxp-config.h"
 #include "gxp-core-telemetry.h"
 #include "gxp-firmware.h"
 #include "gxp-gsx01-ssmt.h"
-#include "gxp-kci.h"
 #include "gxp-lpm.h"
 #include "gxp-pm.h"
 #include "mobile-soc-gsx01.h"
@@ -80,10 +78,14 @@ void gxp_soc_pm_init(struct gxp_dev *gxp)
 {
 	exynos_pm_qos_add_request(&gxp->soc_data->int_min, PM_QOS_DEVICE_THROUGHPUT, 0);
 	exynos_pm_qos_add_request(&gxp->soc_data->mif_min, PM_QOS_BUS_THROUGHPUT, 0);
+	exynos_pm_qos_add_request(&gxp->soc_data->bci_min, PM_QOS_BCI_THROUGHPUT, 0);
+	exynos_pm_qos_add_request(&gxp->soc_data->dsu_min, PM_QOS_DSU_THROUGHPUT, 0);
 }
 
 void gxp_soc_pm_exit(struct gxp_dev *gxp)
 {
+	exynos_pm_qos_remove_request(&gxp->soc_data->dsu_min);
+	exynos_pm_qos_remove_request(&gxp->soc_data->bci_min);
 	exynos_pm_qos_remove_request(&gxp->soc_data->mif_min);
 	exynos_pm_qos_remove_request(&gxp->soc_data->int_min);
 }
@@ -113,6 +115,8 @@ void gxp_soc_pm_reset(struct gxp_dev *gxp)
 {
 	exynos_pm_qos_update_request(&gxp->soc_data->int_min, 0);
 	exynos_pm_qos_update_request(&gxp->soc_data->mif_min, 0);
+	exynos_pm_qos_update_request(&gxp->soc_data->bci_min, 0);
+	exynos_pm_qos_update_request(&gxp->soc_data->dsu_min, 0);
 }
 
 int gxp_soc_init(struct gxp_dev *gxp)

@@ -12,9 +12,12 @@
 #include <linux/rwsem.h>
 #include <linux/slab.h>
 
+#include <gcip/gcip-dma-fence.h>
 #include <gcip/gcip-fence-array.h>
 #include <gcip/gcip-fence.h>
 #include <gcip/gcip-telemetry.h>
+
+#include <trace/events/gxp.h>
 
 #include "gxp-client.h"
 #include "gxp-internal.h"
@@ -50,59 +53,6 @@ static int gxp_ioctl_uci_command_compat(struct gxp_client *client,
 		return -EFAULT;
 
 	return 0;
-}
-
-/**
- * polled_dma_fence_get() - Generate a dma-fence to represent all the fan-in fences.
- * @in_fences: The pointer to the gcip_fence_array object containing fan-in fances.
- *
- * Use dma_fence_array to handle all the fan-in fences if @in_fences->size > 1.
- * The caller should hold the reference count of the fences in @in_fences to make sure they will not
- * be released during the process.
- * The output fence will acquired 1 reference count in this function either with dma_fence_get() or
- * dma_fence_array_create().
- *
- * Return: The pointer to the generated dma-fence or the error pointer on error.
- *         A NULL pointer is returned if no in-kernel fence is passed in.
- */
-static struct dma_fence *polled_dma_fence_get(struct gcip_fence_array *in_fences)
-{
-	static int array_seq;
-	const int size = in_fences->size;
-	struct dma_fence_array *fence_array;
-	struct dma_fence **in_dma_fences;
-	int i;
-
-	if (!in_fences->size || !in_fences->same_type || in_fences->type != GCIP_IN_KERNEL_FENCE)
-		return NULL;
-
-	/* TODO(b/320401031): Remove this constraint after dma-fence-unwrap adopted. */
-	/* dma-fence-array as in-fences is currently not supported. */
-	for (i = 0; i < size; i++) {
-		if (dma_fence_is_array(in_fences->fences[i]->fence.ikf))
-			return ERR_PTR(-EINVAL);
-	}
-
-	if (size == 1)
-		return dma_fence_get(in_fences->fences[0]->fence.ikf);
-
-	in_dma_fences = kcalloc(size, sizeof(*in_dma_fences), GFP_KERNEL);
-	if (!in_dma_fences)
-		return ERR_PTR(-ENOMEM);
-
-	for (i = 0; i < size; i++)
-		in_dma_fences[i] = dma_fence_get(in_fences->fences[i]->fence.ikf);
-
-	/* fence_array will take care of the life cycle of in_dma_fences.*/
-	fence_array = dma_fence_array_create(size, in_dma_fences, dma_fence_context_alloc(1),
-					     array_seq++, false);
-	if (!fence_array) {
-		kfree(in_dma_fences);
-		/* dma_fence_array_create only returns NULL on allocation failure. */
-		return ERR_PTR(-ENOMEM);
-	}
-
-	return &fence_array->base;
 }
 
 /*
@@ -145,6 +95,8 @@ static int gxp_ioctl_uci_command(struct gxp_client *client,
 
 	cmd_seq = gcip_mailbox_inc_seq_num(mcu->uci.mbx->mbx_impl.gcip_mbx, 1);
 
+	trace_gxp_uci_cmd_start(cmd_seq);
+
 	num_in_fences = get_num_fences(ibuf.in_fences);
 	if (num_in_fences < 0)
 		return num_in_fences;
@@ -163,7 +115,8 @@ static int gxp_ioctl_uci_command(struct gxp_client *client,
 		return PTR_ERR(out_fences);
 	}
 
-	polled_dma_fence = polled_dma_fence_get(in_fences);
+	/* @polled_dma_fence can be NULL if @in_fences are not DMA fences or there are no fences. */
+	polled_dma_fence = gcip_fence_array_merge_ikf(in_fences);
 	if (IS_ERR(polled_dma_fence)) {
 		ret = PTR_ERR(polled_dma_fence);
 		goto out;
@@ -183,7 +136,7 @@ static int gxp_ioctl_uci_command(struct gxp_client *client,
 
 err_put_fence:
 	/*
-	 * Put the reference count of the fence acqurired in polled_dma_fence_get.
+	 * Put the reference count of the fence acqurired in gcip_fence_array_merge_ikf.
 	 * If the fence is a dma_fence_array and the callback is failed to be added,
 	 * the whole object and the array it holds will be freed.
 	 * If it is a NULL pointer, it's still safe to call this function.
@@ -192,6 +145,9 @@ err_put_fence:
 out:
 	gcip_fence_array_put(out_fences);
 	gcip_fence_array_put(in_fences);
+
+	trace_gxp_uci_cmd_end(cmd_seq);
+
 	return ret;
 }
 

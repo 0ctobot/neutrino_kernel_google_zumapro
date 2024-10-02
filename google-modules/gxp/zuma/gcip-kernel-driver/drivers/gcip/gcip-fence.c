@@ -11,9 +11,9 @@
 
 #include <gcip/gcip-dma-fence.h>
 #include <gcip/gcip-fence.h>
-#include <gcip/iif/iif-fence.h>
-#include <gcip/iif/iif-signaler-submission-watier.h>
-#include <gcip/iif/iif.h>
+#include <iif/iif-fence.h>
+#include <iif/iif-signaler-submission-waiter.h>
+#include <iif/iif.h>
 
 static struct gcip_fence *gcip_fence_alloc(enum gcip_fence_type type)
 {
@@ -175,10 +175,10 @@ int gcip_fence_submit_signaler_locked(struct gcip_fence *fence)
 	return -EOPNOTSUPP;
 }
 
-int gcip_fence_submit_waiter(struct gcip_fence *fence)
+int gcip_fence_submit_waiter(struct gcip_fence *fence, enum iif_ip_type ip)
 {
 	if (fence->type == GCIP_INTER_IP_FENCE)
-		return iif_fence_submit_waiter(fence->fence.iif, IIF_IP_DSP);
+		return iif_fence_submit_waiter(fence->fence.iif, ip);
 	return -EOPNOTSUPP;
 }
 
@@ -196,10 +196,10 @@ void gcip_fence_signal(struct gcip_fence *fence, int errno)
 	}
 }
 
-void gcip_fence_waited(struct gcip_fence *fence)
+void gcip_fence_waited(struct gcip_fence *fence, enum iif_ip_type ip)
 {
 	if (fence->type == GCIP_INTER_IP_FENCE)
-		iif_fence_waited(fence->fence.iif);
+		iif_fence_waited(fence->fence.iif, ip);
 }
 
 /*

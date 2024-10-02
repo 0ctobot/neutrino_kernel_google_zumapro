@@ -38,16 +38,18 @@ struct gxp_fw_data_manager {
 	 * is provided to all VDs and all cores. This is the R/W section.
 	 */
 	struct gxp_system_descriptor_rw *sys_desc_rw;
+	/* The size of system config region. */
+	u32 sys_cfg_size;
 };
 
 /*
- * Here assumes sys_cfg contains gxp_system_descriptor_ro in the first page and
- * gxp_system_descriptor_rw in the second page.
+ * Here assumes sys_cfg contains gxp_system_descriptor_ro in the first half and
+ * gxp_system_descriptor_rw in the second half.
  */
 static void set_system_cfg_region(struct gxp_dev *gxp, void *sys_cfg)
 {
 	struct gxp_system_descriptor_ro *des_ro = sys_cfg;
-	struct gxp_system_descriptor_rw *des_rw = sys_cfg + PAGE_SIZE;
+	struct gxp_system_descriptor_rw *des_rw = sys_cfg + gxp->data_mgr->sys_cfg_size / 2;
 	struct gxp_core_telemetry_descriptor *descriptor =
 		&gxp->data_mgr->core_telemetry_desc;
 	struct telemetry_descriptor_ro *ro;
@@ -226,10 +228,11 @@ void *gxp_fw_data_system_cfg(struct gxp_dev *gxp)
 	struct gxp_mapped_resource res = gxp_fw_data_resource(gxp);
 
 	/* Use the end of the shared region for system cfg. */
-	return res.vaddr + res.size - GXP_FW_DATA_SYSCFG_SIZE;
+	return res.vaddr + res.size - gxp->data_mgr->sys_cfg_size;
 }
 
-void gxp_fw_data_populate_system_config(struct gxp_dev *gxp)
+void gxp_fw_data_populate_system_config(struct gxp_dev *gxp, u32 sys_cfg_size)
 {
+	gxp->data_mgr->sys_cfg_size = sys_cfg_size;
 	set_system_cfg_region(gxp, gxp_fw_data_system_cfg(gxp));
 }

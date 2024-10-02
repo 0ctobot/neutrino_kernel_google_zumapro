@@ -60,7 +60,7 @@
 #define GCIP_USAGE_STATS_METRIC_SIZE_V1 20
 
 /* Max number of frequencies to support. */
-#define GCIP_USAGE_STATS_MAX_DVFS_FREQ_NUM 10
+#define GCIP_USAGE_STATS_MAX_DVFS_FREQ_NUM 25
 
 struct gcip_usage_stats_attr;
 
@@ -457,7 +457,7 @@ struct gcip_usage_stats_ops {
 	 * @idx will not exceed the number of default DVFS frequencies which is returned by the
 	 * `get_default_dvfs_freqs_num` operator.
 	 */
-	int (*get_default_dvfs_freq)(int idx, void *data);
+	unsigned int (*get_default_dvfs_freq)(int idx, void *data);
 };
 
 /* Structure manages the information of usage stats and device attributes. */

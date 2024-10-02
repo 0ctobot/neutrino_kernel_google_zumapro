@@ -141,6 +141,7 @@ void gxp_client_destroy(struct gxp_client *client)
 	down_write(&client->semaphore);
 
 	if (client->vd && client->vd->state != GXP_VD_OFF) {
+		gxp_vd_check_and_wait_for_debug_dump(client->vd);
 		down_write(&gxp->vd_semaphore);
 		gxp_vd_stop(client->vd);
 		up_write(&gxp->vd_semaphore);
@@ -412,6 +413,8 @@ void gxp_client_release_vd_wakelock(struct gxp_client *client)
 	 */
 	if (client->vd->state == GXP_VD_UNAVAILABLE)
 		return;
+
+	gxp_vd_check_and_wait_for_debug_dump(client->vd);
 
 	down_write(&gxp->vd_semaphore);
 	gxp_vd_suspend(client->vd);

@@ -2,7 +2,7 @@
 /*
  * Trace events for gxp
  *
- * Copyright (c) 2023 Google LLC
+ * Copyright (c) 2023-2024 Google LLC
  */
 
 #undef TRACE_SYSTEM
@@ -214,6 +214,54 @@ TRACE_EVENT(gxp_vd_release_end,
 	    TP_fast_assign(__entry->vdid = vdid;),
 
 	    TP_printk("vdid = %d", __entry->vdid));
+
+TRACE_EVENT(gxp_uci_cmd_start,
+
+	    TP_PROTO(u64 seq),
+
+	    TP_ARGS(seq),
+
+	    TP_STRUCT__entry(__field(u64, seq)),
+
+	    TP_fast_assign(__entry->seq = seq;),
+
+	    TP_printk("seq = %llu", __entry->seq));
+
+TRACE_EVENT(gxp_uci_cmd_end,
+
+	    TP_PROTO(u64 seq),
+
+	    TP_ARGS(seq),
+
+	    TP_STRUCT__entry(__field(u64, seq)),
+
+	    TP_fast_assign(__entry->seq = seq;),
+
+	    TP_printk("seq = %llu", __entry->seq));
+
+TRACE_EVENT(gxp_uci_rsp_start,
+
+	    TP_PROTO(int irq),
+
+	    TP_ARGS(irq),
+
+	    TP_STRUCT__entry(__field(int, irq)),
+
+	    TP_fast_assign(__entry->irq = irq;),
+
+	    TP_printk("irq = %d", __entry->irq));
+
+TRACE_EVENT(gxp_uci_rsp_end,
+
+	    TP_PROTO(u64 seq),
+
+	    TP_ARGS(seq),
+
+	    TP_STRUCT__entry(__field(u64, seq)),
+
+	    TP_fast_assign(__entry->seq = seq;),
+
+	    TP_printk("seq = %llu", __entry->seq));
 
 #endif /* _TRACE_GXP_H */
 

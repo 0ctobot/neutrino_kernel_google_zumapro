@@ -10,6 +10,7 @@
 #include <linux/dma-buf.h>
 #include <linux/dma-direction.h>
 #include <linux/dma-mapping.h>
+#include <linux/dma-resv.h>
 #include <linux/genalloc.h>
 #include <linux/iova.h>
 #include <linux/limits.h>
@@ -38,6 +39,7 @@
 #define GCIP_MAP_MASK_DMA_COHERENT GCIP_MAP_MASK(DMA_COHERENT)
 #define GCIP_MAP_MASK_DMA_ATTR GCIP_MAP_MASK(DMA_ATTR)
 #define GCIP_MAP_MASK_RESTRICT_IOVA GCIP_MAP_MASK(RESTRICT_IOVA)
+#define GCIP_MAP_MASK_MMIO GCIP_MAP_MASK(MMIO)
 
 #define GCIP_MAP_FLAGS_GET_VALUE(ATTR, flags) \
 	(((flags) & GCIP_MAP_MASK(ATTR)) >> (GCIP_MAP_FLAGS_##ATTR##_OFFSET))
@@ -45,6 +47,7 @@
 #define GCIP_MAP_FLAGS_GET_DMA_COHERENT(flags) GCIP_MAP_FLAGS_GET_VALUE(DMA_COHERENT, flags)
 #define GCIP_MAP_FLAGS_GET_DMA_ATTR(flags) GCIP_MAP_FLAGS_GET_VALUE(DMA_ATTR, flags)
 #define GCIP_MAP_FLAGS_GET_RESTRICT_IOVA(flags) GCIP_MAP_FLAGS_GET_VALUE(RESTRICT_IOVA, flags)
+#define GCIP_MAP_FLAGS_GET_MMIO(flags) GCIP_MAP_FLAGS_GET_VALUE(MMIO, flags)
 
 /* Restricted IOVA ceiling is for components with 32-bit DMA windows */
 #define GCIP_RESTRICT_IOVA_CEILING UINT_MAX
@@ -92,13 +95,6 @@ static int dma_info_to_prot(enum dma_data_direction dir, bool coherent, unsigned
 	default:
 		return 0;
 	}
-}
-
-static inline size_t gcip_iommu_domain_granule(struct gcip_iommu_domain *domain)
-{
-	if (unlikely(domain->default_domain))
-		return PAGE_SIZE;
-	return domain->domain_pool->granule;
 }
 
 /*
@@ -497,8 +493,16 @@ static void gcip_iommu_mapping_unmap_dma_buf(struct gcip_iommu_mapping *mapping)
 				  mapping->gcip_map_flags, false);
 	}
 
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(6, 2, 0)
+	dma_resv_lock(dmabuf_mapping->dma_buf->resv, NULL);
 	dma_buf_unmap_attachment(dmabuf_mapping->dma_buf_attachment, dmabuf_mapping->sgt_default,
 				 mapping->dir);
+	dma_resv_unlock(dmabuf_mapping->dma_buf->resv);
+#else
+	dma_buf_unmap_attachment(dmabuf_mapping->dma_buf_attachment, dmabuf_mapping->sgt_default,
+				 mapping->dir);
+#endif
+
 	dma_buf_detach(dmabuf_mapping->dma_buf, dmabuf_mapping->dma_buf_attachment);
 	dma_buf_put(dmabuf_mapping->dma_buf);
 	kfree(dmabuf_mapping);
@@ -1293,7 +1297,13 @@ struct gcip_iommu_mapping *gcip_iommu_domain_map_dma_buf_to_iova(struct gcip_iom
 #endif
 
 	/* Map the attachment into the default domain. */
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(6, 2, 0)
+	dma_resv_lock(dmabuf->resv, NULL);
 	sgt = dma_buf_map_attachment(attachment, dir);
+	dma_resv_unlock(dmabuf->resv);
+#else
+	sgt = dma_buf_map_attachment(attachment, dir);
+#endif
 	if (IS_ERR(sgt)) {
 		ret = PTR_ERR(sgt);
 		dev_err(dev, "Failed to get sgt from attachment (ret=%d, name=%s, size=%lu)\n", ret,
@@ -1311,7 +1321,13 @@ struct gcip_iommu_mapping *gcip_iommu_domain_map_dma_buf_to_iova(struct gcip_iom
 	return mapping;
 
 err_map_dma_buf_sgt:
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(6, 2, 0)
+	dma_resv_lock(dmabuf->resv, NULL);
 	dma_buf_unmap_attachment(attachment, sgt, dir);
+	dma_resv_unlock(dmabuf->resv);
+#else
+	dma_buf_unmap_attachment(attachment, sgt, dir);
+#endif
 err_map_attachment:
 	dma_buf_detach(dmabuf, attachment);
 	return ERR_PTR(ret);
@@ -1363,8 +1379,12 @@ int gcip_iommu_map(struct gcip_iommu_domain *domain, dma_addr_t iova, phys_addr_
 {
 	enum dma_data_direction dir = GCIP_MAP_FLAGS_GET_DMA_DIRECTION(gcip_map_flags);
 	bool coherent = GCIP_MAP_FLAGS_GET_DMA_COHERENT(gcip_map_flags);
+	bool mmio = GCIP_MAP_FLAGS_GET_MMIO(gcip_map_flags);
 	unsigned long attrs = GCIP_MAP_FLAGS_GET_DMA_ATTR(gcip_map_flags);
 	int prot = dma_info_to_prot(dir, coherent, attrs);
+
+	if (mmio)
+		prot |= IOMMU_MMIO;
 
 #if GCIP_IOMMU_MAP_HAS_GFP
 	return iommu_map(domain->domain, iova, paddr, size, prot, GFP_KERNEL);

@@ -11,9 +11,9 @@
 #include <linux/dma-fence.h>
 #include <linux/kref.h>
 
-#include <gcip/iif/iif-fence.h>
-#include <gcip/iif/iif-manager.h>
-#include <gcip/iif/iif.h>
+#include <iif/iif-fence.h>
+#include <iif/iif-manager.h>
+#include <iif/iif.h>
 
 #define GCIP_FENCE_REMAINING_SIGNALERS_NO_REGISTER_EVENTFD (~0u)
 
@@ -90,7 +90,7 @@ int gcip_fence_submit_signaler(struct gcip_fence *fence);
 int gcip_fence_submit_signaler_locked(struct gcip_fence *fence);
 
 /*
- * Submits a waiter.
+ * Submits a waiter of @ip.
  * Note that the waiter submission will not be done when not all signalers have been submitted.
  *
  * This function is only meaningful when the fence type is GCIP_INTER_IP_FENCE and can be called in
@@ -100,7 +100,7 @@ int gcip_fence_submit_signaler_locked(struct gcip_fence *fence);
  * has been succeeded when the function returns 0.) Otherwise, returns a negative errno if it fails
  * with other reasons.
  */
-int gcip_fence_submit_waiter(struct gcip_fence *fence);
+int gcip_fence_submit_waiter(struct gcip_fence *fence, enum iif_ip_type ip);
 
 /*
  * Signals @fence. If all signalers have signaled the fence, it will notify polling FDs.
@@ -110,11 +110,11 @@ int gcip_fence_submit_waiter(struct gcip_fence *fence);
 void gcip_fence_signal(struct gcip_fence *fence, int errno);
 
 /*
- * Notifies @fence that a command which waited the fence has finished their work.
+ * Notifies @fence that a command of @ip which waited the fence has finished their work.
  *
  * This function is only meaningful when the fence type is GCIP_INTER_IP_FENCE.
  */
-void gcip_fence_waited(struct gcip_fence *fence);
+void gcip_fence_waited(struct gcip_fence *fence, enum iif_ip_type ip);
 
 /*
  * Registers a callback which will be called when all signalers are submitted for @fence and

@@ -270,8 +270,7 @@ err_cmd_queue:
 	return -ENOMEM;
 }
 
-static void gxp_kci_release_resources(struct gxp_mailbox *mailbox,
-				      struct gxp_virtual_device *vd,
+static void gxp_kci_release_resources(struct gxp_mailbox *mailbox, struct gxp_virtual_device *vd,
 				      uint virt_core)
 {
 	struct gxp_kci *gkci = mailbox->data;
@@ -376,11 +375,7 @@ int gxp_kci_reinit(struct gxp_kci *gkci)
 {
 	struct gxp_mailbox *mailbox = gkci->mbx;
 
-	gxp_mailbox_write_descriptor(mailbox, mailbox->descriptor_buf.dsp_addr);
-	gxp_mailbox_reset(mailbox);
-	gxp_mailbox_enable_interrupt(mailbox);
-	gxp_mailbox_write_status(mailbox, 1);
-
+	gxp_mailbox_reinit(mailbox);
 	return 0;
 }
 
@@ -677,4 +672,27 @@ int gxp_kci_fault_injection(struct gcip_fault_inject *injection)
 {
 	return gxp_kci_send_cmd_with_data(injection->kci_data, GCIP_KCI_CODE_FAULT_INJECTION,
 					  injection->opaque, sizeof(injection->opaque));
+}
+
+int gxp_kci_set_freq_limits(struct gxp_kci *gkci, u32 min_freq, u32 max_freq)
+{
+	struct gcip_kci_command_element cmd = {
+		.code = GCIP_KCI_CODE_SET_FREQ_LIMITS,
+		.dma = {
+			.size = min_freq,
+			.flags = max_freq,
+		},
+	};
+	return gxp_kci_send_cmd(gkci->mbx, &cmd);
+}
+
+int gxp_kci_thermal_control(struct gxp_kci *gkci, bool enable)
+{
+	struct gcip_kci_command_element cmd = {
+		.code = GCIP_KCI_CODE_THERMAL_CONTROL,
+		.dma = {
+			.flags = (u32)enable,
+		},
+	};
+	return gxp_kci_send_cmd(gkci->mbx, &cmd);
 }

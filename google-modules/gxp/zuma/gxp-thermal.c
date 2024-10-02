@@ -33,7 +33,7 @@ static int gxp_thermal_set_rate(void *data, unsigned long rate)
 	struct gxp_dev *gxp = data;
 	int ret = 0;
 
-	dev_warn(gxp->dev, "Received thermal throttling requests %lu", rate);
+	dev_warn(gxp->dev, "Received thermal throttling requests %lu.\n", rate);
 	if (!gxp_is_direct_mode(gxp)) {
 #if GXP_HAS_MCU
 		struct gxp_mcu *mcu = gxp_mcu_of(gxp);
@@ -58,7 +58,19 @@ static int gxp_thermal_set_rate(void *data, unsigned long rate)
 
 static int gxp_thermal_control(void *data, bool enable)
 {
-	return -EOPNOTSUPP;
+	int ret = -EOPNOTSUPP;
+#if GXP_HAS_MCU
+	struct gxp_dev *gxp = data;
+	struct gxp_mcu *mcu = gxp_mcu_of(gxp);
+
+	dev_warn(gxp->dev, "Received request to %s thermal throttling.\n",
+		 enable ? "enable" : "disable");
+	ret = gxp_kci_thermal_control(&mcu->kci, enable);
+	if (ret)
+		dev_err(gxp->dev, "Error on %s thermal throttling: %d.\n",
+			enable ? "enabling" : "disabling", ret);
+#endif /* GXP_HAS_MCU */
+	return ret;
 }
 
 int gxp_thermal_init(struct gxp_dev *gxp)

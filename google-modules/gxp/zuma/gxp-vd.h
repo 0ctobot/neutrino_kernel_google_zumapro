@@ -155,6 +155,16 @@ struct gxp_virtual_device {
 	bool mcu_crashed;
 	/* The manager of IOMMU reserve regions. */
 	struct gcip_iommu_reserve_manager *iommu_reserve_mgr;
+	/*
+	 * Bitmap of cores for which KD has processed the core dump. This flag is used only
+	 * in direct mode.
+	 */
+	atomic_t core_dump_generated_list;
+	/*
+	 * Wait queue to wait till the debug dump processing finishes for all the cores for
+	 * the current VD before powering them down. This flag is used only in direct mode.
+	 */
+	wait_queue_head_t finished_dump_processing_waitq;
 };
 
 /*
@@ -229,6 +239,23 @@ int gxp_vd_run(struct gxp_virtual_device *vd);
  * This function is only meaningful in direct mode. On MCU mode it returns directly.
  */
 void gxp_vd_stop(struct gxp_virtual_device *vd);
+
+/**
+ * gxp_vd_check_and_wait_for_debug_dump() - Checks if any of the cores for the given vd has
+ *                                          generated the debug dump or has been requested to
+ *                                          generate the forced debug dump. If yes then waits
+ *                                          till all the debug dumps are processed.
+ * @vd: The virtual device to be checked for the crash.
+ *
+ * The caller should never lock the gxp->vd_semaphore before calling this function. The logic
+ * inside this function waits till the debug dumps for all the cores for the given VD are
+ * processed. Processing of debug dump logic requires acquiring of gxp->vd_semaphore which will
+ * end up in deadlock if this function is called after locking the gxp->vd_semaphore.
+ *
+ * This function is only meaningful in direct mode. On MCU mode it returns directly.
+ */
+
+void gxp_vd_check_and_wait_for_debug_dump(struct gxp_virtual_device *vd);
 
 /*
  * Returns the physical core ID for the specified virtual_core belonging to
@@ -493,8 +520,14 @@ void gxp_vd_release_vmbox(struct gxp_dev *gxp, struct gxp_virtual_device *vd);
 void gxp_vd_unlink_offload_vmbox(struct gxp_dev *gxp, struct gxp_virtual_device *vd,
 				 u32 offload_client_id, u8 offload_chip_type);
 #else /* !GXP_HAS_MCU */
-#define gxp_vd_release_vmbox(...)
-#define gxp_vd_unlink_offload_vmbox(...)
+static inline void gxp_vd_release_vmbox(struct gxp_dev *gxp, struct gxp_virtual_device *vd)
+{
+}
+
+static inline void gxp_vd_unlink_offload_vmbox(struct gxp_dev *gxp, struct gxp_virtual_device *vd,
+					       u32 offload_client_id, u8 offload_chip_type)
+{
+}
 #endif /* GXP_HAS_MCU */
 
 /*

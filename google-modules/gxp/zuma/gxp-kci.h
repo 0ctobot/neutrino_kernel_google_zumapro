@@ -251,4 +251,24 @@ int gxp_kci_set_device_properties(struct gxp_kci *gkci,
  */
 int gxp_kci_fault_injection(struct gcip_fault_inject *injection);
 
+/**
+ * gxp_kci_set_freq_limits() - Sends the frequency limits to be honoured to the firmware.
+ * @gkci: Reference to the GXP KCI mailbox struct.
+ * @min_freq: minimum frequency limit to be set.
+ * @max_freq: maximum frequency limit to be set.
+ *
+ * Return: 0 if the command is sent successfully.
+ */
+int gxp_kci_set_freq_limits(struct gxp_kci *gkci, u32 min_freq, u32 max_freq);
+
+/**
+ * gxp_kci_thermal_control() - Sends KCI command to enable/disable thermal throttling.
+ * @gkci: Reference to the GXP KCI mailbox struct.
+ * @enable: bool to indicate whether to enable or disable thermal throttling.
+ *
+ * Return: 0 if the command is sent successfully.
+ */
+
+int gxp_kci_thermal_control(struct gxp_kci *gkci, bool enable);
+
 #endif /* __GXP_KCI_H__ */

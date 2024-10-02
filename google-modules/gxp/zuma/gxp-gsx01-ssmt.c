@@ -2,7 +2,7 @@
 /*
  * GXP SSMT driver.
  *
- * Copyright (C) 2022 Google LLC
+ * Copyright (C) 2022-2024 Google LLC
  */
 
 #include <linux/platform_device.h>

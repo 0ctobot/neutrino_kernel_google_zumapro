@@ -21,7 +21,6 @@
 #define TEST_TRIGGER_TIMEOUT_RACE(...)
 #endif
 
-#define GET_CMD_QUEUE_HEAD() mailbox->ops->get_cmd_queue_head(mailbox)
 #define GET_CMD_QUEUE_TAIL() mailbox->ops->get_cmd_queue_tail(mailbox)
 #define INC_CMD_QUEUE_TAIL(inc) mailbox->ops->inc_cmd_queue_tail(mailbox, inc)
 #define ACQUIRE_CMD_QUEUE_LOCK(try, atomic)                                                        \
@@ -162,33 +161,16 @@ static int gcip_mailbox_enqueue_cmd(struct gcip_mailbox *mailbox, void *cmd,
 				    gcip_mailbox_cmd_flags_t flags)
 {
 	int ret = 0;
-	u32 tail;
 	bool atomic = false;
 
 	ACQUIRE_CMD_QUEUE_LOCK(false, &atomic);
 
 	if (!(flags & GCIP_MAILBOX_CMD_FLAGS_SKIP_ASSIGN_SEQ))
 		SET_CMD_ELEM_SEQ(cmd, mailbox->cur_seq);
-	/*
-	 * The lock ensures mailbox cmd_queue_tail cannot be changed by other processes (this
-	 * method should be the only one to modify the value of tail), therefore we can remember
-	 * its value here and use it in the condition of wait_event() call.
-	 */
-	tail = GET_CMD_QUEUE_TAIL();
-
-	if (mailbox->ops->wait_for_cmd_queue_not_full) {
-		/* Wait until the cmd queue has a space for putting cmd. */
-		ret = mailbox->ops->wait_for_cmd_queue_not_full(mailbox);
-		if (ret)
-			goto out;
-	} else if (GET_CMD_QUEUE_HEAD() == (tail ^ mailbox->queue_wrap_bit)) {
-		/*
-		 * Default logic of checking the fullness of cmd_queue. If the cmd_queue is full,
-		 * it's up to the caller to retry.
-		 */
-		ret = -EAGAIN;
+	/* Wait until the cmd queue has a space for putting cmd. */
+	ret = mailbox->ops->wait_for_cmd_queue_not_full(mailbox);
+	if (ret)
 		goto out;
-	}
 
 	if (async_resp->resp) {
 		/* Adds @resp to the wait_list only if the cmd can be pushed successfully. */
@@ -198,9 +180,11 @@ static int gcip_mailbox_enqueue_cmd(struct gcip_mailbox *mailbox, void *cmd,
 		if (ret)
 			goto out;
 	}
+
 	/* Size of cmd_queue is a multiple of mailbox->cmd_elem_size. */
-	memcpy(mailbox->cmd_queue + mailbox->cmd_elem_size *
-					    CIRC_QUEUE_REAL_INDEX(tail, mailbox->queue_wrap_bit),
+	memcpy(mailbox->cmd_queue +
+		       mailbox->cmd_elem_size *
+			       CIRC_QUEUE_REAL_INDEX(GET_CMD_QUEUE_TAIL(), mailbox->queue_wrap_bit),
 	       cmd, mailbox->cmd_elem_size);
 	INC_CMD_QUEUE_TAIL(1);
 	if (mailbox->ops->after_enqueue_cmd) {
@@ -492,9 +476,9 @@ static int gcip_mailbox_set_ops(struct gcip_mailbox *mailbox, const struct gcip_
 		return 0;
 	}
 
-	if (!ops->get_cmd_queue_head || !ops->get_cmd_queue_tail || !ops->inc_cmd_queue_tail ||
-	    !ops->acquire_cmd_queue_lock || !ops->release_cmd_queue_lock ||
-	    !ops->get_cmd_elem_seq || !ops->set_cmd_elem_seq || !ops->get_cmd_elem_code) {
+	if (!ops->get_cmd_queue_tail || !ops->inc_cmd_queue_tail || !ops->acquire_cmd_queue_lock ||
+	    !ops->release_cmd_queue_lock || !ops->get_cmd_elem_seq || !ops->set_cmd_elem_seq ||
+	    !ops->get_cmd_elem_code || !ops->wait_for_cmd_queue_not_full) {
 		dev_err(mailbox->dev, "Incomplete mailbox CMD queue ops.\n");
 		return -EINVAL;
 	}

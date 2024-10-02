@@ -23,9 +23,9 @@
 #include <linux/rwsem.h>
 #include <linux/spinlock.h>
 
-#include <gcip/iif/iif-manager.h>
 #include <gcip/gcip-resource-accessor.h>
 #include <gcip/gcip-thermal.h>
+#include <iif/iif-manager.h>
 
 #include "gxp-config.h"
 #include "gxp.h"
@@ -165,6 +165,7 @@ struct gxp_dev {
 
 	/* To manage IIF fences. */
 	struct iif_manager *iif_mgr;
+	struct device *iif_dev;
 
 	/* callbacks for chip-dependent implementations */
 
@@ -303,11 +304,8 @@ static inline int gxp_acquire_rmem_resource(struct gxp_dev *gxp,
 	struct device_node *np;
 
 	np = of_parse_phandle(gxp->dev->of_node, phandle, 0);
-	if (IS_ERR_OR_NULL(np)) {
-		dev_err(gxp->dev, "Failed to find \"%s\" reserved memory\n",
-			phandle);
+	if (IS_ERR_OR_NULL(np))
 		return -ENODEV;
-	}
 
 	ret = of_address_to_resource(np, 0, r);
 	of_node_put(np);

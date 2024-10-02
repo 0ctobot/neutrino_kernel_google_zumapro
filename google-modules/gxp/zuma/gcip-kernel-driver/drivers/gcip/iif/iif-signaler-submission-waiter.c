@@ -6,13 +6,14 @@
  */
 
 #include <linux/eventfd.h>
+#include <linux/export.h>
 #include <linux/kref.h>
 #include <linux/list.h>
 #include <linux/slab.h>
 #include <linux/spinlock.h>
 
-#include <gcip/iif/iif-fence.h>
-#include <gcip/iif/iif-signaler-submission-watier.h>
+#include <iif/iif-fence.h>
+#include <iif/iif-signaler-submission-waiter.h>
 
 static struct iif_signaler_submission_waiter *
 iif_signaler_submission_waiter_alloc(unsigned int eventfd, int pending_fences)
@@ -73,7 +74,7 @@ static void all_signaler_submitted(struct iif_fence *fence,
 
 	/*
 	 * The `iif_all_signaler_submission_waiter_cancel` function will delete @cb from
-	 * @watier->cb_list, decrement the refcount of @waiter and release @cb instead.
+	 * @waiter->cb_list, decrement the refcount of @waiter and release @cb instead.
 	 */
 	if (waiter->cancel) {
 		spin_unlock_irqrestore(&waiter->lock, flags);

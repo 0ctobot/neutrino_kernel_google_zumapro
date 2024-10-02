@@ -62,6 +62,12 @@
 #define GCIP_MAP_FLAGS_RESTRICT_IOVA_TO_FLAGS(restrict) \
 	((u64)(restrict) << GCIP_MAP_FLAGS_RESTRICT_IOVA_OFFSET)
 
+#define GCIP_MAP_FLAGS_MMIO_OFFSET \
+	(GCIP_MAP_FLAGS_RESTRICT_IOVA_OFFSET + GCIP_MAP_FLAGS_RESTRICT_IOVA_BIT_SIZE)
+#define GCIP_MAP_FLAGS_MMIO_BIT_SIZE 1
+#define GCIP_MAP_FLAGS_MMIO_TO_FLAGS(mmio) \
+	((u64)(mmio) << GCIP_MAP_FLAGS_RESTRICT_IOVA_OFFSET)
+
 /* Helper macros to easily create the mapping direction flags. */
 #define GCIP_MAP_FLAGS_DMA_RW GCIP_MAP_FLAGS_DMA_DIRECTION_TO_FLAGS(DMA_BIDIRECTIONAL)
 #define GCIP_MAP_FLAGS_DMA_RO GCIP_MAP_FLAGS_DMA_DIRECTION_TO_FLAGS(DMA_TO_DEVICE)
@@ -80,7 +86,9 @@
  *               (See [REDACTED]
  *   [13:13] - RESTRICT_IOVA:
  *               Restrict the IOVA assignment to 32 bit address window.
- *   [63:14] - RESERVED
+ *   [14:14] - MMIO:
+ *               Mapping is for device memory, use IOMMU_MMIO flag.
+ *   [63:15] - RESERVED
  *               Set RESERVED bits to 0 to ensure backwards compatibility.
  *
  * One can use gcip_iommu_encode_gcip_map_flags or `GCIP_MAP_FLAGS_DMA_*_TO_FLAGS` macros to
@@ -537,6 +545,13 @@ static inline void gcip_iommu_mapping_set_ops(struct gcip_iommu_mapping *mapping
 static inline void gcip_iommu_mapping_set_data(struct gcip_iommu_mapping *mapping, void *data)
 {
 	mapping->data = data;
+}
+
+static inline size_t gcip_iommu_domain_granule(struct gcip_iommu_domain *domain)
+{
+	if (unlikely(domain->default_domain))
+		return PAGE_SIZE;
+	return domain->domain_pool->granule;
 }
 
 /**

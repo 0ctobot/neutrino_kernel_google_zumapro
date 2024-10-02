@@ -2,7 +2,7 @@
 /*
  * Implementation of DCI (Direct Command Interface) using mailbox.
  *
- * Copyright (C) 2022 Google LLC
+ * Copyright (C) 2022-2024 Google LLC
  */
 
 #include <linux/kthread.h>
@@ -11,6 +11,7 @@
 #include <uapi/linux/sched/types.h>
 
 #include "gxp-dci.h"
+#include "gxp-debug-dump.h"
 #include "gxp-dma.h"
 #include "gxp-mailbox-driver.h"
 #include "gxp-pm.h"
@@ -281,13 +282,14 @@ gxp_dci_handle_awaiter_arrived(struct gcip_mailbox *mailbox,
 	spin_unlock_irqrestore(async_resp->dest_queue_lock, flags);
 }
 
-static void
-gxp_dci_handle_awaiter_timedout(struct gcip_mailbox *mailbox,
-				struct gcip_mailbox_resp_awaiter *awaiter)
+static void gxp_dci_handle_awaiter_timedout(struct gcip_mailbox *mailbox,
+					    struct gcip_mailbox_resp_awaiter *awaiter)
 {
 	struct gxp_mailbox *mbx = mailbox->data;
 	struct gxp_dci_async_response *async_resp = awaiter->data;
 	struct gxp_dci_response *resp = &async_resp->resp;
+	struct gxp_dev *gxp = mbx->gxp;
+	struct gxp_virtual_device *vd;
 	unsigned long flags;
 
 	/*
@@ -304,8 +306,21 @@ gxp_dci_handle_awaiter_timedout(struct gcip_mailbox *mailbox,
 		list_add_tail(&async_resp->list_entry, async_resp->dest_queue);
 		spin_unlock_irqrestore(async_resp->dest_queue_lock, flags);
 
-		gxp_pm_update_requested_power_states(
-			mbx->gxp, async_resp->requested_states, off_states);
+		/* Get hold of the virtual device. */
+		down_read(&gxp->vd_semaphore);
+		if (gxp->core_to_vd[mbx->core_id]) {
+			vd = gxp->core_to_vd[mbx->core_id];
+			/*
+			 * Response timeout most probably would happen because of core stall. Check
+			 * if forced debug dump can be requested to the participating cores for the
+			 * current vd.
+			 */
+			gxp_debug_dump_send_forced_debug_dump_request(gxp, vd);
+		}
+		up_read(&gxp->vd_semaphore);
+
+		gxp_pm_update_requested_power_states(mbx->gxp, async_resp->requested_states,
+						     off_states);
 
 		if (async_resp->eventfd) {
 			gxp_eventfd_signal(async_resp->eventfd);
@@ -337,7 +352,6 @@ static void gxp_dci_release_awaiter_data(void *data)
 }
 
 static const struct gcip_mailbox_ops gxp_dci_gcip_mbx_ops = {
-	.get_cmd_queue_head = gxp_mailbox_gcip_ops_get_cmd_queue_head,
 	.get_cmd_queue_tail = gxp_mailbox_gcip_ops_get_cmd_queue_tail,
 	.inc_cmd_queue_tail = gxp_mailbox_gcip_ops_inc_cmd_queue_tail,
 	.acquire_cmd_queue_lock = gxp_mailbox_gcip_ops_acquire_cmd_queue_lock,
@@ -460,25 +474,31 @@ struct gxp_mailbox *gxp_dci_alloc(struct gxp_mailbox_manager *mgr,
 		.cmd_elem_size = sizeof(struct gxp_dci_command),
 		.resp_elem_size = sizeof(struct gxp_dci_response),
 	};
+	struct gxp_mailbox *mbx;
 
 	dci = kzalloc(sizeof(*dci), GFP_KERNEL);
 	if (!dci)
 		return ERR_PTR(-ENOMEM);
 	mbx_args.data = dci;
 
-	dci->mbx = gxp_mailbox_alloc(mgr, vd, virt_core, core_id, &mbx_args);
-	if (IS_ERR(dci->mbx))
+	mbx = gxp_mailbox_alloc(mgr, vd, virt_core, core_id, &mbx_args);
+	if (IS_ERR(mbx)) {
 		kfree(dci);
-	else
-		gxp_mailbox_generate_device_interrupt(dci->mbx, BIT(0));
+		return mbx;
+	}
+	dci->mbx = mbx;
+	gxp_mailbox_reinit(dci->mbx);
+	gxp_mailbox_generate_device_interrupt(dci->mbx, BIT(0));
 
-	return dci->mbx;
+	return mbx;
 }
 
 void gxp_dci_release(struct gxp_mailbox_manager *mgr,
 		     struct gxp_virtual_device *vd, uint virt_core,
 		     struct gxp_mailbox *mbx)
 {
+	/* Frees dci. */
+	kfree(mbx->data);
 	gxp_mailbox_release(mgr, vd, virt_core, mbx);
 }
 

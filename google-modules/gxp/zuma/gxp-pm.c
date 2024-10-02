@@ -27,11 +27,20 @@
 #include "gxp-pm.h"
 #include "mobile-soc.h"
 
+#if GXP_HAS_MCU
+#include <gcip/gcip-kci.h>
+
+#include "gxp-kci.h"
+#include "gxp-mcu.h"
+#endif /* GXP_HAS_MCU */
+
 /* Don't attempt to touch the device when @busy_count equals this value. */
 #define BUSY_COUNT_OFF (~0ull)
 
 #define DEBUGFS_BLK_POWERSTATE "blk_powerstate"
 #define DEBUGFS_WAKELOCK "wakelock"
+#define DEBUGFS_MIN_FREQ "min_freq"
+#define DEBUGFS_MAX_FREQ "max_freq"
 
 #define SHUTDOWN_DELAY_US_MIN 200
 #define SHUTDOWN_DELAY_US_MAX 400
@@ -403,8 +412,7 @@ static int gxp_pm_req_state_locked(struct gxp_dev *gxp,
 		return -EINVAL;
 	}
 	if (gxp->power_mgr->curr_state == AUR_OFF) {
-		dev_err(gxp->dev,
-			"Cannot request power state when BLK is off\n");
+		dev_warn(gxp->dev, "Cannot request power state when BLK is off\n");
 		return -EBUSY;
 	}
 	if (state == AUR_OFF)
@@ -731,35 +739,117 @@ out:
 	return ret;
 }
 
-static int gxp_pm_power_up(void *data)
+#if GXP_HAS_MCU
+static int gxp_pm_update_freq_limits_locked(struct gxp_dev *gxp)
 {
-	struct gxp_dev *gxp = data;
-	int ret = gxp_pm_blk_on(gxp);
+	struct gxp_power_manager *mgr = gxp->power_mgr;
+	struct gxp_kci *kci = &(gxp_mcu_of(gxp)->kci);
+	int ret;
 
+	lockdep_assert_held(&gxp->power_mgr->freq_limits_lock);
+
+	ret = gxp_kci_set_freq_limits(kci, mgr->min_freq_limit, mgr->max_freq_limit);
 	if (ret) {
-		dev_err(gxp->dev, "Failed to power on BLK_AUR (ret=%d)\n", ret);
-		return ret;
-	}
-
-	if (gxp->pm_after_blk_on) {
-		ret = gxp->pm_after_blk_on(gxp);
-		if (ret) {
-			gxp_pm_blk_off(gxp);
-			return ret;
+		dev_warn(gxp->dev, "Set frequency limit request failed with error %d.", ret);
+		if (ret == GCIP_KCI_ERROR_INVALID_ARGUMENT) {
+			dev_warn(gxp->dev,
+				 "Invalid values within debugfs frequency limits: [%u, %u]\n",
+				 mgr->min_freq_limit, mgr->max_freq_limit);
+			ret = -EINVAL;
+		} else {
+			ret = -EIO;
 		}
+		mgr->min_freq_limit = 0;
+		mgr->max_freq_limit = 0;
+	} else {
+		dev_info(gxp->dev, "BLK frequency to remain in [%u, %u]kHz frequency limit.\n",
+			 mgr->min_freq_limit, mgr->max_freq_limit);
 	}
 
+	return ret;
+}
+
+static int gxp_pm_set_freq_limit(struct gxp_dev *gxp, u32 val, u32 *limit_to_set)
+{
+	int ret = 0;
+
+	if (val == *limit_to_set)
+		return ret;
+	/*
+	 * Need to hold pm lock to prevent races with power up/down when checking block state and
+	 * sending the KCI command to update limits.
+	 *
+	 * Since power_up will also acquire freq_limits_lock to send initial limits, pm lock must be
+	 * held first to avoid lock inversion.
+	 */
+	gcip_pm_lock(gxp->power_mgr->pm);
+	mutex_lock(&gxp->power_mgr->freq_limits_lock);
+
+	*limit_to_set = val;
+	if (!gxp_pm_is_blk_down(gxp))
+		ret = gxp_pm_update_freq_limits_locked(gxp);
+
+	mutex_unlock(&gxp->power_mgr->freq_limits_lock);
+	gcip_pm_unlock(gxp->power_mgr->pm);
+	return ret;
+}
+
+static int debugfs_min_freq_limit_get(void *data, u64 *val)
+{
+	struct gxp_dev *gxp = (struct gxp_dev *)data;
+	struct gxp_power_manager *mgr = gxp->power_mgr;
+
+	mutex_lock(&mgr->freq_limits_lock);
+	*val = mgr->min_freq_limit;
+	mutex_unlock(&mgr->freq_limits_lock);
 	return 0;
 }
 
-static int gxp_pm_power_down(void *data)
+static int debugfs_min_freq_limit_set(void *data, u64 val)
 {
-	struct gxp_dev *gxp = data;
+	struct gxp_dev *gxp = (struct gxp_dev *)data;
+	struct gxp_power_manager *mgr = gxp->power_mgr;
 
-	if (gxp->pm_before_blk_off)
-		gxp->pm_before_blk_off(gxp);
-	return gxp_pm_blk_off(gxp);
+	if (val > UINT_MAX) {
+		dev_err(gxp->dev, "Requested debugfs min freq %llu must be <= %u (UINT_MAX)\n", val,
+			UINT_MAX);
+		return -EINVAL;
+	}
+
+	return gxp_pm_set_freq_limit(gxp, (u32)val, &mgr->min_freq_limit);
 }
+
+DEFINE_DEBUGFS_ATTRIBUTE(debugfs_min_freq_limit_fops, debugfs_min_freq_limit_get,
+			 debugfs_min_freq_limit_set, "%llu\n");
+
+static int debugfs_max_freq_limit_get(void *data, u64 *val)
+{
+	struct gxp_dev *gxp = (struct gxp_dev *)data;
+	struct gxp_power_manager *mgr = gxp->power_mgr;
+
+	mutex_lock(&mgr->freq_limits_lock);
+	*val = mgr->max_freq_limit;
+	mutex_unlock(&mgr->freq_limits_lock);
+	return 0;
+}
+
+static int debugfs_max_freq_limit_set(void *data, u64 val)
+{
+	struct gxp_dev *gxp = (struct gxp_dev *)data;
+	struct gxp_power_manager *mgr = gxp->power_mgr;
+
+	if (val > UINT_MAX) {
+		dev_err(gxp->dev, "Requested debugfs max freq %llu must be <= %u (UINT_MAX)\n", val,
+			UINT_MAX);
+		return -EINVAL;
+	}
+
+	return gxp_pm_set_freq_limit(gxp, (u32)val, &mgr->max_freq_limit);
+}
+
+DEFINE_DEBUGFS_ATTRIBUTE(debugfs_max_freq_limit_fops, debugfs_max_freq_limit_get,
+			 debugfs_max_freq_limit_set, "%llu\n");
+#endif /* GXP_HAS_MCU */
 
 static int debugfs_wakelock_set(void *data, u64 val)
 {
@@ -848,6 +938,42 @@ DEFINE_DEBUGFS_ATTRIBUTE(debugfs_blk_powerstate_fops,
 			 debugfs_blk_powerstate_get, debugfs_blk_powerstate_set,
 			 "%llx\n");
 
+static int gxp_pm_power_up(void *data)
+{
+	struct gxp_dev *gxp = data;
+	int ret = gxp_pm_blk_on(gxp);
+
+	if (ret) {
+		dev_err(gxp->dev, "Failed to power on BLK_AUR (ret=%d)\n", ret);
+		return ret;
+	}
+
+	if (gxp->pm_after_blk_on) {
+		ret = gxp->pm_after_blk_on(gxp);
+		if (ret) {
+			gxp_pm_blk_off(gxp);
+			return ret;
+		}
+	}
+
+#if GXP_HAS_MCU
+	mutex_lock(&gxp->power_mgr->freq_limits_lock);
+	if (gxp->power_mgr->min_freq_limit || gxp->power_mgr->max_freq_limit)
+		gxp_pm_update_freq_limits_locked(gxp);
+	mutex_unlock(&gxp->power_mgr->freq_limits_lock);
+#endif /* GXP_HAS_MCU */
+	return 0;
+}
+
+static int gxp_pm_power_down(void *data)
+{
+	struct gxp_dev *gxp = data;
+
+	if (gxp->pm_before_blk_off)
+		gxp->pm_before_blk_off(gxp);
+	return gxp_pm_blk_off(gxp);
+}
+
 static void gxp_pm_on_busy(struct gxp_dev *gxp)
 {
 	set_cmu_pll_aur_mux_state(gxp, AUR_CMU_MUX_NORMAL);
@@ -862,6 +988,12 @@ static void gxp_pm_on_idle(struct gxp_dev *gxp)
 	}
 }
 
+/**
+ * gxp_pm_parse_pmu_base() - Parse the pmu-aur-status from device tree.
+ * @gxp: The gxp_dev object.
+ *
+ * Parse the pmu status from property or fall back to try finding from reg instead.
+ */
 static void gxp_pm_parse_pmu_base(struct gxp_dev *gxp)
 {
 	u32 reg;
@@ -869,31 +1001,28 @@ static void gxp_pm_parse_pmu_base(struct gxp_dev *gxp)
 	struct platform_device *pdev =
 		container_of(gxp->dev, struct platform_device, dev);
 	struct device *dev = gxp->dev;
-
-	/* TODO(b/309801480): Remove after DT updated */
-	r = platform_get_resource_byname(pdev, IORESOURCE_MEM, "pmu_aur_status");
-	if (r) {
-		gxp->power_mgr->aur_status = devm_ioremap_resource(gxp->dev, r);
-		if (IS_ERR(gxp->power_mgr->aur_status)) {
-			dev_warn(gxp->dev, "Failed to map PMU register base, ret=%ld\n",
-				 PTR_ERR(gxp->power_mgr->aur_status));
-			gxp->power_mgr->aur_status = NULL;
-		}
-	}
+	void __iomem *aur_status = ERR_PTR(-ENOENT);
 
 	/* "pmu-aur-status" DT property takes precedence over reg entry */
 	if (of_find_property(dev->of_node, "pmu-aur-status", NULL) &&
-			!of_property_read_u32_index(dev->of_node, "pmu-aur-status", 0, &reg)) {
-		gxp->power_mgr->aur_status = devm_ioremap(dev, reg, 0x4);
-		if (IS_ERR(gxp->power_mgr->aur_status)) {
-			dev_warn(gxp->dev, "Failed to map PMU register base, ret=%ld\n",
-				 PTR_ERR(gxp->power_mgr->aur_status));
-			gxp->power_mgr->aur_status = NULL;
-		}
-	} else {
-		if (!r)
-			dev_warn(gxp->dev, "Failed to find PMU register base\n");
+	    !of_property_read_u32_index(dev->of_node, "pmu-aur-status", 0, &reg)) {
+		aur_status = devm_ioremap(dev, reg, 0x4);
 	}
+
+	if (!IS_ERR(aur_status))
+		goto out;
+
+	/* Fall back to try pasring from resource if the property not found. */
+	r = platform_get_resource_byname(pdev, IORESOURCE_MEM, "pmu_aur_status");
+	if (r)
+		aur_status = devm_ioremap_resource(gxp->dev, r);
+
+out:
+	if (IS_ERR(aur_status))
+		dev_warn(gxp->dev, "Failed to get PMU register base, ret=%ld\n",
+			 PTR_ERR(aur_status));
+
+	gxp->power_mgr->aur_status = IS_ERR(aur_status) ? NULL : aur_status;
 }
 
 int gxp_pm_init(struct gxp_dev *gxp)
@@ -906,6 +1035,7 @@ int gxp_pm_init(struct gxp_dev *gxp)
 		.power_down = gxp_pm_power_down,
 	};
 	uint i;
+	int ret;
 
 	mgr = devm_kzalloc(gxp->dev, sizeof(*mgr), GFP_KERNEL);
 	if (!mgr)
@@ -914,8 +1044,8 @@ int gxp_pm_init(struct gxp_dev *gxp)
 
 	mgr->pm = gcip_pm_create(&args);
 	if (IS_ERR(mgr->pm)) {
-		devm_kfree(gxp->dev, mgr);
-		return PTR_ERR(mgr->pm);
+		ret = PTR_ERR(mgr->pm);
+		goto err_free_mgr;
 	}
 
 	mutex_init(&mgr->pm_lock);
@@ -937,8 +1067,11 @@ int gxp_pm_init(struct gxp_dev *gxp)
 	}
 	mutex_init(&mgr->set_acpm_state_work_lock);
 	mutex_init(&mgr->req_pm_qos_work_lock);
-	gxp->power_mgr->wq =
-		create_singlethread_workqueue("gxp_power_work_queue");
+	gxp->power_mgr->wq = create_singlethread_workqueue("gxp_power_work_queue");
+	if (!gxp->power_mgr->wq) {
+		ret = -ENOMEM;
+		goto err_pm_destroy;
+	}
 	gxp->power_mgr->force_mux_normal_count = 0;
 	gxp->power_mgr->blk_switch_count = 0l;
 	spin_lock_init(&gxp->power_mgr->busy_lock);
@@ -951,12 +1084,24 @@ int gxp_pm_init(struct gxp_dev *gxp)
 	gxp_pm_chip_init(gxp);
 
 	gxp->debugfs_wakelock_held = false;
-	debugfs_create_file(DEBUGFS_WAKELOCK, 0200, gxp->d_entry, gxp,
-			    &debugfs_wakelock_fops);
+#if GXP_HAS_MCU
+	mutex_init(&mgr->freq_limits_lock);
+	debugfs_create_file(DEBUGFS_MIN_FREQ, 0600, gxp->d_entry, gxp,
+			    &debugfs_min_freq_limit_fops);
+	debugfs_create_file(DEBUGFS_MAX_FREQ, 0600, gxp->d_entry, gxp,
+			    &debugfs_max_freq_limit_fops);
+#endif /* GXP_HAS_MCU */
+	debugfs_create_file(DEBUGFS_WAKELOCK, 0200, gxp->d_entry, gxp, &debugfs_wakelock_fops);
 	debugfs_create_file(DEBUGFS_BLK_POWERSTATE, 0600, gxp->d_entry, gxp,
 			    &debugfs_blk_powerstate_fops);
 
 	return 0;
+
+err_pm_destroy:
+	gcip_pm_destroy(mgr->pm);
+err_free_mgr:
+	devm_kfree(gxp->dev, mgr);
+	return ret;
 }
 
 int gxp_pm_destroy(struct gxp_dev *gxp)
@@ -966,6 +1111,10 @@ int gxp_pm_destroy(struct gxp_dev *gxp)
 	if (IS_GXP_TEST && !mgr)
 		return 0;
 
+#if GXP_HAS_MCU
+	debugfs_remove(debugfs_lookup(DEBUGFS_MIN_FREQ, gxp->d_entry));
+	debugfs_remove(debugfs_lookup(DEBUGFS_MAX_FREQ, gxp->d_entry));
+#endif /* GXP_HAS_MCU */
 	debugfs_remove(debugfs_lookup(DEBUGFS_BLK_POWERSTATE, gxp->d_entry));
 	debugfs_remove(debugfs_lookup(DEBUGFS_WAKELOCK, gxp->d_entry));
 

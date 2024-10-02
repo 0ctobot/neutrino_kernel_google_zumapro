@@ -15,8 +15,6 @@
 #include "gxp-internal.h"
 #include "gxp-vd.h"
 
-#define GXP_FW_DATA_SYSCFG_SIZE SZ_8K
-
 enum gxp_fw_data_protocol {
 	/* Use the per-VD configuration region. */
 	FW_DATA_PROTOCOL_PER_VD_CONFIG = 2,
@@ -109,13 +107,14 @@ struct gxp_mapped_resource gxp_fw_data_resource(struct gxp_dev *gxp);
 void *gxp_fw_data_system_cfg(struct gxp_dev *gxp);
 
 /**
- * gxp_fw_data_populate_system_config() - Populate settings onto firmware system
- *                                        config region.
- * @gxp: The GXP device
+ * gxp_fw_data_populate_system_config() - Populate settings onto firmware system config region.
+ * @gxp: The GXP device.
+ * @sys_cfg_size: The size of system config region.
  *
- * This function is expected to be called after "after_probe" in the probe
- * procedure since it uses gxp_fw_data_system_cfg().
+ * This function is expected to be called after firmware loaded to know the correct size of the
+ * system config.
+ * The size will be recorded in gxp->data_mgr.
  */
-void gxp_fw_data_populate_system_config(struct gxp_dev *gxp);
+void gxp_fw_data_populate_system_config(struct gxp_dev *gxp, u32 sys_cfg_size);
 
 #endif /* __GXP_FIRMWARE_DATA_H__ */

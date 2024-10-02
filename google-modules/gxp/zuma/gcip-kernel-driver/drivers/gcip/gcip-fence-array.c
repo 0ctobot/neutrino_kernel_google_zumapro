@@ -5,9 +5,11 @@
  * Copyright (C) 2023 Google LLC
  */
 
+#include <linux/dma-fence.h>
 #include <linux/kref.h>
 #include <linux/slab.h>
 
+#include <gcip/gcip-dma-fence.h>
 #include <gcip/gcip-fence-array.h>
 #include <gcip/gcip-fence.h>
 
@@ -135,7 +137,7 @@ void gcip_fence_array_signal(struct gcip_fence_array *fence_array, int errno)
 		gcip_fence_signal(fence_array->fences[i], errno);
 }
 
-void gcip_fence_array_waited(struct gcip_fence_array *fence_array)
+void gcip_fence_array_waited(struct gcip_fence_array *fence_array, enum iif_ip_type ip)
 {
 	int i;
 
@@ -143,7 +145,7 @@ void gcip_fence_array_waited(struct gcip_fence_array *fence_array)
 		return;
 
 	for (i = 0; i < fence_array->size; i++)
-		gcip_fence_waited(fence_array->fences[i]);
+		gcip_fence_waited(fence_array->fences[i], ip);
 }
 
 void gcip_fence_array_submit_signaler(struct gcip_fence_array *fence_array)
@@ -157,7 +159,7 @@ void gcip_fence_array_submit_signaler(struct gcip_fence_array *fence_array)
 		gcip_fence_submit_signaler(fence_array->fences[i]);
 }
 
-void gcip_fence_array_submit_waiter(struct gcip_fence_array *fence_array)
+void gcip_fence_array_submit_waiter(struct gcip_fence_array *fence_array, enum iif_ip_type ip)
 {
 	int i;
 
@@ -165,11 +167,12 @@ void gcip_fence_array_submit_waiter(struct gcip_fence_array *fence_array)
 		return;
 
 	for (i = 0; i < fence_array->size; i++)
-		gcip_fence_submit_waiter(fence_array->fences[i]);
+		gcip_fence_submit_waiter(fence_array->fences[i], ip);
 }
 
 int gcip_fence_array_submit_waiter_and_signaler(struct gcip_fence_array *in_fences,
-						struct gcip_fence_array *out_fences)
+						struct gcip_fence_array *out_fences,
+						enum iif_ip_type ip)
 {
 	int i;
 
@@ -207,7 +210,7 @@ int gcip_fence_array_submit_waiter_and_signaler(struct gcip_fence_array *in_fenc
 
 	/* Submits a waiter to @in_fences. */
 	for (i = 0; in_fences && i < in_fences->size; i++)
-		gcip_fence_submit_waiter(in_fences->fences[i]);
+		gcip_fence_submit_waiter(in_fences->fences[i], ip);
 
 	return 0;
 }
@@ -255,4 +258,31 @@ int gcip_fence_array_wait_signaler_submission(struct gcip_fence_array *fence_arr
 {
 	return gcip_fence_wait_signaler_submission(fence_array->fences, fence_array->size, eventfd,
 						   remaining_signalers);
+}
+
+struct dma_fence *gcip_fence_array_merge_ikf(struct gcip_fence_array *fence_array)
+{
+	struct dma_fence **fences;
+	struct dma_fence *merged;
+	int i;
+
+	if (!fence_array || !fence_array->size || !fence_array->same_type ||
+	    fence_array->type != GCIP_IN_KERNEL_FENCE)
+		return NULL;
+
+	if (fence_array->size == 1)
+		return dma_fence_get(fence_array->fences[0]->fence.ikf);
+
+	fences = kcalloc(fence_array->size, sizeof(*fences), GFP_KERNEL);
+	if (!fences)
+		return ERR_PTR(-ENOMEM);
+
+	for (i = 0; i < fence_array->size; i++)
+		fences[i] = fence_array->fences[i]->fence.ikf;
+
+	merged = gcip_dma_fence_merge_fences(fence_array->size, fences);
+
+	kfree(fences);
+
+	return merged;
 }

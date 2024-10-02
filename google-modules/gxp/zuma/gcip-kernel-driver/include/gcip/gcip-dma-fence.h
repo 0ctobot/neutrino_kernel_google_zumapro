@@ -161,7 +161,7 @@ int gcip_dma_fenceptr_signal(struct gcip_dma_fence *gfence, int error, bool igno
 void gcip_dma_fence_show(struct gcip_dma_fence *gfence, struct seq_file *s);
 
 /**
- * Gets and merges an array of DMA fences from their FDs.
+ * gcip_dma_fence_merge_fences() -  Merges an array of DMA fences with dma_fence_unwrap_merge().
  *
  * Creates a dma_fence_array from all of the provided fences and returns a dma_fence representing
  * that array. If any of the provided fences are also arrays, the resulting array will include
@@ -171,12 +171,19 @@ void gcip_dma_fence_show(struct gcip_dma_fence *gfence, struct seq_file *s);
  *
  * The returned fence must be released with `dma_fence_put()`.
  *
+ * Returns a pointer to the fence on success. Otherwise a negative errno as an ERR_PTR.
+ */
+struct dma_fence *gcip_dma_fence_merge_fences(int num_fences, struct dma_fence **fences);
+
+/**
+ * gcip_dma_fence_merge_fds() - Gets and merges an array of DMA fences from their FDs.
+ *
+ * Creates a dma_fence_array from all of the provided fences.
  * It is OK if @fence_fds do not refer to gcip_dma_fences.
  *
  * Returns a pointer to the fence on success. Otherwise a negative errno as an ERR_PTR.
  *  - If unable to allocate sufficient memory, returns ERR_PTR(-ENOMEM)
  *  - If any of @fence_fds are invalid, returns ERR_PTR(-ENOENT)
- *  - If unable to merge the fences, returns NULL
  */
 struct dma_fence *gcip_dma_fence_merge_fds(int num_fences, int *fence_fds);
 

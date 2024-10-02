@@ -23,16 +23,14 @@
 #include "gxp-debug-dump.h"
 #include "gxp-dma.h"
 #include "gxp-doorbell.h"
-#include "gxp-firmware.h"
 #include "gxp-firmware-data.h"
 #include "gxp-firmware-loader.h"
+#include "gxp-firmware.h"
 #include "gxp-host-device-structs.h"
 #include "gxp-internal.h"
 #include "gxp-lpm.h"
 #include "gxp-mailbox-driver.h"
 #include "gxp-mapping.h"
-#include "gxp-mcu.h"
-#include "gxp-mcu-telemetry.h"
 #include "gxp-notification.h"
 #include "gxp-pm.h"
 #include "gxp-vd.h"
@@ -41,20 +39,16 @@
 #include <linux/platform_data/sscoredump.h>
 #endif
 
+#if GXP_HAS_MCU
+#include "gxp-mcu-telemetry.h"
+#include "gxp-mcu.h"
+#endif /* GXP_HAS_MCU */
+
 #define SSCD_MSG_LENGTH 64
 
 #define GXP_SYNC_BARRIER_STRIDE (GXP_REG_SYNC_BARRIER_1 - GXP_REG_SYNC_BARRIER_0)
 
 #define DEBUG_DUMP_MEMORY_SIZE 0x400000 /* size in bytes */
-
-/*
- * The minimum wait time in millisecond to be enforced between two successive calls to the SSCD
- * module to prevent the overwrite of the previous generated core dump files. SSCD module generates
- * the files whose name are at second precision i.e.
- * crashinfo_<SUBSYSTEM_NAME>_<%Y-%m-%d_%H-%M-%S>.txt and
- * coredump_<SUBSYSTEM_NAME>_<%Y-%m-%d_%H-%M-%S>.bin.
- */
-#define SSCD_REPORT_WAIT_TIME (1000ULL)
 
 /*
  * CORE_FIRMWARE_RW_STRIDE & CORE_FIRMWARE_RW_ADDR must match with their
@@ -613,6 +607,37 @@ void gxp_debug_dump_invalidate_segments(struct gxp_dev *gxp, uint32_t core_id)
 	core_dump_header->core_header.dump_available = 0;
 }
 
+void gxp_debug_dump_send_forced_debug_dump_request(struct gxp_dev *gxp,
+						   struct gxp_virtual_device *vd)
+{
+	uint phys_core;
+	uint generate_debug_dump;
+	uint debug_dump_generated;
+
+	lockdep_assert_held(&gxp->vd_semaphore);
+
+	for (phys_core = 0; phys_core < GXP_NUM_CORES; phys_core++) {
+		if (!(vd->core_list & BIT(phys_core)))
+			continue;
+
+		generate_debug_dump = gxp_firmware_get_generate_debug_dump(gxp, vd, phys_core);
+		debug_dump_generated = gxp_firmware_get_debug_dump_generated(gxp, vd, phys_core);
+		/*
+		 * If neither the core has generated the debug dump nor has been requested to
+		 * generate the forced debug dump.
+		 */
+		if (!debug_dump_generated && !generate_debug_dump) {
+			if (!gxp_lpm_is_powered(gxp, CORE_TO_PSM(phys_core))) {
+				dev_dbg(gxp->dev, "Core%u not powered on.\n", phys_core);
+				continue;
+			}
+			/* Send the interrupt to the core for requesting the forced debug dump. */
+			gxp_firmware_set_generate_debug_dump(gxp, vd, phys_core, 1);
+			gxp_notification_send(gxp, phys_core, CORE_NOTIF_GENERATE_DEBUG_DUMP);
+		}
+	}
+}
+
 /*
  * Caller must make sure that gxp->debug_dump_mgr->common_dump and
  * gxp->debug_dump_mgr->core_dump are not NULL.
@@ -790,10 +815,12 @@ static void gxp_debug_dump_process_dump_direct_mode(struct work_struct *work)
 	uint core_id = debug_dump_work->core_id;
 	struct gxp_dev *gxp = debug_dump_work->gxp;
 	struct gxp_virtual_device *vd = NULL;
+	int old_core_dump_generated_list;
 
 	down_read(&gxp->vd_semaphore);
 	if (gxp->core_to_vd[core_id]) {
 		vd = gxp_vd_get(gxp->core_to_vd[core_id]);
+		gxp_debug_dump_send_forced_debug_dump_request(gxp, vd);
 	} else {
 		dev_warn(gxp->dev, "debug dump failed for null vd on core %d.", core_id);
 		up_read(&gxp->vd_semaphore);
@@ -809,6 +836,15 @@ static void gxp_debug_dump_process_dump_direct_mode(struct work_struct *work)
 	mutex_lock(&vd->debug_dump_lock);
 
 	gxp_generate_debug_dump(gxp, core_id, vd);
+
+	/* Update the debug dump processing status for the current core. */
+	old_core_dump_generated_list = atomic_fetch_or(BIT(core_id), &vd->core_dump_generated_list);
+	/*
+	 * Event the wait queue in case debug dump processing has been finished for all the
+	 * running cores for the vd.
+	 */
+	if ((old_core_dump_generated_list | BIT(core_id)) == vd->core_list)
+		wake_up(&vd->finished_dump_processing_waitq);
 
 	mutex_unlock(&vd->debug_dump_lock);
 	gxp_vd_put(vd);

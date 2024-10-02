@@ -721,7 +721,7 @@ static ssize_t gcip_usage_stats_dvfs_freqs_show(struct device *dev,
 		mutex_unlock(&ustats->dvfs_freqs_lock);
 		dvfs_freqs_num = ustats->ops->get_default_dvfs_freqs_num(ustats->data);
 		for (i = 0; i < dvfs_freqs_num; i++)
-			written += scnprintf(buf + written, PAGE_SIZE - written, "%.*s%d", i, " ",
+			written += scnprintf(buf + written, PAGE_SIZE - written, "%.*s%u", i, " ",
 					     ustats->ops->get_default_dvfs_freq(i, ustats->data));
 	} else {
 		dvfs_freqs_num = ustats->dvfs_freqs_num;

@@ -25,12 +25,12 @@ static void destroy_dmabuf_mapping(struct gxp_mapping *mapping)
 	dma_addr_t device_address = mapping->gcip_mapping->device_address;
 	size_t size = mapping->gcip_mapping->size;
 
-	trace_gxp_mapping_destroy_start(device_address, size);
+	trace_gxp_dmabuf_mapping_destroy_start(device_address, size);
 
 	gcip_iommu_mapping_unmap(mapping->gcip_mapping);
 	kfree(mapping);
 
-	trace_gxp_mapping_destroy_end(device_address, size);
+	trace_gxp_dmabuf_mapping_destroy_end(device_address, size);
 }
 
 struct gxp_mapping *gxp_dmabuf_map(struct gxp_dev *gxp, struct gcip_iommu_reserve_manager *mgr,

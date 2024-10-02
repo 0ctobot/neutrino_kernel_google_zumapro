@@ -5,11 +5,15 @@
  * Copyright (C) 2022 Google LLC
  */
 
+#include <linux/device.h>
 #include <linux/interrupt.h>
 #include <linux/moduleparam.h>
 #include <linux/of_irq.h>
+#include <linux/of_platform.h>
+#include <linux/of.h>
+#include <linux/platform_device.h>
 
-#include <gcip/iif/iif-manager.h>
+#include <iif/iif-manager.h>
 
 #include "gxp-config.h"
 #include "gxp-internal.h"
@@ -271,6 +275,81 @@ enum gxp_chip_revision gxp_get_chip_revision(struct gxp_dev *gxp)
 	return GXP_CHIP_ANY;
 }
 
+static void gxp_get_embedded_iif_mgr(struct gxp_dev *gxp)
+{
+	struct iif_manager *mgr;
+
+#if HAS_TPU_EXT
+	if (gxp->tpu_dev.dev) {
+		int ret = edgetpu_ext_driver_cmd(gxp->tpu_dev.dev, EDGETPU_EXTERNAL_CLIENT_TYPE_DSP,
+						 GET_IIF_MANAGER, NULL, &mgr);
+
+		if (!ret) {
+			dev_info(gxp->dev, "Use the IIF manager of TPU driver");
+			/* Note that we shouldn't call `iif_manager_get` here. */
+			gxp->iif_mgr = mgr;
+			return;
+		}
+	}
+#endif /* HAS_TPU_EXT */
+
+	dev_info(gxp->dev, "Try to get an embedded IIF manager");
+
+	mgr = iif_manager_init(gxp->dev->of_node);
+	if (IS_ERR(mgr)) {
+		dev_warn(gxp->dev, "Failed to init an embedded IIF manager: %ld", PTR_ERR(mgr));
+		return;
+	}
+
+	gxp->iif_mgr = mgr;
+}
+
+static void gxp_get_iif_mgr(struct gxp_dev *gxp)
+{
+	struct platform_device *pdev;
+	struct device_node *node;
+	struct iif_manager *mgr;
+
+	node = of_parse_phandle(gxp->dev->of_node, "iif-device", 0);
+	if (IS_ERR_OR_NULL(node)) {
+		dev_warn(gxp->dev, "There is no iif-device node in the device tree");
+		goto get_embed;
+	}
+
+	pdev = of_find_device_by_node(node);
+	of_node_put(node);
+	if (!pdev) {
+		dev_warn(gxp->dev, "Failed to find the IIF device");
+		goto get_embed;
+	}
+
+	mgr = platform_get_drvdata(pdev);
+	if (!mgr) {
+		dev_warn(gxp->dev, "Failed to get a manager from IIF device");
+		goto put_device;
+	}
+
+	dev_info(gxp->dev, "Use the IIF manager of IIF device");
+
+	/* We don't need to call `get_device` since `of_find_device_by_node` takes a refcount. */
+	gxp->iif_dev = &pdev->dev;
+	gxp->iif_mgr = iif_manager_get(mgr);
+	return;
+
+put_device:
+	put_device(&pdev->dev);
+get_embed:
+	gxp_get_embedded_iif_mgr(gxp);
+}
+
+static void gxp_put_iif_mgr(struct gxp_dev *gxp)
+{
+	if (gxp->iif_mgr)
+		iif_manager_put(gxp->iif_mgr);
+	/* NO-OP if `gxp->iif_dev` is NULL. */
+	put_device(gxp->iif_dev);
+}
+
 int gxp_mcu_platform_after_probe(struct gxp_dev *gxp)
 {
 	int ret;
@@ -282,12 +361,7 @@ int gxp_mcu_platform_after_probe(struct gxp_dev *gxp)
 	if (ret)
 		return ret;
 
-	gxp->iif_mgr = iif_manager_init(gxp->dev->of_node);
-	if (IS_ERR(gxp->iif_mgr)) {
-		dev_err(gxp->dev, "Failed to init IIF manager: %ld", PTR_ERR(gxp->iif_mgr));
-		gxp->iif_mgr = NULL;
-	}
-
+	gxp_get_iif_mgr(gxp);
 	gxp_usage_stats_init(gxp);
 	return gxp_mcu_init(gxp, gxp_mcu_of(gxp));
 }
@@ -299,9 +373,7 @@ void gxp_mcu_platform_before_remove(struct gxp_dev *gxp)
 
 	gxp_mcu_exit(gxp_mcu_of(gxp));
 	gxp_usage_stats_exit(gxp);
-
-	if (gxp->iif_mgr)
-		iif_manager_put(gxp->iif_mgr);
+	gxp_put_iif_mgr(gxp);
 }
 
 void gxp_mcu_dev_init(struct gxp_mcu_dev *mcu_dev)

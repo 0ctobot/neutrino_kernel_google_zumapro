@@ -13,12 +13,11 @@
 #include <linux/types.h>
 
 /*
- * The actual return value from the alloc_noncontiguous function.
- * The user should only care about @sgt. @pages is used internally for freeing memory.
+ * Used internally by the alloc_noncontiguous functions.
  */
 struct gcip_sgt_handle {
-	struct sg_table sgt;
-	void *mem;
+	struct sg_table sgt;	/* SG table for vmalloc'ed physical pages */
+	void *mem;		/* kernel VA of vmalloc area */
 };
 
 /*
@@ -28,10 +27,11 @@ struct gcip_sgt_handle {
  * @size: Total size in bytes. Will be page aligned.
  * @gfp: The GFP flag for malloc internal structures.
  *
- * Returns the SG table represents the non-contiguous region.
+ * Returns an SG table for the non-contiguous pages.
  * Returns NULL on any error.
  */
 struct sg_table *gcip_alloc_noncontiguous(struct device *dev, size_t size, gfp_t gfp);
+
 /* Frees the memory allocated by gcip_alloc_noncontiguous. */
 void gcip_free_noncontiguous(struct sg_table *sgt);
 

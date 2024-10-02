@@ -8,18 +8,42 @@
 #ifndef __GCIP_IMAGE_CONFIG_H__
 #define __GCIP_IMAGE_CONFIG_H__
 
-#include <asm/page.h>
 #include <linux/bits.h>
+#include <linux/sizes.h>
 #include <linux/types.h>
 
 #define GCIP_FW_NUM_VERSIONS 4
-#define GCIP_IMG_CFG_MAX_IOMMU_MAPPINGS 20
+#define GCIP_IMG_CFG_MAX_IOMMU_MAPPINGS 19
 #define GCIP_IMG_CFG_MAX_NS_IOMMU_MAPPINGS 5
 #define GCIP_IMG_CFG_MAX_PROTECTED_MEMORY_MAPPINGS 3
 
 #define GCIP_FW_PRIV_LEVEL_GSA 0
 #define GCIP_FW_PRIV_LEVEL_TZ 1
 #define GCIP_FW_PRIV_LEVEL_NS 2
+
+#define GCIP_FW_ASAN_ENABLED (1 << 0)
+#define GCIP_FW_UBSAN_ENABLED (1 << 1)
+
+#define GCIP_IMAGE_CONFIG_SANITIZER_SHIFT 2
+#define GCIP_IMAGE_CONFIG_SANITIZER_MASK (BIT(GCIP_IMAGE_CONFIG_SANITIZER_SHIFT) - 1)
+#define GCIP_IMAGE_CONFIG_SANITIZER_STATUS(cfg) (cfg & GCIP_IMAGE_CONFIG_SANITIZER_MASK)
+#define GCIP_IMAGE_CONFIG_SANITIZER_INDEX(cfg) (cfg >> GCIP_IMAGE_CONFIG_SANITIZER_SHIFT)
+
+/*
+ * Mapping flags in lower 12 bits (regardless of page size in use by AP kernel) of requested
+ * virt_address in iommu_mappings.  Must match definitions used by firmware.
+ */
+#define GCIP_IMG_CFG_MAP_FLAGS_MASK		(SZ_4K - 1)
+
+/* The entry is for a CSR/device region and must be mapped with IOMMU_MMIO flag. */
+#define GCIP_IMAGE_CONFIG_MAP_MMIO_BIT		(BIT(0))
+#define GCIP_IMAGE_CONFIG_MAP_MMIO(flags)	(flags & GCIP_IMAGE_CONFIG_MAP_MMIO_BIT)
+/* The mapping must be replicated for each PASID/context. */
+#define GCIP_IMAGE_CONFIG_MAP_SHARED_BIT	(BIT(1))
+#define GCIP_IMAGE_CONFIG_MAP_SHARED(flags)	(flags & GCIP_IMAGE_CONFIG_MAP_SHARED_BIT)
+/* The mapping uses a 36-bit IOVA. The incoming value needs to be shifted left 4 bits */
+#define GCIP_IMAGE_CONFIG_MAP_36BIT_BIT		(BIT(3))
+#define GCIP_IMAGE_CONFIG_MAP_36BIT(flags)	(flags & GCIP_IMAGE_CONFIG_MAP_36BIT_BIT)
 
 /*
  * The image configuration attached to the signed firmware.
@@ -35,7 +59,7 @@ struct gcip_image_config {
 	__u32 remapped_region_size;
 	__u32 num_iommu_mappings;
 	struct {
-		/* Device virtual address */
+		/* Device virtual address requested, with map flags in lower 12 bits */
 		__u32 virt_address;
 		/*
 		 * Encodes a 12-bit aligned address and the corresponding size
@@ -44,6 +68,8 @@ struct gcip_image_config {
 		 */
 		__u32 image_config_value;
 	} iommu_mappings[GCIP_IMG_CFG_MAX_IOMMU_MAPPINGS];
+	__u32 reserved;
+	__u32 sanitizer_config;
 	__u32 protected_memory_regions[GCIP_IMG_CFG_MAX_PROTECTED_MEMORY_MAPPINGS];
 	__u32 secure_telemetry_region_start;
 	__u32 remapped_data_start;
@@ -60,21 +86,24 @@ struct gcip_image_config_ops {
 	 *
 	 * It is ensured that there is no overflow on @paddr + @size before calling this function.
 	 *
-	 * @flags is a bit-field with the following attributes:
-	 *   [0:0] - Security. 1 for secure and 0 for non-secure.
+	 * @cfg_map_flags holds GCIP_IMAGE_CONFIG_MAP_* flags masked from an iommu_mappings_entry,
+	 *                or zero for ns_iommu_mappings (GCIP_IMAGE_CONFIG_FLAGS_SECURE == 0)
+	 * @cfg_op_flags is a bit-field with the following attributes:
+	 *   [0:0] - Secure: 1 = handle secure iommu_mappings[] entry, 0 = ns_iommu_mappings[]
 	 *   [31:1] - Reserved.
 	 *
 	 * Returns 0 on success. Otherwise a negative errno.
 	 * Mandatory.
 	 */
 	int (*map)(void *data, dma_addr_t daddr, phys_addr_t paddr, size_t size,
-		   unsigned int flags);
+		   unsigned int cfg_map_flags, unsigned int cfg_op_flags);
 	/*
 	 * Removes the IOMMU mapping previously added by @map.
 	 *
 	 * Mandatory.
 	 */
-	void (*unmap)(void *data, dma_addr_t daddr, size_t size, unsigned int flags);
+	void (*unmap)(void *data, dma_addr_t daddr, size_t size, unsigned int cfg_map_flags,
+		      unsigned int cfg_op_flags);
 };
 
 struct gcip_image_config_parser {
@@ -88,6 +117,7 @@ struct gcip_image_config_parser {
 };
 
 #define GCIP_IMG_CFG_ADDR_SHIFT 12
+#define GCIP_IMG_CFG_PAGE_SHIFT 12
 #define GCIP_IMG_CFG_MB_SHIFT 20
 #define GCIP_IMG_CFG_SIZE_MODE_BIT BIT(GCIP_IMG_CFG_ADDR_SHIFT - 1)
 #define GCIP_IMG_CFG_SECURE_SIZE_MASK (GCIP_IMG_CFG_SIZE_MODE_BIT - 1u)
@@ -98,7 +128,7 @@ struct gcip_image_config_parser {
 static inline u32 gcip_ns_config_to_size(u32 cfg)
 {
 	if (cfg & GCIP_IMG_CFG_SIZE_MODE_BIT)
-		return (cfg & GCIP_IMG_CFG_NS_SIZE_MASK) << PAGE_SHIFT;
+		return (cfg & GCIP_IMG_CFG_NS_SIZE_MASK) << GCIP_IMG_CFG_PAGE_SHIFT;
 
 	return (cfg & GCIP_IMG_CFG_NS_SIZE_MASK) << GCIP_IMG_CFG_MB_SHIFT;
 }
@@ -107,9 +137,9 @@ static inline u32 gcip_ns_config_to_size(u32 cfg)
 static inline u32 gcip_config_to_size(u32 cfg)
 {
 	if (cfg & GCIP_IMG_CFG_SIZE_MODE_BIT)
-		return (cfg & GCIP_IMG_CFG_SECURE_SIZE_MASK) << PAGE_SHIFT;
+		return (cfg & GCIP_IMG_CFG_SECURE_SIZE_MASK) << GCIP_IMG_CFG_PAGE_SHIFT;
 
-	return BIT(cfg & GCIP_IMG_CFG_SECURE_SIZE_MASK) << PAGE_SHIFT;
+	return BIT(cfg & GCIP_IMG_CFG_SECURE_SIZE_MASK) << GCIP_IMG_CFG_PAGE_SHIFT;
 }
 
 /*
@@ -180,6 +210,14 @@ void gcip_image_config_clear(struct gcip_image_config_parser *parser);
 static inline bool gcip_image_config_is_ns(struct gcip_image_config *config)
 {
 	return config->privilege_level == GCIP_FW_PRIV_LEVEL_NS;
+}
+
+/*
+ * Returns whether the privilege level specified by @config is secure.
+ */
+static inline bool gcip_image_config_is_secure(struct gcip_image_config *config)
+{
+	return config->privilege_level != GCIP_FW_PRIV_LEVEL_NS;
 }
 
 #endif /* __GCIP_IMAGE_CONFIG_H__ */

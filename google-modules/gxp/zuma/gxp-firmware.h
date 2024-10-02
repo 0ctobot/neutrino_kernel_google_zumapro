@@ -22,8 +22,6 @@ enum gxp_imgcfg_idx {
 	CORE_CFG_REGION_IDX,
 	VD_CFG_REGION_IDX,
 	SYS_CFG_REGION_IDX,
-	/* TODO(b/299037074): Remove core's accesses to LPM. */
-	REMOTE_LPM_IDX = 7,
 };
 
 struct gxp_firmware_manager {
@@ -124,6 +122,34 @@ void gxp_firmware_set_boot_status(struct gxp_dev *gxp,
  */
 u32 gxp_firmware_get_boot_status(struct gxp_dev *gxp,
 				 struct gxp_virtual_device *vd, uint core);
+
+/*
+ * Returns the `generate_debug_dump` flag from the given virtual device's shared host-core region
+ * for the specified core.
+ */
+u32 gxp_firmware_get_generate_debug_dump(struct gxp_dev *gxp, struct gxp_virtual_device *vd,
+					 uint core);
+
+/*
+ * Sets the `generate_debug_dump` flag for the given virtual device's shared host-core region
+ * for the specified core.
+ */
+void gxp_firmware_set_generate_debug_dump(struct gxp_dev *gxp, struct gxp_virtual_device *vd,
+					  uint core, u32 generate_debug_dump);
+
+/*
+ * Returns the `debug_dump_generated` flag from the given virtual device's shared host-core region
+ * for the specified core.
+ */
+u32 gxp_firmware_get_debug_dump_generated(struct gxp_dev *gxp, struct gxp_virtual_device *vd,
+					  uint core);
+
+/*
+ * Sets the `generate_debug_dump` flag from the given virtual device's shared host-core region
+ * for the specified core.
+ */
+void gxp_firmware_set_debug_dump_generated(struct gxp_dev *gxp, struct gxp_virtual_device *vd,
+					   uint core, u32 debug_dump_generated);
 
 /*
  * Disable external interrupts to core.

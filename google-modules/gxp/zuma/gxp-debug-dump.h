@@ -39,6 +39,15 @@
 	(GXP_NUM_COMMON_SEGMENTS + GXP_NUM_CORE_SEGMENTS + GXP_NUM_CORE_DATA_SEGMENTS + \
 	 GXP_NUM_BUFFER_MAPPINGS)
 
+/*
+ * The minimum wait time in millisecond to be enforced between two successive calls to the SSCD
+ * module to prevent the overwrite of the previous generated core dump files. SSCD module generates
+ * the files whose name are at second precision i.e.
+ * crashinfo_<SUBSYSTEM_NAME>_<%Y-%m-%d_%H-%M-%S>.txt and
+ * coredump_<SUBSYSTEM_NAME>_<%Y-%m-%d_%H-%M-%S>.bin.
+ */
+#define SSCD_REPORT_WAIT_TIME (1000ULL)
+
 #define GXP_Q7_ICACHE_SIZE 131072 /* I-cache size in bytes */
 #define GXP_Q7_ICACHE_LINESIZE 64 /* I-cache line size in bytes */
 #define GXP_Q7_ICACHE_WAYS 4
@@ -236,6 +245,22 @@ bool gxp_debug_dump_is_enabled(void);
  * @core_id: physical id of core whose dump segments need to be invalidated.
  */
 void gxp_debug_dump_invalidate_segments(struct gxp_dev *gxp, uint32_t core_id);
+
+/**
+ * gxp_debug_dump_send_forced_debug_dump_request() - Sends the forced debug dump request to the
+ *                                                   running cores of the given vd.
+ * @gxp: The GXP device to obtain the handler for.
+ * @vd: vd whose cores to send the forced debug dump request.
+ *
+ * The caller must hold @gxp->vd_semaphore.
+ *
+ * In case of single core VD no forced debug dump request will be sent since there will be no other
+ * core. For multicore VD, forced debug dump request will be sent to other cores only during the
+ * first worker thread run. For successive worker thread runs since the forced request was already
+ * sent, it will not be sent again.
+ */
+void gxp_debug_dump_send_forced_debug_dump_request(struct gxp_dev *gxp,
+						   struct gxp_virtual_device *vd);
 
 /**
  * gxp_debug_dump_process_dump_mcu_mode() - Checks and process the debug dump

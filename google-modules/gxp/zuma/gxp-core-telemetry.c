@@ -394,7 +394,7 @@ int gxp_secure_core_telemetry_mmap_buffers(struct gxp_dev *gxp,
 	unsigned long orig_pgoff = vma->vm_pgoff;
 
 	if (!phys) {
-		dev_err(gxp->dev, "Secure buffer is not mapped.\n");
+		dev_warn(gxp->dev, "Secure buffer is not mapped.\n");
 		return -ENODATA;
 	}
 

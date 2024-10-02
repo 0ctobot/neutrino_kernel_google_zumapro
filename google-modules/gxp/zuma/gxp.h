@@ -13,7 +13,7 @@
 
 /* Interface Version */
 #define GXP_INTERFACE_VERSION_MAJOR 1
-#define GXP_INTERFACE_VERSION_MINOR 26
+#define GXP_INTERFACE_VERSION_MINOR 27
 #define GXP_INTERFACE_VERSION_BUILD 0
 
 /* mmap offsets for MCU logging and tracing buffers */
@@ -271,116 +271,6 @@ struct gxp_virtual_device_ioctl {
 /* Allocate virtual device. */
 #define GXP_ALLOCATE_VIRTUAL_DEVICE                                            \
 	_IOWR(GXP_IOCTL_BASE, 6, struct gxp_virtual_device_ioctl)
-
-#define ETM_TRACE_LSB_MASK 0x1
-#define ETM_TRACE_SYNC_MSG_PERIOD_MIN 8
-#define ETM_TRACE_SYNC_MSG_PERIOD_MAX 256
-#define ETM_TRACE_PC_MATCH_MASK_LEN_MAX 31
-
-/*
- * For all *_enable and pc_match_sense fields, only the least significant bit is
- * considered. All other bits are ignored.
- */
-struct gxp_etm_trace_start_ioctl {
-	__u16 virtual_core_id;
-	__u8 trace_ram_enable; /* Enables local trace memory. */
-	/* When set, trace output is sent out on the ATB interface. */
-	__u8 atb_enable;
-	/* Enables embedding timestamp information in trace messages. */
-	__u8 timestamp_enable;
-	/*
-	 * Determines the rate at which synchronization messages are
-	 * automatically emitted in the output trace.
-	 * Valid values: 0, 8, 16, 32, 64, 128, 256
-	 * Eg. A value of 16 means 1 synchronization message will be emitted
-	 * every 16 messages.
-	 * A value of 0 means no synchronization messages will be emitted.
-	 */
-	__u16 sync_msg_period;
-	__u8 pc_match_enable; /* PC match causes Stop trigger. */
-	/*
-	 * 32-bit address to compare to processor PC when pc_match_enable = 1.
-	 * A match for a given executed instruction triggers trace stop.
-	 * Note: trigger_pc is ignored when pc_match_enable = 0.
-	 */
-	__u32 trigger_pc;
-	/*
-	 * Indicates how many of the lower bits of trigger_pc to ignore.
-	 * Valid values: 0 to 31
-	 * Note: pc_match_mask_length is ignored when pc_match_enable = 0.
-	 */
-	__u8 pc_match_mask_length;
-	/* When 0, match when the processor's PC is in-range of trigger_pc and
-	 * mask. When 1, match when the processor's PC is out-of-range of
-	 * trigger_pc and mask.
-	 * Note: pc_match_sense is ignored when pc_match_enable = 0.
-	 */
-	__u8 pc_match_sense;
-};
-
-/*
- * Configure ETM trace registers and start ETM tracing.
- *
- * The client must hold a VIRTUAL_DEVICE wakelock.
- */
-#define GXP_ETM_TRACE_START_COMMAND                                            \
-	_IOW(GXP_IOCTL_BASE, 7, struct gxp_etm_trace_start_ioctl)
-
-/*
- * Halts trace generation via a software trigger. The virtual core id is passed
- * in as an input.
- *
- * The client must hold a VIRTUAL_DEVICE wakelock.
- */
-#define GXP_ETM_TRACE_SW_STOP_COMMAND _IOW(GXP_IOCTL_BASE, 8, __u16)
-
-/*
- * Users should call this IOCTL after tracing has been stopped for the last
- * trace session of the core. Otherwise, there is a risk of having up to 3 bytes
- * of trace data missing towards the end of the trace session.
- * This is a workaround for b/180728272 and b/181623511.
- * The virtual core id is passed in as an input.
- *
- * The client must hold a VIRTUAL_DEVICE wakelock.
- */
-#define GXP_ETM_TRACE_CLEANUP_COMMAND _IOW(GXP_IOCTL_BASE, 9, __u16)
-
-#define GXP_TRACE_HEADER_SIZE 256
-#define GXP_TRACE_RAM_SIZE 4096
-struct gxp_etm_get_trace_info_ioctl {
-	/*
-	 * Input:
-	 * The virtual core to fetch a response from.
-	 */
-	__u16 virtual_core_id;
-	/*
-	 * Input:
-	 * The type of data to retrieve.
-	 * 0: Trace Header only
-	 * 1: Trace Header + Trace Data in Trace RAM
-	 */
-	__u8 type;
-	/*
-	 * Input:
-	 * Trace header user space address to contain trace header information
-	 * that is used for decoding the trace.
-	 */
-	__u64 trace_header_addr;
-	/*
-	 * Input:
-	 * Trace data user space address to contain Trace RAM data.
-	 * Note: trace_data field will be empty if type == 0
-	 */
-	__u64 trace_data_addr;
-};
-
-/*
- * Retrieves trace header and/or trace data for decoding purposes.
- *
- * The client must hold a VIRTUAL_DEVICE wakelock.
- */
-#define GXP_ETM_GET_TRACE_INFO_COMMAND                                         \
-	_IOWR(GXP_IOCTL_BASE, 10, struct gxp_etm_get_trace_info_ioctl)
 
 #define GXP_TELEMETRY_TYPE_LOGGING (0)
 #define GXP_TELEMETRY_TYPE_TRACING (1)

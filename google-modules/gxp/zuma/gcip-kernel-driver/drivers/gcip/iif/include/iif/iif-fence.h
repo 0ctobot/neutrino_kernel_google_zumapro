@@ -1,19 +1,24 @@
 /* SPDX-License-Identifier: GPL-2.0-only */
 /*
- * GCIP-integrated IIF driver fence.
+ * The inter-IP fence.
  *
- * Copyright (C) 2023 Google LLC
+ * The actual functionality (waiting and signaling) won't be done by the kernel driver. The main
+ * role of it is creating fences with assigning fence IDs, initializing the fence table and managing
+ * the life cycle of them.
+ *
+ * Copyright (C) 2023-2024 Google LLC
  */
 
 #ifndef __IIF_IIF_FENCE_H__
 #define __IIF_IIF_FENCE_H__
 
 #include <linux/kref.h>
+#include <linux/lockdep_types.h>
 #include <linux/spinlock.h>
 #include <linux/types.h>
 
-#include <gcip/iif/iif-manager.h>
-#include <gcip/iif/iif.h>
+#include <iif/iif-manager.h>
+#include <iif/iif.h>
 
 struct iif_fence;
 struct iif_fence_ops;
@@ -50,6 +55,33 @@ enum iif_fence_state {
 	IIF_FENCE_STATE_RETIRED,
 };
 
+/*
+ * Contains the callback function which will be called when all signalers have signaled the fence.
+ *
+ * The callback can be registered to the fence by the `iif_fence_add_poll_callback` function.
+ */
+struct iif_fence_poll_cb {
+	/* Node to be added to the list. */
+	struct list_head node;
+	/* Actual callback function to be called. */
+	iif_fence_poll_cb_t func;
+};
+
+/*
+ * Contains the callback function which will be called when all signalers have been submitted.
+ *
+ * The callback will be registered to the fence when the `iif_fence_submit_waiter` function fails
+ * in the submission.
+ */
+struct iif_fence_all_signaler_submitted_cb {
+	/* Node to be added to the list. */
+	struct list_head node;
+	/* Actual callback function to be called. */
+	iif_fence_all_signaler_submitted_cb_t func;
+	/* The number of remaining signalers to be submitted. */
+	int remaining_signalers;
+};
+
 /* The fence object. */
 struct iif_fence {
 	/* IIF manager. */
@@ -67,6 +99,9 @@ struct iif_fence {
 	 * @all_signaler_submitted_error.
 	 */
 	spinlock_t submitted_signalers_lock;
+#if IS_ENABLED(CONFIG_DEBUG_SPINLOCK)
+	struct lock_class_key submitted_signalers_key;
+#endif /* IS_ENABLED(CONFIG_DEBUG_SPINLOCK) */
 	/* The interrupt state before holding @submitted_signalers_lock. */
 	unsigned long submitted_signalers_lock_flags;
 	/* The number of signaled signalers. */
@@ -93,6 +128,8 @@ struct iif_fence {
 	int all_signaler_submitted_error;
 	/* The number of sync_file(s) bound to the fence. */
 	atomic_t num_sync_file;
+	/* The callback called if the fence's signaler is AP and the fence is signaled. */
+	struct iif_fence_poll_cb ap_poll_cb;
 };
 
 /* Operators of `struct iif_fence`. */
@@ -105,33 +142,6 @@ struct iif_fence_ops {
 	 * Context: normal and in_interrupt().
 	 */
 	void (*on_release)(struct iif_fence *fence);
-};
-
-/*
- * Contains the callback function which will be called when all signalers have signaled the fence.
- *
- * The callback can be registered to the fence by the `iif_fence_add_poll_callback` function.
- */
-struct iif_fence_poll_cb {
-	/* Node to be added to the list. */
-	struct list_head node;
-	/* Actual callback function to be called. */
-	iif_fence_poll_cb_t func;
-};
-
-/*
- * Contains the callback function which will be called when all signalers have been submitted.
- *
- * The callback will be registered to the fence when the `iif_fence_submit_waiter` function fails
- * in the submission.
- */
-struct iif_fence_all_signaler_submitted_cb {
-	/* Node to be added to the list. */
-	struct list_head node;
-	/* Actual callback function to be called. */
-	iif_fence_all_signaler_submitted_cb_t func;
-	/* The number of remaining signalers to be submitted. */
-	int remaining_signalers;
 };
 
 /*
@@ -199,7 +209,7 @@ int iif_fence_submit_signaler_locked(struct iif_fence *fence);
 int iif_fence_submit_waiter(struct iif_fence *fence, enum iif_ip_type ip);
 
 /* Signals @fence. If all signalers have signaled, it will notify polling FDs. */
-void iif_fence_signal(struct iif_fence *fence);
+int iif_fence_signal(struct iif_fence *fence);
 
 /*
  * Sets @fence->signal_error to let the user know that @fence has been signaled with an error.
@@ -226,8 +236,8 @@ int iif_fence_get_signal_status(struct iif_fence *fence);
  */
 bool iif_fence_is_signaled(struct iif_fence *fence);
 
-/* Notifies the driver that a waiter finished waiting on @fence. */
-void iif_fence_waited(struct iif_fence *fence);
+/* Notifies the driver that a waiter of @ip finished waiting on @fence. */
+void iif_fence_waited(struct iif_fence *fence, enum iif_ip_type ip);
 
 /*
  * Registers a callback which will be called when all signalers of @fence signaled. Once the

@@ -334,6 +334,8 @@ static void reset_core_config_region(struct gxp_dev *gxp,
 	core_cfg->top_access_ok = 0;
 	core_cfg->boot_status = GXP_BOOT_STATUS_NONE;
 	gxp_firmware_set_boot_mode(gxp, vd, core, GXP_BOOT_MODE_COLD_BOOT);
+	gxp_firmware_set_debug_dump_generated(gxp, vd, core, 0);
+	gxp_firmware_set_generate_debug_dump(gxp, vd, core, 0);
 }
 
 static int gxp_firmware_handshake(struct gxp_dev *gxp,
@@ -1008,7 +1010,7 @@ static void gxp_firmware_stop_core(struct gxp_dev *gxp,
 	gxp_notification_unregister_handler(gxp, phys_core,
 					    HOST_NOTIF_CORE_TELEMETRY_STATUS);
 
-	if (gxp->mailbox_mgr->release_mailbox) {
+	if (gxp->mailbox_mgr->release_mailbox && gxp->mailbox_mgr->mailboxes[phys_core]) {
 		gxp->mailbox_mgr->release_mailbox(gxp->mailbox_mgr, vd, virt_core,
 						  gxp->mailbox_mgr->mailboxes[phys_core]);
 		dev_notice(gxp->dev, "Mailbox %u released\n", phys_core);
@@ -1150,8 +1152,43 @@ void gxp_firmware_set_boot_status(struct gxp_dev *gxp,
 	core_cfg->boot_status = status;
 }
 
-u32 gxp_firmware_get_boot_status(struct gxp_dev *gxp,
-				 struct gxp_virtual_device *vd, uint core)
+u32 gxp_firmware_get_generate_debug_dump(struct gxp_dev *gxp, struct gxp_virtual_device *vd,
+					 uint core)
+{
+	struct gxp_host_control_region *core_cfg;
+
+	core_cfg = get_scratchpad_base(gxp, vd, core);
+	return core_cfg->generate_debug_dump;
+}
+
+void gxp_firmware_set_generate_debug_dump(struct gxp_dev *gxp, struct gxp_virtual_device *vd,
+					  uint core, u32 generate_debug_dump)
+{
+	struct gxp_host_control_region *core_cfg;
+
+	core_cfg = get_scratchpad_base(gxp, vd, core);
+	core_cfg->generate_debug_dump = generate_debug_dump;
+}
+
+u32 gxp_firmware_get_debug_dump_generated(struct gxp_dev *gxp, struct gxp_virtual_device *vd,
+					  uint core)
+{
+	struct gxp_host_control_region *core_cfg;
+
+	core_cfg = get_scratchpad_base(gxp, vd, core);
+	return core_cfg->debug_dump_generated;
+}
+
+void gxp_firmware_set_debug_dump_generated(struct gxp_dev *gxp, struct gxp_virtual_device *vd,
+					   uint core, u32 debug_dump_generated)
+{
+	struct gxp_host_control_region *core_cfg;
+
+	core_cfg = get_scratchpad_base(gxp, vd, core);
+	core_cfg->debug_dump_generated = debug_dump_generated;
+}
+
+u32 gxp_firmware_get_boot_status(struct gxp_dev *gxp, struct gxp_virtual_device *vd, uint core)
 {
 	struct gxp_host_control_region *core_cfg;
 

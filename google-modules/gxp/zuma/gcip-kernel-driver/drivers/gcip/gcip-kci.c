@@ -14,13 +14,6 @@
 #include <gcip/gcip-kci.h>
 #include <gcip/gcip-mailbox.h>
 
-static u32 gcip_kci_get_cmd_queue_head(struct gcip_mailbox *mailbox)
-{
-	struct gcip_kci *kci = gcip_mailbox_get_data(mailbox);
-
-	return kci->ops->get_cmd_queue_head(kci);
-}
-
 static u32 gcip_kci_get_cmd_queue_tail(struct gcip_mailbox *mailbox)
 {
 	struct gcip_kci *kci = gcip_mailbox_get_data(mailbox);
@@ -255,7 +248,6 @@ static void gcip_kci_on_error(struct gcip_mailbox *mailbox, int err)
 }
 
 static const struct gcip_mailbox_ops gcip_mailbox_ops = {
-	.get_cmd_queue_head = gcip_kci_get_cmd_queue_head,
 	.get_cmd_queue_tail = gcip_kci_get_cmd_queue_tail,
 	.inc_cmd_queue_tail = gcip_kci_inc_cmd_queue_tail,
 	.acquire_cmd_queue_lock = gcip_kci_acquire_cmd_queue_lock,

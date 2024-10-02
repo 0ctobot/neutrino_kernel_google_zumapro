@@ -2,7 +2,7 @@
 /*
  * SoC-specific function headers.
  *
- * Copyright (C) 2023 Google LLC
+ * Copyright (C) 2023-2024 Google LLC
  */
 
 #ifndef __MOBILE_SOC_H__

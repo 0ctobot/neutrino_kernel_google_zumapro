@@ -19,6 +19,17 @@
 #define GXP_MCU_BOOT_MODE_NORMAL 0
 #define GXP_MCU_BOOT_MODE_RECOVERY 1
 
+struct gxp_mcu_firmware_ns_buffer {
+	/* SG table for NS firmware buffer mappings. */
+	struct sg_table *sgt;
+	/* DMA address of the NS firmware buffer. */
+	dma_addr_t daddr;
+	/* Size of the NS firmware buffer. */
+	size_t size;
+	/* List of NS firmware buffer mappings for the device. */
+	struct list_head list;
+};
+
 struct gxp_mcu_firmware {
 	struct gxp_dev *gxp;
 	/* resource for MCU firmware image */
@@ -35,6 +46,14 @@ struct gxp_mcu_firmware {
 	struct work_struct fw_crash_handler_work;
 	/* The container of fault injection data. */
 	struct gcip_fault_inject *fault_inject;
+	/* List of all NS buffer mappings for the device. */
+	struct list_head ns_buffer_list;
+	/* Lock to protect @ns_buffer_list. */
+	struct mutex ns_buffer_list_lock;
+	/* The buffer of dynamic fw memory, which is only used in non-secure mode. */
+	struct gxp_mcu_firmware_ns_buffer *dynamic_fw_buffer;
+	/* The sanitizer enablement status for ASAN and UBSAN */
+	int sanitizer_status;
 };
 
 /*

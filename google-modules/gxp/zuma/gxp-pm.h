@@ -124,6 +124,13 @@ struct gxp_power_manager {
 	bool curr_low_clkmux;
 	/* Last requested clock mux state */
 	bool last_scheduled_low_clkmux;
+	/*
+	 * Min/Max frequency limits, in kHz, requested via debugfs.
+	 * Protected by `freq_limits_lock`.
+	 */
+	struct mutex freq_limits_lock;
+	u32 min_freq_limit;
+	u32 max_freq_limit;
 	int curr_state;
 	int curr_memory_state; /* Note: this state will not be maintained in the MCU mode. */
 	const struct gxp_pm_ops *ops;

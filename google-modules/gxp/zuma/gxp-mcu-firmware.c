@@ -16,6 +16,7 @@
 #include <linux/string.h>
 #include <linux/workqueue.h>
 
+#include <gcip/gcip-alloc-helper.h>
 #include <gcip/gcip-common-image-header.h>
 #include <gcip/gcip-fault-injection.h>
 #include <gcip/gcip-image-config.h>
@@ -62,17 +63,33 @@
 /*
  * Programs instruction remap CSRs.
  */
-static void program_iremap_csr(struct gxp_dev *gxp,
-			       struct gxp_mapped_resource *buf)
+static int program_iremap_csr(struct gxp_dev *gxp, struct gxp_mapped_resource *buf)
 {
+	struct gxp_mcu_firmware *mcu_fw = gxp_mcu_firmware_of(gxp);
+	size_t size;
+
 	dev_info(gxp->dev, "Program instruction remap CSRs");
 	gxp_soc_set_iremap_context(gxp);
-	gxp_write_32(gxp, GXP_REG_CFGVECTABLE0, buf->daddr);
 
-	gxp_write_32(gxp, GXP_REG_IREMAP_LOW, buf->daddr);
-	gxp_write_32(gxp, GXP_REG_IREMAP_HIGH, buf->daddr + buf->size);
+	if (mcu_fw->dynamic_fw_buffer) {
+		if (buf->daddr + buf->size > GXP_IREMAP_DYNAMIC_CODE_BASE) {
+			dev_err(gxp->dev,
+				"Bad dynamic firmware base %x, carveout daddr: %pad size: %llx",
+				GXP_IREMAP_DYNAMIC_CODE_BASE, &buf->daddr, buf->size);
+			return -EINVAL;
+		}
+		gxp_write_32(gxp, GXP_REG_CFGVECTABLE0, GXP_IREMAP_DYNAMIC_CODE_BASE);
+		size = mcu_fw->dynamic_fw_buffer->size;
+		gxp_write_32(gxp, GXP_REG_IREMAP_LOW, buf->daddr);
+		gxp_write_32(gxp, GXP_REG_IREMAP_HIGH, GXP_IREMAP_DYNAMIC_CODE_BASE + size);
+	} else {
+		gxp_write_32(gxp, GXP_REG_CFGVECTABLE0, buf->daddr);
+		gxp_write_32(gxp, GXP_REG_IREMAP_LOW, buf->daddr);
+		gxp_write_32(gxp, GXP_REG_IREMAP_HIGH, buf->daddr + buf->size);
+	}
 	gxp_write_32(gxp, GXP_REG_IREMAP_TARGET, buf->daddr);
 	gxp_write_32(gxp, GXP_REG_IREMAP_ENABLE, 1);
+	return 0;
 }
 
 /*
@@ -260,6 +277,68 @@ static bool wait_for_pg_state_locked(struct gxp_dev *gxp, bool force)
 	return gxp_pg_by_recovery_boot(gxp, force);
 }
 
+static struct gxp_mcu_firmware_ns_buffer *map_ns_buffer(struct gxp_dev *gxp, dma_addr_t daddr,
+							size_t size)
+{
+	struct gxp_mcu_firmware_ns_buffer *ns_buffer;
+	u64 gcip_map_flags = GCIP_MAP_FLAGS_DMA_RW;
+
+	ns_buffer = kzalloc(sizeof(*ns_buffer), GFP_KERNEL);
+	if (!ns_buffer)
+		return ERR_PTR(-ENOMEM);
+
+	ns_buffer->daddr = daddr;
+	ns_buffer->size = size;
+	ns_buffer->sgt = gcip_alloc_noncontiguous(gxp->dev, size, GFP_KERNEL);
+	if (!ns_buffer->sgt) {
+		kfree(ns_buffer);
+		return ERR_PTR(-ENOMEM);
+	}
+	if (!gcip_iommu_domain_map_sgt_to_iova(gxp_iommu_get_domain_for_dev(gxp), ns_buffer->sgt,
+					       daddr, &gcip_map_flags)) {
+		dev_err(gxp->dev, "Failed to map NS buffer, daddr: %pad size: %#zx", &daddr, size);
+		gcip_free_noncontiguous(ns_buffer->sgt);
+		kfree(ns_buffer);
+		return ERR_PTR(-EBUSY);
+	}
+	return ns_buffer;
+}
+
+static void unmap_ns_buffer(struct gxp_dev *gxp, struct gxp_mcu_firmware_ns_buffer *ns_buffer)
+{
+	gcip_iommu_domain_unmap_sgt_from_iova(gxp_iommu_get_domain_for_dev(gxp), ns_buffer->sgt,
+					      GCIP_MAP_FLAGS_DMA_RW);
+	gcip_free_noncontiguous(ns_buffer->sgt);
+	kfree(ns_buffer);
+}
+
+static void reset_shadow_memory(struct gxp_dev *gxp)
+{
+	struct gxp_mcu_firmware *mcu_fw = gxp_mcu_firmware_of(gxp);
+	struct gxp_mcu_firmware_ns_buffer *shadow_buffer = NULL, *cur;
+	u32 shadow_index =
+		GCIP_IMAGE_CONFIG_SANITIZER_INDEX(mcu_fw->cfg_parser.last_config.sanitizer_config);
+	u32 count = 0;
+
+	mutex_lock(&mcu_fw->ns_buffer_list_lock);
+	list_for_each_entry(cur, &mcu_fw->ns_buffer_list, list) {
+		if (count == shadow_index) {
+			shadow_buffer = cur;
+			break;
+		}
+		count++;
+	}
+	mutex_unlock(&mcu_fw->ns_buffer_list_lock);
+
+	if (shadow_buffer) {
+		memset(gcip_noncontiguous_sgt_to_mem(shadow_buffer->sgt), 0, shadow_buffer->size);
+		gxp_dma_sync_sg_for_device(gxp, shadow_buffer->sgt->sgl,
+					   shadow_buffer->sgt->orig_nents, DMA_TO_DEVICE);
+	} else {
+		dev_warn(gxp->dev, "shadow buffer not found");
+	}
+}
+
 int gxp_mcu_firmware_load(struct gxp_dev *gxp, char *fw_name,
 			  const struct firmware **fw)
 {
@@ -298,13 +377,6 @@ int gxp_mcu_firmware_load(struct gxp_dev *gxp, char *fw_name,
 
 	size = (*fw)->size - GCIP_FW_HEADER_SIZE;
 
-	if (size > mcu_fw->image_buf.size) {
-		dev_err(dev, "firmware %s size %#zx exceeds buffer size %#llx",
-			fw_name, size, mcu_fw->image_buf.size);
-		ret = -ENOSPC;
-		goto err_release_firmware;
-	}
-
 	imgcfg = get_image_config_from_hdr(hdr);
 	if (!imgcfg) {
 		dev_err(dev, "Unsupported image header generation");
@@ -332,8 +404,32 @@ int gxp_mcu_firmware_load(struct gxp_dev *gxp, char *fw_name,
 	}
 	mcu_fw->is_secure = !gcip_image_config_is_ns(imgcfg);
 
-	memcpy(mcu_fw->image_buf.vaddr, (*fw)->data + GCIP_FW_HEADER_SIZE,
-	       size);
+	mcu_fw->sanitizer_status = GCIP_IMAGE_CONFIG_SANITIZER_STATUS(imgcfg->sanitizer_config);
+
+	if (size > mcu_fw->image_buf.size || (mcu_fw->sanitizer_status != 0)) {
+		if (mcu_fw->is_secure) {
+			dev_err(dev, "firmware %s size %#zx exceeds buffer size %#llx", fw_name,
+				size, mcu_fw->image_buf.size);
+			ret = -ENOSPC;
+			goto err_clear_config;
+		}
+
+		/*
+		 * In non-secure mode, we support allocating buffers to put MCU firmware image
+		 * instead of using carveouts.
+		 */
+		mcu_fw->dynamic_fw_buffer = map_ns_buffer(gxp, GXP_IREMAP_DYNAMIC_CODE_BASE, size);
+		if (IS_ERR(mcu_fw->dynamic_fw_buffer))
+			goto err_clear_config;
+		memcpy(gcip_noncontiguous_sgt_to_mem(mcu_fw->dynamic_fw_buffer->sgt),
+		       (*fw)->data + GCIP_FW_HEADER_SIZE, size);
+		gxp_dma_sync_sg_for_device(gxp, mcu_fw->dynamic_fw_buffer->sgt->sgl,
+					   mcu_fw->dynamic_fw_buffer->sgt->orig_nents,
+					   DMA_TO_DEVICE);
+	} else {
+		memcpy(mcu_fw->image_buf.vaddr, (*fw)->data + GCIP_FW_HEADER_SIZE, size);
+	}
+
 out:
 	mutex_unlock(&mcu_fw->lock);
 	return 0;
@@ -357,6 +453,10 @@ void gxp_mcu_firmware_unload(struct gxp_dev *gxp, const struct firmware *fw)
 		dev_err(mcu_fw->gxp->dev, "Failed to unload MCU firmware");
 		mutex_unlock(&mcu_fw->lock);
 		return;
+	}
+	if (mcu_fw->dynamic_fw_buffer) {
+		unmap_ns_buffer(gxp, mcu_fw->dynamic_fw_buffer);
+		mcu_fw->dynamic_fw_buffer = NULL;
 	}
 	gcip_image_config_clear(&mcu_fw->cfg_parser);
 	mcu_fw->status = GCIP_FW_INVALID;
@@ -388,7 +488,11 @@ static int gxp_mcu_firmware_start(struct gxp_mcu_firmware *mcu_fw)
 			return -EIO;
 		}
 	} else {
-		program_iremap_csr(gxp, &mcu_fw->image_buf);
+		ret = program_iremap_csr(gxp, &mcu_fw->image_buf);
+		if (ret) {
+			gxp_lpm_down(gxp, GXP_MCU_CORE_ID);
+			return ret;
+		}
 		/* Raise wakeup doorbell */
 		dev_dbg(gxp->dev, "Raising doorbell %d interrupt\n",
 			CORE_WAKEUP_DOORBELL(GXP_MCU_CORE_ID));
@@ -548,6 +652,9 @@ static int gxp_mcu_firmware_run_locked(struct gxp_mcu_firmware *mcu_fw)
 
 	lockdep_assert_held(&mcu_fw->lock);
 
+	if (mcu_fw->sanitizer_status & GCIP_FW_ASAN_ENABLED)
+		reset_shadow_memory(gxp);
+
 	/*
 	 * Resets UCI/KCI CSRs to ensure that no unconsumed commands are carried over from the last
 	 * execution.
@@ -596,8 +703,10 @@ static int init_mcu_firmware_buf(struct gxp_dev *gxp,
 	int ret;
 
 	ret = gxp_acquire_rmem_resource(gxp, &r, "gxp-mcu-fw-region");
-	if (ret)
+	if (ret) {
+		dev_err(gxp->dev, "Failed to find reserved memory for MCU FW: %d", ret);
 		return ret;
+	}
 	buf->size = resource_size(&r);
 	buf->paddr = r.start;
 	buf->daddr = GXP_IREMAP_CODE_BASE;
@@ -734,24 +843,71 @@ static const struct attribute_group firmware_attr_group = {
 	.attrs = dev_attrs,
 };
 
-static int image_config_map(void *data, dma_addr_t daddr, phys_addr_t paddr,
-			    size_t size, unsigned int flags)
+static int image_config_map_ns(struct gxp_dev *gxp, dma_addr_t daddr, size_t size)
 {
-	struct gxp_dev *gxp = data;
-	const bool ns = !(flags & GCIP_IMAGE_CONFIG_FLAGS_SECURE);
+	struct gxp_mcu_firmware *mcu_fw = gxp_mcu_firmware_of(gxp);
+	struct gxp_mcu_firmware_ns_buffer *ns_buffer;
 
-	if (ns) {
-		dev_err(gxp->dev, "image config NS mappings are not supported");
-		return -EINVAL;
-	}
+	ns_buffer = map_ns_buffer(gxp, daddr, size);
+	if (IS_ERR(ns_buffer))
+		return PTR_ERR(ns_buffer);
 
-	return gcip_iommu_map(gxp_iommu_get_domain_for_dev(gxp), daddr, paddr, size,
-			      GCIP_MAP_FLAGS_DMA_RW);
+	mutex_lock(&mcu_fw->ns_buffer_list_lock);
+	list_add_tail(&ns_buffer->list, &mcu_fw->ns_buffer_list);
+	mutex_unlock(&mcu_fw->ns_buffer_list_lock);
+	return 0;
 }
 
-static void image_config_unmap(void *data, dma_addr_t daddr, size_t size, unsigned int flags)
+static void image_config_unmap_ns(struct gxp_dev *gxp, dma_addr_t daddr, size_t size)
+{
+	struct gxp_mcu_firmware *mcu_fw = gxp_mcu_firmware_of(gxp);
+	struct gxp_mcu_firmware_ns_buffer *ns_buffer = NULL, *cur;
+
+	mutex_lock(&mcu_fw->ns_buffer_list_lock);
+	list_for_each_entry(cur, &mcu_fw->ns_buffer_list, list) {
+		if (cur->daddr == daddr && cur->size == size) {
+			ns_buffer = cur;
+			list_del(&cur->list);
+			break;
+		}
+	}
+	mutex_unlock(&mcu_fw->ns_buffer_list_lock);
+
+	if (ns_buffer) {
+		unmap_ns_buffer(gxp, cur);
+	} else {
+		dev_warn(gxp->dev, "Failed to find NS buffer, daddr: %pad size: %#zx", &daddr,
+			 size);
+	}
+}
+
+static int image_config_map(void *data, dma_addr_t daddr, phys_addr_t paddr, size_t size,
+			    unsigned int cfg_map_flags, unsigned int cfg_op_flags)
 {
 	struct gxp_dev *gxp = data;
+	const bool ns = !(cfg_op_flags & GCIP_IMAGE_CONFIG_FLAGS_SECURE);
+	u64 gcip_map_flags = GCIP_MAP_FLAGS_DMA_RW;
+
+	if (ns)
+		return image_config_map_ns(gxp, daddr, size);
+
+	if (GCIP_IMAGE_CONFIG_MAP_MMIO(cfg_map_flags))
+		gcip_map_flags |= GCIP_MAP_FLAGS_MMIO_TO_FLAGS(1);
+
+	return gcip_iommu_map(gxp_iommu_get_domain_for_dev(gxp), daddr, paddr, size,
+			      gcip_map_flags);
+}
+
+static void image_config_unmap(void *data, dma_addr_t daddr, size_t size,
+			       unsigned int cfg_map_flags, unsigned int cfg_op_flags)
+{
+	struct gxp_dev *gxp = data;
+	const bool ns = !(cfg_op_flags & GCIP_IMAGE_CONFIG_FLAGS_SECURE);
+
+	if (ns) {
+		image_config_unmap_ns(gxp, daddr, size);
+		return;
+	}
 
 	gcip_iommu_unmap(gxp_iommu_get_domain_for_dev(gxp), daddr, size);
 }
@@ -814,6 +970,8 @@ int gxp_mcu_firmware_init(struct gxp_dev *gxp, struct gxp_mcu_firmware *mcu_fw)
 	mcu_fw->status = GCIP_FW_INVALID;
 	mcu_fw->crash_cnt = 0;
 	mutex_init(&mcu_fw->lock);
+	INIT_LIST_HEAD(&mcu_fw->ns_buffer_list);
+	mutex_init(&mcu_fw->ns_buffer_list_lock);
 	INIT_WORK(&mcu_fw->fw_crash_handler_work, gxp_mcu_firmware_crash_handler_work);
 
 	ret = device_add_group(gxp->dev, &firmware_attr_group);

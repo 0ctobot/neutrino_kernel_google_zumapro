@@ -1,17 +1,39 @@
 /* SPDX-License-Identifier: GPL-2.0-only */
 /*
- * GCIP-integrated IIF driver fence table.
+ * Interface to utilize IIF fence tables, the wait table and the signal table. Both tables will have
+ * one entry per fence ID.
  *
- * Copyright (C) 2023 Google LLC
+ * - Wait table: Describes which IPs are waiting on each fence. This table will be written by the
+ *               kernel driver only.
+ *
+ * - Signal table: Describes how many signals are remaining to unblock each fence. This table will
+ *                 be initialized by the kernel driver and each signaler IP will update it.
+ *
+ * Copyright (C) 2023-2024 Google LLC
  */
 
 #ifndef __IIF_IIF_FENCE_TABLE_H__
 #define __IIF_IIF_FENCE_TABLE_H__
 
+#include <linux/bitops.h>
 #include <linux/of.h>
 #include <linux/types.h>
 
-#include <gcip/iif/iif.h>
+#include <iif/iif.h>
+
+#define IIF_CLEAR_LSB(b) ((b) & ((b) - 1))
+
+/*
+ * Iterates the type of IPs waiting on the fence of @fence_id.
+ *
+ * fence_table (input): Pointer to the fence table.
+ * fence_id (input): ID of the fence to get IPs waiting on it.
+ * ip (output): Type of IP waiting on the fence (enum iif_ip_type).
+ * tmp (output): Temporary variable to iterate the wait table entry (int).
+ */
+#define for_each_waiting_ip(fence_table, fence_id, waiting_ip, tmp)                               \
+	for (tmp = (fence_table)->wait_table[fence_id].waiting_ips, waiting_ip = __ffs(tmp); tmp; \
+	     tmp = IIF_CLEAR_LSB(tmp), waiting_ip = __ffs(tmp))
 
 /* Entry of the wait table. */
 struct iif_wait_table_entry {

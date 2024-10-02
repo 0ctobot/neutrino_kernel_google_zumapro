@@ -207,12 +207,32 @@ void gcip_dma_fence_show(struct gcip_dma_fence *gfence, struct seq_file *s)
 	spin_unlock_irq(&gfence->lock);
 }
 
+struct dma_fence *gcip_dma_fence_merge_fences(int num_fences, struct dma_fence **fences)
+{
+	struct dma_fence *tmp;
+	struct dma_fence *array;
+	int i;
+
+	array = dma_fence_unwrap_merge(fences[0]);
+	if (!array)
+		return ERR_PTR(-ENOMEM);
+
+	for (i = 1; i < num_fences; i++) {
+		tmp = array;
+		array = dma_fence_unwrap_merge(tmp, fences[i]);
+		dma_fence_put(tmp);
+		if (!array)
+			return ERR_PTR(-ENOMEM);
+	}
+
+	return array;
+}
+
 struct dma_fence *gcip_dma_fence_merge_fds(int num_fences, int *fence_fds)
 {
 	struct dma_fence **fences;
-	struct dma_fence *tmp;
 	struct dma_fence *result;
-	int i = 0;
+	int i;
 
 	if (!num_fences)
 		return ERR_PTR(-EINVAL);
@@ -229,20 +249,7 @@ struct dma_fence *gcip_dma_fence_merge_fds(int num_fences, int *fence_fds)
 		}
 	}
 
-	result = dma_fence_unwrap_merge(fences[0]);
-	if (!result) {
-		result = ERR_PTR(-ENOMEM);
-		goto out;
-	}
-	for (i = 1; i < num_fences; i++) {
-		tmp = result;
-		result = dma_fence_unwrap_merge(tmp, fences[i]);
-		dma_fence_put(tmp);
-		if (!result) {
-			result = ERR_PTR(-ENOMEM);
-			goto out;
-		}
-	}
+	result = gcip_dma_fence_merge_fences(num_fences, fences);
 
 out:
 	for (i = 0; i < num_fences; i++)

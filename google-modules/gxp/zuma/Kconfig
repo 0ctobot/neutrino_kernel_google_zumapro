@@ -25,5 +25,4 @@ config CALLISTO
 	  To compile this driver as a module, choose M here. The module will be
 	  called "gxp".
 
-
 endmenu

@@ -2,17 +2,18 @@
 /*
  * GXP mailbox driver.
  *
- * Copyright (C) 2020-2022 Google LLC
+ * Copyright (C) 2020-2024 Google LLC
  */
+
 #ifndef __GXP_MAILBOX_DRIVER_H__
 #define __GXP_MAILBOX_DRIVER_H__
 
+#include <linux/io.h>
+
+#include <gcip/gcip-mailbox.h>
+
 #include "gxp-config.h"
 #include "gxp-mailbox.h"
-
-#if !GXP_USE_LEGACY_MAILBOX
-#include <gcip/gcip-mailbox.h>
-#endif
 
 /* Utilities of circular queue operations */
 
@@ -33,11 +34,21 @@ u32 gxp_circ_queue_inc(u32 index, u32 inc, u32 queue_size, u32 wrap_bit);
 void gxp_mailbox_driver_init(struct gxp_mailbox *mailbox);
 void gxp_mailbox_driver_exit(struct gxp_mailbox *mailbox);
 
-void gxp_mailbox_driver_enable_interrupts(struct gxp_mailbox *mailbox);
+void gxp_mailbox_driver_register_interrupts(struct gxp_mailbox *mailbox);
 void gxp_mailbox_driver_disable_interrupts(struct gxp_mailbox *mailbox);
 
 void __iomem *gxp_mailbox_get_csr_base(struct gxp_dev *gxp, uint index);
 void __iomem *gxp_mailbox_get_data_base(struct gxp_dev *gxp, uint index);
+
+static inline u32 gxp_mailbox_csr_read(struct gxp_mailbox *mailbox, uint reg_offset)
+{
+	return readl(mailbox->csr_reg_base + reg_offset);
+}
+
+static inline void gxp_mailbox_csr_write(struct gxp_mailbox *mailbox, uint reg_offset, u32 value)
+{
+	writel(value, mailbox->csr_reg_base + reg_offset);
+}
 
 void gxp_mailbox_reset_hw(struct gxp_mailbox *mailbox);
 /**
@@ -59,12 +70,6 @@ void gxp_mailbox_clear_interrupts(struct gxp_mailbox *mailbox, u32 intr_bits);
  * @mailbox: Mailbox for which to enable interrupts.
  */
 void gxp_mailbox_enable_interrupt(struct gxp_mailbox *mailbox);
-/**
- * gxp_mailbox_get_interrupt_status() - Retrieve the set interrupt bits coming
- *                                      to AP/Host.
- * @mailbox: Mailbox for which to get interrupt status.
- */
-u32 gxp_mailbox_get_interrupt_status(struct gxp_mailbox *mailbox);
 /* gxp_mailbox_wait_for_device_mailbox_init() - Wait for mailbox to get
  *                                              enabled/initialised by device.
  * @mailbox: Mailbox to get it enabled from device end.
@@ -165,12 +170,10 @@ int gxp_mailbox_inc_resp_queue_head_nolock(struct gxp_mailbox *mailbox, u32 inc,
 int gxp_mailbox_inc_resp_queue_head_locked(struct gxp_mailbox *mailbox, u32 inc,
 					   u32 wrap_bit);
 
-#if !GXP_USE_LEGACY_MAILBOX
 /*
  * Following functions are used when setting the operators of `struct gcip_mailbox_ops`.
  * To use these functions, @mailbox->data should be set as an instance of `struct gxp_mailbox`.
  */
-u32 gxp_mailbox_gcip_ops_get_cmd_queue_head(struct gcip_mailbox *mailbox);
 u32 gxp_mailbox_gcip_ops_get_cmd_queue_tail(struct gcip_mailbox *mailbox);
 void gxp_mailbox_gcip_ops_inc_cmd_queue_tail(struct gcip_mailbox *mailbox,
 					     u32 inc);
@@ -201,6 +204,5 @@ int gxp_mailbox_gcip_ops_after_enqueue_cmd(struct gcip_mailbox *mailbox,
 void gxp_mailbox_gcip_ops_after_fetch_resps(struct gcip_mailbox *mailbox,
 					    u32 num_resps);
 bool gxp_mailbox_gcip_ops_is_block_off(struct gcip_mailbox *mailbox);
-#endif /* !GXP_USE_LEGACY_MAILBOX */
 
 #endif /* __GXP_MAILBOX_DRIVER_H__ */

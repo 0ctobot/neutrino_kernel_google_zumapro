@@ -12,7 +12,8 @@
 #include <linux/of_irq.h>
 #include <linux/spinlock.h>
 
-#include "gxp-config.h" /* GXP_USE_LEGACY_MAILBOX */
+#include <trace/events/gxp.h>
+
 #include "gxp-mailbox-driver.h"
 #include "gxp-mailbox-regs.h"
 #include "gxp-mailbox.h"
@@ -32,6 +33,8 @@ static void data_write(struct gxp_mailbox *mailbox, uint reg_offset, u32 value)
 static irqreturn_t mailbox_irq_handler(int irq, void *arg)
 {
 	struct gxp_mailbox *mailbox = (struct gxp_mailbox *)arg;
+
+	trace_gxp_uci_rsp_start(irq);
 
 	gxp_mailbox_chip_irq_handler(mailbox);
 	return IRQ_HANDLED;
@@ -104,10 +107,9 @@ void gxp_mailbox_driver_exit(struct gxp_mailbox *mailbox)
 	/* Nothing to cleanup */
 }
 
-void gxp_mailbox_driver_enable_interrupts(struct gxp_mailbox *mailbox)
+void gxp_mailbox_driver_register_interrupts(struct gxp_mailbox *mailbox)
 {
 	register_irq(mailbox);
-	gxp_mailbox_enable_interrupt(mailbox);
 }
 
 void gxp_mailbox_driver_disable_interrupts(struct gxp_mailbox *mailbox)
@@ -339,14 +341,6 @@ int gxp_mailbox_inc_resp_queue_head_locked(struct gxp_mailbox *mailbox, u32 inc,
 	return gxp_mailbox_inc_resp_queue_head_nolock(mailbox, inc, wrap_bit);
 }
 
-#if !GXP_USE_LEGACY_MAILBOX
-u32 gxp_mailbox_gcip_ops_get_cmd_queue_head(struct gcip_mailbox *mailbox)
-{
-	struct gxp_mailbox *gxp_mbx = mailbox->data;
-
-	return gxp_mailbox_read_cmd_queue_head(gxp_mbx);
-}
-
 u32 gxp_mailbox_gcip_ops_get_cmd_queue_tail(struct gcip_mailbox *mailbox)
 {
 	struct gxp_mailbox *gxp_mbx = mailbox->data;
@@ -500,4 +494,3 @@ bool gxp_mailbox_gcip_ops_is_block_off(struct gcip_mailbox *mailbox)
 
 	return gxp_pm_is_blk_down(gxp_mbx->gxp);
 }
-#endif /* !GXP_USE_LEGACY_MAILBOX */
