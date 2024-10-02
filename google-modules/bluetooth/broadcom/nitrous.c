@@ -68,6 +68,7 @@ struct nitrous_bt_lpm {
 	struct logbuffer *log;
 	int idle_bt_tx_ip_index;
 	int idle_bt_rx_ip_index;
+	int wakelock_ctrl;
 };
 
 #define PROC_BTWAKE	0
@@ -165,7 +166,7 @@ static irqreturn_t nitrous_host_wake_isr(int irq, void *data)
 		logbuffer_log(lpm->log, "host_wake_isr de-asserted %ptTt.%03ld",
 			&ts, ts.tv_nsec / NSEC_PER_MSEC);
 		exynos_update_ip_idle_status(lpm->idle_bt_rx_ip_index, STATUS_IDLE);
-		pm_wakeup_dev_event(lpm->dev, NITROUS_RX_AUTOSUSPEND_DELAY, false);
+		pm_wakeup_dev_event(lpm->dev, lpm->wakelock_ctrl, false);
 	}
 
 	return IRQ_HANDLED;
@@ -676,7 +677,7 @@ static int nitrous_probe(struct platform_device *pdev)
 {
 	struct device *dev = &pdev->dev;
 	struct nitrous_bt_lpm *lpm;
-	int rc = 0;
+	int rc, wakelock_time = 0;
 
 	lpm = devm_kzalloc(dev, sizeof(struct nitrous_bt_lpm), GFP_KERNEL);
 	if (!lpm)
@@ -727,6 +728,15 @@ static int nitrous_probe(struct platform_device *pdev)
 	dev_dbg(lpm->dev, "DBO support: %x", lpm->dbo_state);
 
 	lpm->off_mode_latch = device_property_read_bool(lpm->dev, "off-mode-latch");
+
+	if (!of_property_read_u32(pdev->dev.of_node, "goog,wakelock-ctrl",
+				&wakelock_time)) {
+		dev_info(lpm->dev, "Using Wakelock Control time (%d)", wakelock_time);
+		lpm->wakelock_ctrl = wakelock_time;
+	} else {
+		dev_info(lpm->dev, "Using default Wakelock time");
+		lpm->wakelock_ctrl = NITROUS_RX_AUTOSUSPEND_DELAY;
+	}
 
 	lpm->log = logbuffer_register("btlpm");
 	if (IS_ERR_OR_NULL(lpm->log)) {
