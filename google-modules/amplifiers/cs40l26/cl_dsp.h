@@ -146,6 +146,15 @@
 #define CL_DSP_OWT_HEADER_MAX_LEN		254
 #define CL_DSP_OWT_HEADER_ENTRY_SIZE		12
 
+/* Waveform metadata */
+#define CL_DSP_SVC_ID			1
+#define CL_DSP_SVC_LEN			1
+#define CL_DSP_MD_SIZE_MAX_BYTES	28
+#define CL_DSP_MD_PRESENT		BIT(10)
+#define CL_DSP_MD_TERMINATOR		0xFFFFFF
+#define CL_DSP_MD_TYPE_MASK		GENMASK(23, 16)
+#define CL_DSP_MD_LENGTH_MASK		GENMASK(15, 8)
+
 /* macros */
 #define CL_DSP_WORD_ALIGN(n)	(CL_DSP_BYTES_PER_WORD +\
 				(((n) / CL_DSP_BYTES_PER_WORD) *\
@@ -266,6 +275,7 @@ struct cl_dsp_owt_header {
 	u32 offset;
 	u32 size;
 	void *data;
+	u32 braking_time;
 };
 
 struct cl_dsp_owt_desc {
@@ -388,9 +398,13 @@ int cl_dsp_get_reg(struct cl_dsp *dsp, const char *coeff_name,
 int cl_dsp_get_flags(struct cl_dsp *dsp, const char *coeff_name,
 		const unsigned int block_type, const unsigned int algo_id,
 		unsigned int *flags);
+int cl_dsp_get_length(struct cl_dsp *dsp, const char *coeff_name,
+		const unsigned int block_type, const unsigned int algo_id,
+		size_t *length);
 bool cl_dsp_algo_is_present(struct cl_dsp *dsp, const unsigned int algo_id);
 struct cl_dsp_memchunk cl_dsp_memchunk_create(void *data, int size);
 int cl_dsp_memchunk_write(struct cl_dsp_memchunk *ch, int nbits, u32 val);
+inline bool cl_dsp_memchunk_end(struct cl_dsp_memchunk *ch);
 int cl_dsp_memchunk_read(struct cl_dsp *dsp, struct cl_dsp_memchunk *ch,
 		int nbits, void *val);
 int cl_dsp_memchunk_flush(struct cl_dsp_memchunk *ch);

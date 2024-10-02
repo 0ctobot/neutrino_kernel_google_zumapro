@@ -616,6 +616,12 @@ int tas25xx_init_work_func(struct tas25xx_priv *p_tas25xx, struct tas_device *de
 			"ch=%d Error in  post powerup data write.  err=%d\n",
 			chn, ret);
 
+	ret = tas25xx_update_playback_volume(p_tas25xx, chn);
+	if (ret)
+		dev_err(plat_data->dev,
+			"ch=%d Error in update playback volume.  err=%d\n",
+			chn, ret);
+
 	/* check for interrupts during power up */
 	detected = tas_dev_interrupt_read(p_tas25xx, chn, &type);
 	if (detected) {

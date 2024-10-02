@@ -55,6 +55,7 @@
 #define CS40L26_GLOBAL_ENABLES				0x2014
 #define CS40L26_BLOCK_ENABLES2				0x201C
 #define CS40L26_ERROR_RELEASE				0x2034
+#define CS40L26_GPIO_PAD_CONTROL			0x242C
 #define CS40L26_PWRMGT_CTL				0x2900
 #define CS40L26_PWRMGT_STS				0x290C
 #define CS40L26_REFCLK_INPUT				0x2C04
@@ -84,6 +85,7 @@
 #define CS40L26_NG_CONFIG				0x6808
 #define CS40L26_DIGPWM_CONFIG2				0x7068
 #define CS40L26_TST_DAC_MSM_CONFIG			0x7404
+#define CS40L26_ALIVE_DCIN_WD				0x7424
 #define CS40L26_IRQ1_CFG				0x10000
 #define CS40L26_IRQ1_STATUS				0x10004
 #define CS40L26_IRQ1_EINT_1				0x10010
@@ -92,6 +94,7 @@
 #define CS40L26_IRQ1_STS_2				0x10094
 #define CS40L26_IRQ1_MASK_1				0x10110
 #define CS40L26_IRQ1_MASK_2				0x10114
+#define CS40L26_GPIO1_CTRL1				0x11008
 #define CS40L26_MIXER_NGATE_CH1_CFG			0x12004
 #define CS40L26_DSP_MBOX_1				0x13000
 #define CS40L26_DSP_MBOX_2				0x13004
@@ -127,9 +130,7 @@
 #define CS40L26_MAX_I2C_READ_SIZE_WORDS			32
 
 /* Register default changes */
-#define CS40L26_TST_DAC_MSM_CONFIG_DEFAULT_CHANGE_VALUE_FULL	0x11330000
-#define CS40L26_TST_DAC_MSM_CONFIG_DEFAULT_CHANGE_VALUE_H16 (\
-		CS40L26_TST_DAC_MSM_CONFIG_DEFAULT_CHANGE_VALUE_FULL >> 16)
+#define CS40L26_SPK_DEFAULT_HIZ					0x1133
 #define CS40L26_SPK_DEFAULT_HIZ_MASK				BIT(28)
 #define CS40L26_SPK_DEFAULT_HIZ_SHIFT				28
 
@@ -211,69 +212,65 @@
 #define CS40L26_EXT_ALGO_ID		0x0004013C
 #define CS40L26_DVL_ALGO_ID		0x00040140
 #define CS40L26_EP_ALGO_ID		0x00040141
+#define CS40L26_LS_ALGO_ID		0x000A0144
 #define CS40L26_LF0T_ALGO_ID		0x00040143
 
 /* DebugFS */
 #define CS40L26_ALGO_ID_MAX_STR_LEN	12
 #define CS40L26_HW_STR_LEN		16
+#define CS40L26_DEBUGFS_DIR_NAME_LEN	20
 
-/* Power management */
-#define CS40L26_PSEQ_MAX_WORDS			129
-#define CS40L26_PSEQ_NUM_OPS			8
-#define CS40L26_PSEQ_STR_LINE_LEN		64
-#define CS40L26_PSEQ_OP_MASK			GENMASK(23, 16)
-#define CS40L26_PSEQ_OP_SHIFT			16
-#define CS40L26_PSEQ_OP_WRITE_FULL		0x00
-#define CS40L26_PSEQ_OP_WRITE_FULL_WORDS	3
-#define CS40L26_PSEQ_OP_WRITE_FIELD		0x01
-#define CS40L26_PSEQ_OP_WRITE_FIELD_WORDS	4
-#define CS40L26_PSEQ_OP_WRITE_ADDR8		0x02
-#define CS40L26_PSEQ_OP_WRITE_ADDR8_WORDS	2
-#define CS40L26_PSEQ_OP_WRITE_INCR		0x03
-#define CS40L26_PSEQ_OP_WRITE_INCR_WORDS	2
-#define CS40L26_PSEQ_OP_WRITE_L16		0x04
-#define CS40L26_PSEQ_OP_WRITE_H16		0x05
-#define CS40L26_PSEQ_OP_WRITE_X16_WORDS		2
-#define CS40L26_PSEQ_OP_DELAY			0xFE
-#define CS40L26_PSEQ_OP_DELAY_WORDS		1
-#define CS40L26_PSEQ_OP_END			0xFF
-#define CS40L26_PSEQ_OP_END_WORDS		1
-#define CS40L26_PSEQ_OP_END_ADDR		0xFFFFFF
-#define CS40L26_PSEQ_OP_END_DATA		0xFFFFFF
-#define CS40L26_PSEQ_INVALID_ADDR		0xFF000000
-#define CS40L26_PSEQ_WRITE_FULL_LOWER_ADDR_SHIFT	8
-#define CS40L26_PSEQ_WRITE_FULL_UPPER_ADDR_SHIFT	16
-#define CS40L26_PSEQ_WRITE_FULL_LOWER_ADDR_MASK		GENMASK(15, 0)
-#define CS40L26_PSEQ_WRITE_FULL_UPPER_ADDR_MASK		GENMASK(31, 0)
-#define CS40L26_PSEQ_WRITE_FULL_UPPER_DATA_SHIFT	24
-#define CS40L26_PSEQ_WRITE_FULL_LOWER_DATA_MASK		GENMASK(23, 0)
-#define CS40L26_PSEQ_WRITE_FULL_UPPER_DATA_MASK		GENMASK(31, 24)
-#define CS40L26_PSEQ_WRITE_X16_LOWER_ADDR_SHIFT		16
-#define CS40L26_PSEQ_WRITE_X16_LOWER_ADDR_MASK		GENMASK(7, 0)
-#define CS40L26_PSEQ_WRITE_X16_UPPER_ADDR_SHIFT		8
-#define CS40L26_PSEQ_WRITE_X16_UPPER_ADDR_MASK		GENMASK(23, 8)
-#define CS40L26_PSEQ_WRITE_X16_UPPER_DATA_SHIFT		0
-#define CS40L26_PSEQ_WRITE_X16_UPPER_DATA_MASK		GENMASK(31, 0)
-#define CS40L26_PSEQ_WRITE_ADDR8_ADDR_SHIFT		8
-#define CS40L26_PSEQ_WRITE_ADDR8_ADDR_MASK		GENMASK(7, 0)
-#define CS40L26_PSEQ_WRITE_ADDR8_UPPER_DATA_SHIFT	24
-#define CS40L26_PSEQ_WRITE_ADDR8_UPPER_DATA_MASK	GENMASK(31, 24)
-#define CS40L26_PSEQ_WRITE_ADDR8_LOWER_DATA_MASK	GENMASK(23, 0)
+/* Write Sequencer */
+#define CS40L26_WSEQ_NAME_MAX_LEN	17
+#define CS40L26_WSEQ_ACTIVE_NAME	"ACTIVE_SEQUENCE"
+#define CS40L26_WSEQ_POWER_ON_NAME	"POWER_ON_SEQUENCE"
 
-#define CS40L26_PSEQ_FULL_ADDR_GET(x, y)	((((x) & 0xFFFF) << 16) |\
-						(((y) & 0xFFFF00) >> 8))
-#define CS40L26_PSEQ_FULL_DATA_GET(x, y)	((((x) & 0xFF) << 24) |\
-						((y) & 0xFFFFFF))
-#define CS40L26_PSEQ_X16_ADDR_GET(x, y)		((((x) & 0xFFFF) << 8) |\
-						(((y) & 0xFF0000) >> 16))
-#define CS40L26_PSEQ_L16_DATA_GET(x)		((x) & 0xFFFF)
-#define CS40L26_PSEQ_H16_DATA_GET(x)		(CS40L26_PSEQ_L16_DATA_GET((x)) << 16)
-#define CS40L26_PSEQ_ADDR8_ADDR_GET(x)		(((x) & 0xFF00) >> 8)
-#define CS40L26_PSEQ_ADDR8_DATA_GET(x, y)	((((x) & 0xFF) << 24) |\
-						((y) & 0xFFFFFF))
+#define CS40L26_WSEQ_OP_MAX_WORDS		3
+#define CS40L26_WSEQ_OP_CODE_NBITS		8
+#define CS40L26_WSEQ_STR_LINE_LEN		64
+#define CS40L26_WSEQ_OP_WRITE_FULL		0x00
+#define CS40L26_WSEQ_OP_WRITE_FULL_ADDR_NBITS	32
+#define CS40L26_WSEQ_OP_WRITE_FULL_DATA_NBITS	32
+#define CS40L26_WSEQ_OP_WRITE_ADDR8		0x02
+#define CS40L26_WSEQ_OP_WRITE_ADDR8_ADDR_NBITS	8
+#define CS40L26_WSEQ_OP_WRITE_ADDR8_DATA_NBITS	32
+#define CS40L26_WSEQ_OP_WRITE_L16		0x04
+#define CS40L26_WSEQ_OP_WRITE_H16		0x05
+#define CS40L26_WSEQ_OP_WRITE_X16_ADDR_NBITS	24
+#define CS40L26_WSEQ_OP_WRITE_X16_DATA_NBITS	16
+#define CS40L26_WSEQ_OP_END			0xFF
+#define CS40L26_WSEQ_OP_END_ADDR		0xFFFFFF
+#define CS40L26_WSEQ_OP_END_DATA		0xFFFFFF
 
+#define CS40L26_WSEQ_LIST_TERMINATOR		0xFFFFFF
+
+#define CS40L26_WSEQ_WRITE_FULL_LOWER_ADDR_SHIFT	8
+#define CS40L26_WSEQ_WRITE_FULL_UPPER_ADDR_SHIFT	16
+#define CS40L26_WSEQ_WRITE_FULL_LOWER_ADDR_MASK		GENMASK(15, 0)
+#define CS40L26_WSEQ_WRITE_FULL_UPPER_ADDR_MASK		GENMASK(31, 0)
+#define CS40L26_WSEQ_WRITE_FULL_UPPER_DATA_SHIFT	24
+#define CS40L26_WSEQ_WRITE_FULL_LOWER_DATA_MASK		GENMASK(23, 0)
+#define CS40L26_WSEQ_WRITE_FULL_UPPER_DATA_MASK		GENMASK(31, 24)
+#define CS40L26_WSEQ_WRITE_X16_LOWER_ADDR_SHIFT		16
+#define CS40L26_WSEQ_WRITE_X16_LOWER_ADDR_MASK		GENMASK(7, 0)
+#define CS40L26_WSEQ_WRITE_X16_UPPER_ADDR_SHIFT		8
+#define CS40L26_WSEQ_WRITE_X16_UPPER_ADDR_MASK		GENMASK(23, 8)
+#define CS40L26_WSEQ_WRITE_X16_UPPER_DATA_SHIFT		0
+#define CS40L26_WSEQ_WRITE_X16_UPPER_DATA_MASK		GENMASK(31, 0)
+#define CS40L26_WSEQ_WRITE_ADDR8_ADDR_SHIFT		8
+#define CS40L26_WSEQ_WRITE_ADDR8_ADDR_MASK		GENMASK(7, 0)
+#define CS40L26_WSEQ_WRITE_ADDR8_UPPER_DATA_SHIFT	24
+#define CS40L26_WSEQ_WRITE_ADDR8_UPPER_DATA_MASK	GENMASK(31, 24)
+#define CS40L26_WSEQ_WRITE_ADDR8_LOWER_DATA_MASK	GENMASK(23, 0)
+
+#define CS40L26_WSEQ_LOWER_MASK			GENMASK(15, 0)
+#define CS40L26_WSEQ_UPPER_MASK			GENMASK(31, 16)
+
+
+/* Power Management */
 #define CS40L26_PM_STDBY_TIMEOUT_OFFSET		16
 #define CS40L26_PM_STDBY_TIMEOUT_MS_MIN		100
+#define CS40L26_PM_STDBY_TIMEOUT_US_MIN		100000
 #define CS40L26_PM_TIMEOUT_MS_MAX		10000
 #define CS40L26_PM_ACTIVE_TIMEOUT_OFFSET	24
 #define CS40L26_PM_ACTIVE_TIMEOUT_MS_DEFAULT	250
@@ -292,7 +289,6 @@
 
 #define CS40L26_WKSRC_STS_EN			BIT(7)
 
-
 #define CS40L26_NG_THRESHOLD_MASK		GENMASK(2, 0)
 #define CS40L26_NG_DELAY_MASK			GENMASK(6, 4)
 #define CS40L26_NG_ENABLE_MASK			GENMASK(13, 8)
@@ -302,6 +298,8 @@
 #define CS40L26_NG_DELAY_DEFAULT		3
 #define CS40L26_NG_DELAY_MIN			0
 #define CS40L26_NG_DELAY_MAX			7
+
+#define CS40L26_AUX_NG_DEFAULT			0x303
 
 #define CS40L26_AUX_NG_THLD_MASK		GENMASK(2, 0)
 #define CS40L26_AUX_NG_HOLD_MASK		GENMASK(11, 8)
@@ -392,6 +390,7 @@
 #define CS40L26_EP_FILE_NAME		"cs40l26-ep.bin"
 #define CS40L26_LF0T_FILE_NAME		"cs40l26-lf0t.bin"
 #define CS40L26_DBC_FILE_NAME		"cs40l26-dbc.bin"
+#define CS40L26_LS_CAL_FILE_NAME	"cs40l26-ls.bin"
 
 #define CS40L26_SVC_LE_EST_TIME_US	8000
 #define CS40L26_SVC_LE_MAX_ATTEMPTS	2
@@ -407,8 +406,10 @@
 #define CS40L26_FW_MAINT_BRANCH			0x27
 #define CS40L26_FW_MAINT_CALIB_MIN_REV		0x21010D
 #define CS40L26_FW_MAINT_CALIB_BRANCH		0x21
-#define CS40L26_FW_B2_MIN_REV			0x090000
-#define CS40L26_FW_B2_BRANCH			0x09
+#define CS40L26_FW_B2_MIN_REV			0X0A0000
+#define CS40L26_FW_B2_BRANCH			0x0A
+#define CS40L26_FW_B2_CALIB_MIN_REV		0x0A0000
+#define CS40L26_FW_B2_CALIB_BRANCH		0x0A
 #define CS40L26_FW_GPI_TIMEOUT_MIN_REV		0x07022A
 #define CS40L26_FW_GPI_TIMEOUT_CALIB_MIN_REV	0x010122
 #define CS40L26_FW_BRANCH_MASK			GENMASK(23, 21)
@@ -472,7 +473,7 @@
 #define CS40L26_ERASE_BUFFER_MS			500
 #define CS40L26_MAX_WAIT_VIBE_COMPLETE_MS	10000
 
-/* GPI Triggering */
+/* GPIO */
 #define CS40L26_GPIO1			1
 #define CS40L26_EVENT_MAP_INDEX_MASK	GENMASK(8, 0)
 #define CS40L26_EVENT_MAP_NUM_GPI_REGS	4
@@ -490,8 +491,21 @@
 #define CS40L26_BTN_OWT_MASK	BIT(16)
 #define CS40L26_BTN_OWT_SHIFT	16
 
+#define CS40L26_GPIO_CTRL_DIR_MASK	BIT(31)
+#define CS40L26_GPIO_CTRL_DIR_SHIFT	31
+
+#define CS40L26_GPIO_CTRL_DIR_OUT	0
+#define CS40L26_GPIO_CTRL_DIR_IN	1
+
+#define CS40L26_GP1_CTRL_MASK		GENMASK(18, 16)
+#define CS40L26_GP1_CTRL_SHIFT		16
+
+#define CS40L26_GP1_CTRL_HIZ		0
+#define CS40L26_GP1_CTRL_GPIO		1
+
 /* Interrupts */
 #define CS40L26_IRQ_STATUS_MASK		BIT(0)
+
 #define CS40L26_GPIO1_RISE_MASK		BIT(0)
 #define CS40L26_GPIO1_FALL_MASK		BIT(1)
 #define CS40L26_GPIO2_RISE_MASK		BIT(2)
@@ -513,11 +527,15 @@
 #define CS40L26_BST_IPK_FLAG_MASK	BIT(23)
 #define CS40L26_TEMP_ERR_MASK		BIT(26)
 #define CS40L26_AMP_ERR_MASK		BIT(27)
+#define CS40L26_DC_WD_RISE_MASK		BIT(28)
+#define CS40L26_DC_WD_FALL_MASK		BIT(29)
 #define CS40L26_VIRTUAL2_MBOX_WR_MASK	BIT(31)
+
 #define CS40L26_VPBR_FLAG_MASK		BIT(17)
 #define CS40L26_VPBR_ATT_CLR_MASK	BIT(18)
 #define CS40L26_VBBR_FLAG_MASK		BIT(19)
 #define CS40L26_VBBR_ATT_CLR_MASK	BIT(20)
+
 #define CS40L26_IRQ(_irq, _name, _hand)	\
 	{				\
 		.irq = CS40L26_ ## _irq ## _IRQ,		\
@@ -529,7 +547,6 @@
 		.reg_offset = (CS40L26_ ## _reg) - CS40L26_IRQ1_EINT_1,	\
 		.mask = CS40L26_ ## _irq ## _MASK			\
 	}
-
 
 /* temp monitoring */
 #define CS40L26_TEMP_RESULT_FILT_MASK		GENMASK(24, 16)
@@ -725,6 +742,9 @@
 
 #define CS40L26_A2H_DELAY_MAX		0x190
 
+#define CS40L26_FLAGS_I2S_SVC_EN_MASK		BIT(0)
+#define CS40L26_FLAGS_I2S_SVC_LOOP_MASK		BIT(2)
+
 #define CS40L26_VMON_DEC_OUT_DATA_MASK	GENMASK(23, 0)
 #define CS40L26_VMON_OVFL_FLAG_MASK	BIT(31)
 #define CS40L26_VMON_DEC_OUT_DATA_MAX	CS40L26_VMON_DEC_OUT_DATA_MASK
@@ -739,7 +759,6 @@
 #define CS40L26_WT_HEADER_DEFAULT_FLAGS		0x0000
 #define CS40L26_WT_HEADER_PWLE_SIZE		12
 #define CS40L26_WT_HEADER_COMP_SIZE		20
-#define CS40L26_WT_SVC_METADATA			BIT(10)
 #define CS40L26_WT_TYPE12_IDENTIFIER		0xC00
 
 #define CS40L26_WT_TYPE10_SECTION_BYTES_MIN	8
@@ -761,6 +780,10 @@
 #define CS40L26_Q_EST_MIN			0
 #define CS40L26_Q_EST_MAX			0x7FFFFF
 
+#define CS40L26_LS_CAL_NUM_REGS			47
+#define CS40L26_LS_CAL_REINIT_MASK		BIT(2)
+#define CS40L26_LS_CAL_REINIT_SHIFT		2
+
 #define CS40L26_DVL_PEQ_COEFFICIENTS_NUM_REGS	6
 
 #define CS40L26_F0_EST_FREQ_FRAC_BITS		14
@@ -780,13 +803,6 @@
 #define CS40L26_F0_FREQ_CENTRE_MIN (CS40L26_F0_FREQ_CENTRE_HZ_MIN << CS40L26_F0_EST_FREQ_FRAC_BITS)
 
 #define CS40L26_LOGGER_EN_MASK			BIT(0)
-
-#define CS40L26_LOGGER_SRC_ID_BEMF		1
-#define CS40L26_LOGGER_SRC_ID_VBST		2
-#define CS40L26_LOGGER_SRC_ID_VMON		3
-#define CS40L26_LOGGER_SRC_ID_EP		4
-
-#define CS40L26_LOGGER_SRC_TYPE_XM_TO_XM	1
 
 #define CS40L26_LOGGER_SRC_FF_OUT		2
 #define CS40L26_LOGGER_SRC_PROTECTION_OUT	3
@@ -838,10 +854,62 @@
 /* MFD */
 #define CS40L26_NUM_MFD_DEVS			1
 
+/* DC Watchdog */
+#define CS40L26_DCIN_WD_EN_MASK			BIT(0)
+#define CS40L26_DCIN_WD_THLD_MASK		GENMASK(6, 1)
+#define CS40L26_DCIN_WD_DUR_MASK		GENMASK(9, 7)
+#define CS40L26_DCIN_WD_MODE_MASK		GENMASK(11, 10)
+
+#define CS40L26_DCIN_WD_ENABLE			1
+
+#define CS40L26_DCIN_WD_THLD_2P5PCT_FS		0x01
+#define CS40L26_DCIN_WD_THLD_100P0PCT_FS	0x28
+
+#define CS40L26_DCIN_WD_DUR_20_MS		0x0
+#define CS40L26_DCIN_WD_DUR_4883_MS		0x7
+
+#define CS40L26_DCIN_WD_MODE_NORMAL		0
+#define CS40L26_DCIN_WD_MODE_MUTE		3
+
 /* macros */
 #define CS40L26_MS_TO_US(n)	((n) * 1000)
 
 /* enums */
+enum cs40l26_logger_src_sign {
+	CS40L26_LOGGER_SRC_SIGN_UNSIGNED,
+	CS40L26_LOGGER_SRC_SIGN_SIGNED,
+};
+
+enum cs40l26_logger_src_size {
+	CS40L26_LOGGER_SRC_SIZE_SINGLE,
+	CS40L26_LOGGER_SRC_SIZE_BLOCK,
+};
+
+enum cs40l26_logger_src_id {
+	CS40L26_LOGGER_SRC_ID_INVALID,
+	CS40L26_LOGGER_SRC_ID_BEMF,
+	CS40L26_LOGGER_SRC_ID_VBST,
+	CS40L26_LOGGER_SRC_ID_VMON,
+	CS40L26_LOGGER_SRC_ID_EP,
+	CS40L26_LOGGER_SRC_ID_IMON,
+};
+
+enum cs40l26_logger_src_type {
+	CS40L26_LOGGER_SRC_TYPE_XM_ADDR,
+	CS40L26_LOGGER_SRC_TYPE_XM_TO_XM,
+	CS40L26_LOGGER_SRC_TYPE_YM_ADDR,
+	CS40L26_LOGGER_SRC_TYPE_XM_TO_YM,
+};
+
+enum cs40l26_ls_cal_return_code {
+	CS40L26_LS_CAL_OK,
+	CS40L26_LS_CAL_IN_PROGRESS,
+	CS40L26_LS_CAL_FAIL_DET,
+	CS40L26_LS_CAL_FAIL_ROOTS,
+	CS40L26_LS_CAL_SATURATION,
+	CS40L26_LS_CAL_STEP2_FREQ,
+};
+
 enum cs40l26_brwnout_type {
 	CS40L26_VBBR_THLD,
 	CS40L26_VPBR_THLD,
@@ -930,6 +998,8 @@ enum cs40l26_irq_list {
 	CS40L26_BST_IPK_FLAG_IRQ,
 	CS40L26_TEMP_ERR_IRQ,
 	CS40L26_AMP_ERR_IRQ,
+	CS40L26_DC_WD_RISE_IRQ,
+	CS40L26_DC_WD_FALL_IRQ,
 	CS40L26_VIRTUAL2_MBOX_WR_IRQ,
 	CS40L26_VPBR_FLAG_IRQ,
 	CS40L26_VPBR_ATT_CLR_IRQ,
@@ -985,12 +1055,20 @@ struct cs40l26_owt_section {
 	u16 wvfrm_bank;
 };
 
-struct cs40l26_pseq_op {
-	u8 size;
-	u16 offset; /* offset in bytes from pseq_base */
-	u8 operation;
-	u32 words[3];
-	struct list_head list;
+struct cs40l26_wseq_params {
+	char name[CS40L26_WSEQ_NAME_MAX_LEN];
+	size_t max_size_bytes;
+	size_t size_bytes;
+	u32 base_addr;
+	u32 list_term_addr;
+	u32 rom_list_term_addr;
+};
+
+struct cs40l26_wseq_op {
+	u32 addr;
+	u8 code;
+	u32 data;
+	u16 offset;
 };
 
 struct cs40l26_svc_le {
@@ -1007,6 +1085,7 @@ struct cs40l26_rom_regs {
 	u32 dsp_halo_state;
 	u32 event_map_table_event_data_packed;
 	u32 p_vibegen_rom;
+	u32 rom_aseq_end_of_script;
 	u32 rom_pseq_end_of_script;
 };
 
@@ -1045,6 +1124,7 @@ struct cs40l26_private {
 	u32 devid : 24;
 	u8 revid;
 	struct mutex lock;
+	struct regulator_bulk_data *reg_supplies;
 	struct gpio_desc *reset_gpio;
 	struct input_dev *input;
 	struct cl_dsp *dsp;
@@ -1063,15 +1143,13 @@ struct cs40l26_private {
 	struct workqueue_struct *vibe_workqueue;
 	int irq;
 	bool vibe_init_success;
-	int pseq_num_ops;
-	u32 pseq_base;
-	struct list_head pseq_op_head;
 	enum cs40l26_pm_state pm_state;
 	u32 fw_id;
 	bool fw_defer;
 	bool fw_rom_only;
 	bool fw_loaded;
 	bool calib_fw;
+	u32 wt_num;
 	enum cs40l26_vibe_state vibe_state;
 	bool vibe_state_reporting;
 	bool asp_enable;
@@ -1108,7 +1186,6 @@ struct cs40l26_private {
 	const struct cs40l26_rom_data *rom_data;
 #ifdef CONFIG_DEBUG_FS
 	struct dentry *debugfs_root;
-	struct dentry *debugfs_hw_node;
 	u32 dbg_hw_reg;
 	struct cl_dsp_debugfs *cl_dsp_db;
 #endif
@@ -1129,6 +1206,7 @@ struct cs40l26_private {
 	bool dbc_enable;
 	u32 dbc_configs[CS40L26_DBC_NUM_CONTROLS];
 	bool pwle_zero_cross;
+	bool gpo_playback_mon;
 	u32 press_idx;
 	u32 release_idx;
 	u32 clip_lvl;
@@ -1142,6 +1220,12 @@ struct cs40l26_private {
 	u32 aux_ng_delay;
 	bool aux_ng_enable;
 	u32 refclk_input;
+	bool dc_wd_enabled;
+	u32 dc_wd_thld;
+	u32 dc_wd_dur;
+	bool dc_wd_mute;
+	u32 braking_time_bank;
+	u32 braking_time_index;
 	const char *device_name;
 	bool cs40l26_not_probed;
 	u8 device_id;
@@ -1160,6 +1244,7 @@ struct cs40l26_codec {
 	int tdm_slots;
 	int tdm_slot[2];
 	bool dsp_bypass;
+	bool svc_ol_forced;
 };
 
 struct cs40l26_pll_sysclk_config {
@@ -1171,8 +1256,11 @@ struct cs40l26_pll_sysclk_config {
 int cs40l26_svc_le_estimate(struct cs40l26_private *cs40l26, unsigned int *le);
 int cs40l26_set_pll_loop(struct cs40l26_private *cs40l26, unsigned int pll_loop);
 int cs40l26_asp_start(struct cs40l26_private *cs40l26);
+int cs40l26_num_ram_waves(struct cs40l26_private *cs40l26);
+int cs40l26_num_owt_waves(struct cs40l26_private *cs40l26);
 int cs40l26_num_waves(struct cs40l26_private *cs40l26);
 int cs40l26_fw_swap(struct cs40l26_private *cs40l26, const u32 id);
+int cs40l26_wt_swap(struct cs40l26_private *cs40l26);
 void cs40l26_vibe_state_update(struct cs40l26_private *cs40l26,
 		enum cs40l26_vibe_state_event event);
 int cs40l26_pm_timeout_ms_set(struct cs40l26_private *cs40l26, unsigned int dsp_state,
@@ -1182,9 +1270,10 @@ int cs40l26_pm_timeout_ms_get(struct cs40l26_private *cs40l26, unsigned int dsp_
 int cs40l26_pm_state_transition(struct cs40l26_private *cs40l26, enum cs40l26_pm_state state);
 int cs40l26_get_ram_ext_algo_id(struct cs40l26_private *cs40l26, unsigned int *algo_id);
 int cs40l26_mailbox_write(struct cs40l26_private *cs40l26, u32 write_val);
-int cs40l26_pm_enter(struct device *dev);
-void cs40l26_pm_exit(struct device *dev);
-void cs40l26_resume_error_handle(struct device *dev, int ret);
+inline void cs40l26_pm_runtime_setup(struct cs40l26_private *cs40l26);
+inline void cs40l26_pm_runtime_teardown(struct cs40l26_private *cs40l26);
+inline int cs40l26_pm_enter(struct device *dev);
+inline void cs40l26_pm_exit(struct device *dev);
 int cs40l26_resume(struct device *dev);
 int cs40l26_sys_resume(struct device *dev);
 int cs40l26_sys_resume_noirq(struct device *dev);
@@ -1197,8 +1286,10 @@ int cs40l26_remove(struct cs40l26_private *cs40l26);
 bool cs40l26_precious_reg(struct device *dev, unsigned int ret);
 bool cs40l26_readable_reg(struct device *dev, unsigned int reg);
 bool cs40l26_volatile_reg(struct device *dev, unsigned int reg);
-int cs40l26_pseq_write(struct cs40l26_private *cs40l26, u32 addr, u32 data, bool update,
-		u8 op_code);
+int cs40l26_wseq_read(struct cs40l26_private *cs40l26, struct cl_dsp_memchunk *ch,
+		struct cs40l26_wseq_op *op);
+int cs40l26_wseq_write(struct cs40l26_private *cs40l26, u32 addr, u32 data,
+		bool update, u8 op_code, struct cs40l26_wseq_params *wseq_params);
 int cs40l26_copy_f0_est_to_dvl(struct cs40l26_private *cs40l26);
 int cs40l26_rom_wt_init(struct cs40l26_private *cs40l26);
 
@@ -1206,16 +1297,21 @@ static int cs40l26_probed_retry_count[CS40L26_MAX_DEVICES];
 void cs40l26_add_codec_devices(struct device *dev);
 
 /* external tables */
-extern struct regulator_bulk_data cs40l26_supplies[CS40L26_NUM_SUPPLIES];
+extern struct cs40l26_wseq_params aseq_params;
+extern struct cs40l26_wseq_params pseq_params;
+extern const struct regulator_bulk_data cs40l26_supplies[CS40L26_NUM_SUPPLIES];
 extern const struct dev_pm_ops cs40l26_pm_ops;
 extern const struct regmap_config cs40l26_regmap;
 extern const struct mfd_cell cs40l26_devs[CS40L26_NUM_MFD_DEVS];
-extern const u8 cs40l26_pseq_op_sizes[CS40L26_PSEQ_NUM_OPS][2];
 extern const u32 cs40l26_attn_q21_2_vals[CS40L26_NUM_PCT_MAP_VALUES];
 extern const struct reg_sequence cs40l26_a1_errata[CS40L26_ERRATA_A1_NUM_WRITES];
+extern const struct cs40l26_ls_cal_param cs40l26_ls_cal_params[CS40L26_LS_CAL_NUM_REGS];
 
 /* sysfs */
 extern const struct attribute_group *cs40l26_attr_groups[];
+
+#define CS40L26_FW_CTRL_VAL_STR_SIZE		12
+#define CS40L26_FW_CTRL_VAL_STR_SIZE_NO_NEWLINE	(CS40L26_FW_CTRL_VAL_STR_SIZE - 1)
 
 /* debugfs */
 #ifdef CONFIG_DEBUG_FS

@@ -95,6 +95,42 @@ Description:
 
 		Valid values: 1 (integer)
 
+What:		/sys/class/input/input(x)/default/braking_time_bank
+Date:		April 2024
+Contact:	patches@opensource.cirrus.com
+Description:
+		Specify the bank of the effect from which braking time
+		information is to be read.
+
+		Access: Write
+
+		Valid values:
+			0: RAM bank
+			2: OWT bank
+
+What:		/sys/class/input/input(x)/default/braking_time_index
+Date:		April 2024
+Contact:	patches@opensource.cirrus.com
+Description:
+		Specify the index in the 0-indexed wavetable of the effect from
+		which braking time information is to be read.
+
+		Access: Write
+
+		Valid values:
+			Minimum: 0
+
+What:		/sys/class/input/input(x)/default/braking_time_ms
+Date:		April 2024
+Contact:	patches@opensource.cirrus.com
+Description:
+		Braking time in milliseconds of SVC effect specified by
+		braking_time_index and braking_time_bank.
+
+		A non-SVC effect will return a braking time of 0 ms.
+
+		Access: Read
+
 What:		/sys/class/input/input(x)/default/num_waves
 Date:		December 2023
 Contact:	patches@opensource.cirrus.com
@@ -190,6 +226,22 @@ Description:
 		Valid values: Represented as enum
 			0: Runtime firmware
 			1: Calibration firmware
+
+What:		/sys/class/input/input(x)/default/swap_wavetable
+Date:		February 2024
+Contact:	patches@opensource.cirrus.com
+Description:
+		Switch wavetable tuning .bin files at runtime.
+		All uploaded effects from userspace must be erased
+		prior to swapping wavetable tunings.
+
+		Access: Read, Write
+
+		Valid values: Represented as integer
+			0: Loads cs40l26.bin
+			1: Loads cs40l26-wt1.bin
+			2: Loads cs40l26-wt2.bin
+			etc.
 
 What:		/sys/class/input/input(x)/default/vibe_state
 Date:		September 2023
@@ -295,6 +347,55 @@ Description:
 			Minimum: 0x050000 (20 Hz) or 0x850000 (-20 Hz)
 			Maximum: 0x1E0000 (120 Hz) or 0x9E0000 (-120 Hz)
 			Default: 0x1E0000 (120 Hz)
+
+What:		/sys/class/input/input(x)/calibration/ls_calibration_params_temp
+Date:		January 2024
+Contact:	patches@opensource.cirrus.com
+Description:
+		Temperature during calibration.
+
+		Access: Read, Write
+
+		Valid values: Hex value in signed Q8.15 format representing degrees in Celsius
+			Minimum: 0xE70000 (-50 C)
+			Maximum: 0x190000 (50 C)
+			Default: 0x0A0000 (20 C)
+
+What:		/sys/class/input/input(x)/calibration/ls_calibration_results
+Date:		January 2024
+Contact:	patches@opensource.cirrus.com
+Description:
+		Coefficients calibrated by the least squares algorithm.
+
+		After running LS Calibration via the trigger_calibration control,
+		read out the coefficients and store them in persistent memory.
+		After loading runtime firmware, write the coefficients back to this
+		control in the exact way that they were first printed when reading
+		the control. This will apply the correct coefficient configuration
+		to the excursion protection algorithm.
+
+		Access: Read, Write
+
+		Valid values: Hex values representing each coefficient setting
+			See firmware documentation for more detailed information
+			on each coefficient.
+
+What:		/sys/class/input/input(x)/calibration/ls_calibration_results_name
+Date:		February 2024
+Contact:	patches@opensource.cirrus.com
+Description:
+		Coefficients calibrated by the least squares algorithm.
+
+		After running LS Calibration via the trigger_calibration control,
+		read out the coefficient values and the firmware control name to which
+		they apply.
+
+		Access: Read
+
+		Valid values: Firmware control name - hex value pairs
+			representing each coefficient setting.
+			See firmware documentation for more detailed information
+			on each coefficient.
 
 What:		/sys/class/input/input(x)/calibration/q_measured
 Date:		December 2023
@@ -483,6 +584,20 @@ Description:
 			Minimum: 0x000000 (0 mm)
 			Maximum: 0x7FFFFF (0.999999 * 10.5 =~ 10.5 mm)
 
+What:		/sys/class/input/input(x)/data_logger/max_imon
+Date:		January 2024
+Contact:	patches@opensource.cirrus.com
+Description:
+		Maximum logged value of IMON since logging was enabled
+		or maximum calculations were reset.
+
+		Access: Read
+
+		Valid values: Represented as hexadecimal in signed Q0.23 format.
+			Full scale corresponds to 2.1 Amperes
+			Minimum: 0x000000 (0 A)
+			Maximum: 0x7FFFFF (0.999999 * 2.1 =~ 2.1 A)
+
 What:		/sys/class/input/input(x)/data_logger/max_vbst
 Date:		September 2023
 Contact:	patches@opensource.cirrus.com
@@ -544,6 +659,17 @@ Description:
 
 		Valid values: Represented as hexadecimal
 
+What:		/sys/class/input/input(x)/firmware/fw_ctrl_size_words
+Date:		March 2024
+Contact:	patches@opensource.cirrus.com
+Description:
+		Number of 32-bit words of the control defined by
+		fw_algo_id, fw_ctrl_name, and fw_mem_block_type.
+
+		Access: Read
+
+		Valid values: Represented as an integer
+
 What:		/sys/class/input/input(x)/firmware/fw_ctrl_val
 Date:		December 2023
 Contact:	patches@opensource.cirrus.com
@@ -556,6 +682,16 @@ Description:
 		Access: Read, Write
 
 		Valid values: Represented as hexadecimal
+			If reading from a firmware control that consists of more than one word
+			of data, the output will be displayed as a list of values separated by
+			a new line. The data will be displayed in increasing register order
+			as 32-bit hexadecimal words.
+
+			If writing to a firmware control that consists of more than one word
+			of data, the input must be formatted as 32-bit hexadecimal words separated
+			by a new line and listed in order of increasing register (i.e. the first
+			value in the list will be written to the first register that makes up
+			the firmware control etc.).
 
 What:		/sys/class/input/input(x)/firmware/fw_mem_block_type
 Date:		December 2023

@@ -322,6 +322,110 @@ EXIT:
 	return ret;
 }
 
+static int32_t tas25xx_em_left_get(struct snd_kcontrol *kcontrol,
+		struct snd_ctl_elem_value *ucontrol)
+{
+	struct snd_soc_component *component = snd_soc_kcontrol_component(kcontrol);
+	struct tas25xx_priv *p_tas25xx = snd_soc_component_get_drvdata(component);
+	struct soc_enum *soc_enum = (struct soc_enum *)kcontrol->private_value;
+	uint32_t reg;
+	int value = 0;
+	int ret = 0;
+
+	if (!ucontrol) {
+		pr_err("tas25xx: %s:ucontrol is NULL\n", __func__);
+		return -EINVAL;
+	}
+
+	reg = TAS25XX_REG(0, 0, soc_enum->reg);
+	ret = p_tas25xx->read(p_tas25xx, 0, reg, &value);
+	ucontrol->value.integer.value[0] = (value & TAS25XX_EM_MASK) >> soc_enum->shift_l;
+	pr_info ("%s: read value = %x  ret = %d\n", __func__, value, ret);
+	return ret;
+}
+
+static int32_t tas25xx_em_left_put(struct snd_kcontrol *kcontrol,
+		struct snd_ctl_elem_value *ucontrol)
+{
+	struct snd_soc_component *component = snd_soc_kcontrol_component(kcontrol);
+	struct tas25xx_priv *p_tas25xx = snd_soc_component_get_drvdata(component);
+	struct soc_enum *soc_enum = (struct soc_enum *)kcontrol->private_value;
+	uint32_t reg;
+	int value = 0;
+	int ret = 0;
+
+	if (!ucontrol)
+		return -EINVAL;
+
+	p_tas25xx->left_em_mode = ucontrol->value.integer.value[0];
+	value = p_tas25xx->left_em_mode << soc_enum->shift_l;
+	reg = TAS25XX_REG(0, 0, soc_enum->reg);
+	ret = p_tas25xx->update_bits(p_tas25xx, 0, reg, TAS25XX_EM_MASK, value);
+	pr_info("%s: update value %d ret = %d", __func__, value, ret);
+	return ret;
+}
+
+static int32_t tas25xx_em_right_get(struct snd_kcontrol *kcontrol,
+		struct snd_ctl_elem_value *ucontrol)
+{
+	struct snd_soc_component *component = snd_soc_kcontrol_component(kcontrol);
+	struct tas25xx_priv *p_tas25xx = snd_soc_component_get_drvdata(component);
+	struct soc_enum *soc_enum = (struct soc_enum *)kcontrol->private_value;
+	uint32_t reg;
+	int value = 0;
+	int ret = 0;
+
+	if (!ucontrol) {
+		pr_err("tas25xx: %s:ucontrol is NULL\n", __func__);
+		return -EINVAL;
+	}
+
+	reg = TAS25XX_REG(0, 0, soc_enum->reg);
+	ret = p_tas25xx->read(p_tas25xx, 1, reg, &value);
+	ucontrol->value.integer.value[0] = (value & TAS25XX_EM_MASK) >> soc_enum->shift_l;
+	pr_info ("%s: read value = %x  ret = %d\n", __func__, value, ret);
+	return ret;
+}
+
+static int32_t tas25xx_em_right_put(struct snd_kcontrol *kcontrol,
+		struct snd_ctl_elem_value *ucontrol)
+{
+	struct snd_soc_component *component = snd_soc_kcontrol_component(kcontrol);
+	struct tas25xx_priv *p_tas25xx = snd_soc_component_get_drvdata(component);
+	struct soc_enum *soc_enum = (struct soc_enum *)kcontrol->private_value;
+	uint32_t reg;
+	int value = 0;
+	int ret = 0;
+
+	if (!ucontrol)
+		return -EINVAL;
+
+	p_tas25xx->right_em_mode = ucontrol->value.integer.value[0];
+	value = p_tas25xx->right_em_mode << soc_enum->shift_l;
+	reg = TAS25XX_REG(0, 0, soc_enum->reg);
+	ret = p_tas25xx->update_bits(p_tas25xx, 1, reg, TAS25XX_EM_MASK, value);
+	pr_info("%s: update value %x ret = %d", __func__, value, ret);
+	return ret;
+}
+
+static const char * const tas25xx_em_text[] = {"OFF", "NG_ON", "ME_ON", "NG_ME_ON"};
+static SOC_ENUM_SINGLE_DECL(em_enum, TAS25XX_EM_REG, TAS25XX_EM_SHIFT, tas25xx_em_text);
+
+static struct snd_kcontrol_new tas25xx_custom_ctrls [] = {
+	SOC_ENUM_EXT("TAS25XX EM LEFT", em_enum, tas25xx_em_left_get, tas25xx_em_left_put),
+	SOC_ENUM_EXT("TAS25XX EM RIGHT", em_enum, tas25xx_em_right_get, tas25xx_em_right_put),
+};
+
+static int32_t tas25xx_create_custom_controls(struct tas25xx_priv *p_tas25xx)
+{
+	struct linux_platform *plat_data =
+		(struct linux_platform *)p_tas25xx->platform_data;
+	int32_t ret = 0;
+
+	ret = snd_soc_add_component_controls(plat_data->codec,
+			&tas25xx_custom_ctrls[0], 2);
+	return ret;
+}
 
 static uint8_t *process_block_get_cmd(uint8_t *mem_in, int8_t *cmd)
 {
@@ -1575,11 +1679,28 @@ static int32_t tas25xx_parse_kcontrols(struct tas25xx_priv *p_tas25xx, uint8_t *
 		goto EXIT;
 	}
 
+	p_tas25xx->playback_volume_left_index = -1;
+	p_tas25xx->playback_volume_right_index = -1;
+
 	for (i = 0; i < g_no_of_kcontrols; i++) {
 		memcpy(&(g_kctrl_data[i].type), buf, 1);
 		buf += 1;
 		/* Integer Type */
 		if (g_kctrl_data[i].type == 0) {
+			if (p_tas25xx->playback_volume_left_index == -1
+				&& !strcmp(buf, "PLAYBACK_VOLUME_LEFT")) {
+				p_tas25xx->playback_volume_left_index = i;
+				dev_dbg(plat_data->dev,
+					"%s: update playback_volume_left_index = %d\n",
+					__func__, p_tas25xx->playback_volume_left_index);
+			}
+			if (p_tas25xx->playback_volume_right_index == -1
+				&& !strcmp(buf, "PLAYBACK_VOLUME_RIGHT")) {
+				p_tas25xx->playback_volume_right_index = i;
+				dev_dbg(plat_data->dev,
+					"%s: update playback_volume_right_index = %d\n",
+					__func__, p_tas25xx->playback_volume_right_index);
+			}
 
 			g_kctrl_data[i].kcontrol.int_type.name = kasprintf(GFP_KERNEL, "%s %s",
 					"TAS25XX", (char *)buf);
@@ -2062,6 +2183,11 @@ int32_t tas25xx_create_kcontrols(struct tas25xx_priv *p_tas25xx)
 			dev_err(plat_data->dev, "%s: kcontrols failed", __func__);
 			goto EXIT;
 		}
+		ret = tas25xx_create_custom_controls(p_tas25xx);
+		if (ret) {
+			dev_err(plat_data->dev, "%s: custom kcontrols failed", __func__);
+			goto EXIT;
+		}
 	} else {
 		dev_err(plat_data->dev, "%s: firmware not loaded\n", __func__);
 	}
@@ -2504,3 +2630,31 @@ int32_t tas25xx_remove_binfile(struct tas25xx_priv *p_tas25xx)
 
 	return 0;
 }
+
+int32_t tas25xx_update_playback_volume(struct tas25xx_priv *p_tas25xx, int32_t ch)
+{
+	int32_t kcontrol_index;
+	int32_t v_idx;
+	int32_t misc_info;
+	int32_t ret = 0;
+	struct linux_platform *plat_data = NULL;
+
+	plat_data = (struct linux_platform *) p_tas25xx->platform_data;
+	kcontrol_index = (ch == 0)?p_tas25xx->playback_volume_left_index:
+			p_tas25xx->playback_volume_right_index;
+
+	if (kcontrol_index < 0) {
+		dev_err(plat_data->dev, "ch-%d %s invalid kcontrol index %d\n",
+				ch, __func__, kcontrol_index);
+		return -EINVAL;
+	}
+	v_idx = g_kctrl_data[kcontrol_index].kcontrol.int_type.curr_val;
+	misc_info = g_kctrl_data[kcontrol_index].kcontrol.int_type.misc_info;
+
+	if (((misc_info & 0xf) == KCNTR_ANYTIME) ||
+		(p_tas25xx->m_power_state == TAS_POWER_ACTIVE))
+		ret = tas25xx_int_put_idx_value(p_tas25xx, kcontrol_index, v_idx);
+
+	return ret;
+}
+

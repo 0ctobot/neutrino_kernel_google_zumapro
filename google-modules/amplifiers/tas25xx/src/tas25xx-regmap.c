@@ -532,6 +532,9 @@ static void tas25xx_enable_irq(struct tas25xx_priv *p_tas25xx)
 	int i = 0;
 	int irq_no;
 	int irq_gpio;
+	uint32_t reg;
+	uint32_t value;
+	int32_t ret;
 
 	plat_data = (struct linux_platform *) p_tas25xx->platform_data;
 
@@ -543,6 +546,17 @@ static void tas25xx_enable_irq(struct tas25xx_priv *p_tas25xx)
 		irq_gpio = p_tas25xx->devs[i]->irq_gpio;
 		if (!gpio_is_valid(irq_gpio))
 			continue;
+
+		// Update IRQZ setting
+		if (p_tas25xx->irqz_value != -1) {
+			value = p_tas25xx->irqz_value;
+			reg = TAS25XX_REG(0, 0, 0x1C);
+			ret = p_tas25xx->write(p_tas25xx, i, reg, value);
+			if (ret < 0) {
+				dev_err(plat_data->dev, "%s: write reg %x fail=%d\n",
+					__func__, reg, ret);
+			}
+		}
 
 		if (p_tas25xx->irq_enabled[i] == 0) {
 			irq_no = p_tas25xx->devs[i]->irq_no;
@@ -836,6 +850,16 @@ static int tas25xx_parse_dt(struct device *dev,
 	else if (CHK_ONE_BIT_SET(reset_gpios))
 		dev_info(plat_data->dev, "Using commong reset gpio");
 
+	rc = of_property_read_u32(np, "ti,irqz-value", &p_tas25xx->irqz_value);
+	if (rc) {
+		dev_warn(plat_data->dev,
+			"Looking up %s property in node %s, err=%d, ignored\n",
+			"ti,irqz-value", np->full_name, rc);
+		p_tas25xx->irqz_value = -1;
+		rc = 0;
+	} else
+		dev_dbg(plat_data->dev, "ti,irqz-value=%x", p_tas25xx->irqz_value);
+
 EXIT:
 	return rc;
 }
@@ -899,6 +923,8 @@ static int tas25xx_i2c_probe(struct i2c_client *p_client,
 	plat_data->runtime_resume = tas25xx_runtime_resume;
 #endif
 	p_tas25xx->m_power_state = TAS_POWER_SHUTDOWN;
+	p_tas25xx->left_em_mode = -1;
+	p_tas25xx->right_em_mode = -1;
 
 	if (p_client->dev.of_node) {
 		ret = tas25xx_parse_dt(&p_client->dev, p_tas25xx);

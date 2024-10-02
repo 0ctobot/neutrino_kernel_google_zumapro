@@ -57,6 +57,10 @@
 
 #define TAS25XX_DEFAULT	0xFFFFFFFF
 
+#define TAS25XX_EM_REG		0x03
+#define TAS25XX_EM_SHIFT	6
+#define TAS25XX_EM_MASK		0xC0
+
 enum kcntl_during_t {
 	KCNTR_ANYTIME = 0, /* instant update */
 	KCNTR_PRE_POWERUP = 1, /* during pre-power up */
@@ -115,6 +119,8 @@ int tas_write_init_config_params(struct tas25xx_priv *p_tas25xx, int number_of_c
 
 int32_t tas25xx_update_kcontrol_data(struct tas25xx_priv *p_tas25xx, enum kcntl_during_t cur_state,
 	uint32_t chmask);
+
+int32_t tas25xx_update_playback_volume(struct tas25xx_priv *p_tas25xx, int32_t ch);
 
 void tas25xx_prep_dev_for_calib(int start);
 #endif /* __TAS25XX_REGBIN_PARSER__ */

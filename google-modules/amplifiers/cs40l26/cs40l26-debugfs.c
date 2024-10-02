@@ -14,76 +14,118 @@
 #include "cs40l26.h"
 
 #ifdef CONFIG_DEBUG_FS
-static ssize_t cs40l26_power_on_seq_read(struct file *file, char __user *user_buf,
-					size_t count, loff_t *ppos)
+
+static ssize_t cs40l26_wseq_format_string(struct cs40l26_private *cs40l26,
+		struct cs40l26_wseq_params *wseq_params, char **wseq_str)
+{
+	char str[CS40L26_WSEQ_STR_LINE_LEN];
+	struct cs40l26_wseq_op op;
+	struct cl_dsp_memchunk ch;
+	ssize_t error, str_size;
+	u8 *seq_data;
+
+	str_size = CS40L26_WSEQ_STR_LINE_LEN * wseq_params->size_bytes / CL_DSP_BYTES_PER_WORD;
+	*wseq_str = kzalloc(str_size, GFP_KERNEL);
+	if (!*wseq_str)
+		return -ENOMEM;
+
+	seq_data = kzalloc(wseq_params->size_bytes, GFP_KERNEL);
+	if (!seq_data)
+		return -ENOMEM;
+
+	error = regmap_raw_read(cs40l26->regmap, wseq_params->base_addr,
+			seq_data, wseq_params->size_bytes);
+	if (error)
+		goto err_free;
+
+	ch = cl_dsp_memchunk_create(seq_data, wseq_params->size_bytes);
+
+	while (!cl_dsp_memchunk_end(&ch)) {
+		memset((void *) &op, 0, sizeof(struct cs40l26_wseq_op));
+
+		error = cs40l26_wseq_read(cs40l26, &ch, &op);
+		if (error)
+			goto err_free;
+
+		error = snprintf(str, CS40L26_WSEQ_STR_LINE_LEN,
+				"0x%08X: Code = 0x%02X, Addr = 0x%08X, Data = 0x%08X\n",
+				wseq_params->base_addr + op.offset, op.code,
+				op.addr, op.data);
+		if (error != strlen(str)) {
+			dev_err(cs40l26->dev, "Failed to format sequence string\n");
+			error = -EINVAL;
+			goto err_free;
+		} else {
+			error = 0;
+		}
+
+		strncat(*wseq_str, str, CS40L26_WSEQ_STR_LINE_LEN);
+	}
+
+err_free:
+	kfree(seq_data);
+
+	return error ? error : str_size;
+}
+
+static ssize_t cs40l26_active_seq_read(struct file *file, char __user *user_buf,
+		size_t count, loff_t *ppos)
 {
 	struct cs40l26_private *cs40l26 = file->private_data;
-	char *pseq_str = NULL;
-	char str[CS40L26_PSEQ_STR_LINE_LEN];
-	ssize_t error, pseq_str_size;
-	struct cs40l26_pseq_op *op;
-	u32 addr, data;
+	char *aseq_str = NULL;
+	ssize_t aseq_str_size, error;
+
+	error = cs40l26_pm_enter(cs40l26->dev);
+	if (error)
+		return error;
 
 	mutex_lock(&cs40l26->lock);
 
-	if (list_empty(&cs40l26->pseq_op_head) || cs40l26->pseq_num_ops <= 0) {
-		dev_err(cs40l26->dev, "Power on sequence is empty\n");
-		error = -ENODATA;
+	aseq_str_size = cs40l26_wseq_format_string(cs40l26, &aseq_params, &aseq_str);
+	if (aseq_str_size < 0) {
+		error = aseq_str_size;
 		goto err_mutex;
 	}
 
-	pseq_str_size = CS40L26_PSEQ_STR_LINE_LEN * cs40l26->pseq_num_ops;
-	pseq_str = kzalloc(pseq_str_size, GFP_KERNEL);
-	if (!pseq_str) {
-		error = -ENOMEM;
+	error = simple_read_from_buffer(user_buf, count, ppos, aseq_str, aseq_str_size);
+
+err_mutex:
+	mutex_unlock(&cs40l26->lock);
+
+	cs40l26_pm_exit(cs40l26->dev);
+
+	kfree(aseq_str);
+
+	return error;
+}
+
+static ssize_t cs40l26_power_on_seq_read(struct file *file, char __user *user_buf,
+		size_t count, loff_t *ppos)
+{
+	struct cs40l26_private *cs40l26 = file->private_data;
+	char *pseq_str = NULL;
+	ssize_t error, pseq_str_size;
+
+	error = cs40l26_pm_enter(cs40l26->dev);
+	if (error)
+		return error;
+
+	mutex_lock(&cs40l26->lock);
+
+	pseq_str_size = cs40l26_wseq_format_string(cs40l26, &pseq_params, &pseq_str);
+	if (pseq_str_size < 0) {
+		error = pseq_str_size;
 		goto err_mutex;
-	}
-
-	list_for_each_entry_reverse(op, &cs40l26->pseq_op_head, list) {
-		switch (op->operation) {
-		case CS40L26_PSEQ_OP_WRITE_FULL:
-			addr = CS40L26_PSEQ_FULL_ADDR_GET(op->words[0], op->words[1]);
-			data = CS40L26_PSEQ_FULL_DATA_GET(op->words[1], op->words[2]);
-			break;
-		case CS40L26_PSEQ_OP_WRITE_H16:
-		case CS40L26_PSEQ_OP_WRITE_L16:
-			addr = CS40L26_PSEQ_X16_ADDR_GET(op->words[0], op->words[1]);
-			if (op->operation == CS40L26_PSEQ_OP_WRITE_H16)
-				data = CS40L26_PSEQ_H16_DATA_GET(op->words[1]);
-			else
-				data = CS40L26_PSEQ_L16_DATA_GET(op->words[1]);
-			break;
-		case CS40L26_PSEQ_OP_WRITE_ADDR8:
-			addr = CS40L26_PSEQ_ADDR8_ADDR_GET(op->words[0]);
-			data = CS40L26_PSEQ_ADDR8_DATA_GET(op->words[0], op->words[1]);
-			break;
-		case CS40L26_PSEQ_OP_END:
-			addr = CS40L26_PSEQ_OP_END_ADDR;
-			data = CS40L26_PSEQ_OP_END_DATA;
-			break;
-		default:
-			dev_err(cs40l26->dev, "Unrecognized Op Code: 0x%02X\n", op->operation);
-			error = -EINVAL;
-			goto err_mutex;
-		}
-
-		error = snprintf(str, CS40L26_PSEQ_STR_LINE_LEN,
-				"0x%08X: code = 0x%02X, Addr = 0x%08X, Data = 0x%08X\n",
-				cs40l26->pseq_base + op->offset, op->operation, addr, data);
-		if (error <= 0) {
-			error = -EINVAL;
-			goto err_mutex;
-		}
-
-		strncat(pseq_str, str, CS40L26_PSEQ_STR_LINE_LEN);
 	}
 
 	error = simple_read_from_buffer(user_buf, count, ppos, pseq_str, pseq_str_size);
 
 err_mutex:
-	kfree(pseq_str);
-
 	mutex_unlock(&cs40l26->lock);
+
+	cs40l26_pm_exit(cs40l26->dev);
+
+	kfree(pseq_str);
 
 	return error;
 }
@@ -209,13 +251,13 @@ static ssize_t cs40l26_hw_val_write(struct file *file, const char __user *user_b
 	if (error)
 		goto exit_mutex;
 
-	error = cs40l26_pseq_write(cs40l26, cs40l26->dbg_hw_reg, (val & GENMASK(31, 16)) >> 16,
-			true, CS40L26_PSEQ_OP_WRITE_H16);
+	error = cs40l26_wseq_write(cs40l26, cs40l26->dbg_hw_reg, (val & GENMASK(31, 16)) >> 16,
+			true, CS40L26_WSEQ_OP_WRITE_H16, &pseq_params);
 	if (error)
 		goto exit_mutex;
 
-	error = cs40l26_pseq_write(cs40l26, cs40l26->dbg_hw_reg, (val & GENMASK(15, 0)),
-			true, CS40L26_PSEQ_OP_WRITE_L16);
+	error = cs40l26_wseq_write(cs40l26, cs40l26->dbg_hw_reg, (val & GENMASK(15, 0)),
+			true, CS40L26_WSEQ_OP_WRITE_L16, &pseq_params);
 
 exit_mutex:
 	mutex_unlock(&cs40l26->lock);
@@ -252,6 +294,13 @@ static const struct {
 	const struct file_operations fops;
 } cs40l26_debugfs_fops[] = {
 	{
+		.name = "active_seq",
+		.fops = {
+			.open = simple_open,
+			.read = cs40l26_active_seq_read,
+		},
+	},
+	{
 		.name = "power_on_seq",
 		.fops = {
 			.open = simple_open,
@@ -262,42 +311,41 @@ static const struct {
 
 static void cs40l26_hw_debugfs_init(struct cs40l26_private *cs40l26)
 {
+	struct dentry *hw_node;
 	int i;
 
-	cs40l26->debugfs_hw_node = debugfs_create_dir("hardware", cs40l26->debugfs_root);
-	if (IS_ERR_OR_NULL(cs40l26->debugfs_hw_node)) {
+	hw_node = debugfs_create_dir("hardware", cs40l26->debugfs_root);
+
+	if (IS_ERR_OR_NULL(hw_node)) {
 		dev_err(cs40l26->dev, "Failed to mount hardware debugfs directory\n");
-#if 0
-		// Causes Kernel panic when taking an error pointer.
-		kfree(cs40l26->debugfs_hw_node);
-#endif
 		return;
 	}
 
 	for (i = 0; i < ARRAY_SIZE(cs40l26_hw_debugfs_fops); i++)
 		debugfs_create_file(cs40l26_hw_debugfs_fops[i].name, CL_DSP_DEBUGFS_RW_FILE_MODE,
-				cs40l26->debugfs_hw_node, cs40l26,
-				&cs40l26_hw_debugfs_fops[i].fops);
+				hw_node, cs40l26, &cs40l26_hw_debugfs_fops[i].fops);
 }
 
 void cs40l26_debugfs_init(struct cs40l26_private *cs40l26)
 {
-	struct dentry *root = NULL;
-	int i;
+	struct i2c_client *client = to_i2c_client(cs40l26->dev);
+	char name[CS40L26_DEBUGFS_DIR_NAME_LEN];
+	int error, i;
 
 	cs40l26_debugfs_cleanup(cs40l26);
 
-	root = debugfs_create_dir(cs40l26->device_name, NULL);
-	if (IS_ERR_OR_NULL(root)) {
-		dev_err(cs40l26->dev, "Failed to create %s", cs40l26->device_name);
+	error = snprintf(name, CS40L26_DEBUGFS_DIR_NAME_LEN, "%s-%d-00%X",
+			client->name, client->adapter->nr, client->addr);
+	if (error < 0) {
+		dev_err(cs40l26->dev, "Failed to format debugFS name: %d\n", error);
 		return;
 	}
 
+	cs40l26->debugfs_root = debugfs_create_dir(name, NULL);
+
 	for (i = 0; i < ARRAY_SIZE(cs40l26_debugfs_fops); i++)
 		debugfs_create_file(cs40l26_debugfs_fops[i].name, CL_DSP_DEBUGFS_RW_FILE_MODE,
-				root, cs40l26, &cs40l26_debugfs_fops[i].fops);
-
-	cs40l26->debugfs_root = root;
+				cs40l26->debugfs_root, cs40l26, &cs40l26_debugfs_fops[i].fops);
 
 	cs40l26_hw_debugfs_init(cs40l26);
 
@@ -317,6 +365,7 @@ void cs40l26_debugfs_cleanup(struct cs40l26_private *cs40l26)
 	cl_dsp_debugfs_destroy(cs40l26->cl_dsp_db);
 	cs40l26->cl_dsp_db = NULL;
 	debugfs_remove_recursive(cs40l26->debugfs_root);
+	cs40l26->debugfs_root = NULL;
 }
 EXPORT_SYMBOL_GPL(cs40l26_debugfs_cleanup);
 

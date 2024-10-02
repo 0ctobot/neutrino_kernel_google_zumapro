@@ -408,6 +408,11 @@ struct tas25xx_priv {
 	struct class *class;
 	struct cmd_data cmd_data;
 	struct tas_block_op_data_t block_op_data[MAX_CHANNELS];
+	int32_t playback_volume_left_index;
+	int32_t playback_volume_right_index;
+	int irqz_value;
+	int left_em_mode;
+	int right_em_mode;
 };
 
 static inline int is_power_up_state(enum tas_power_states_t state)
