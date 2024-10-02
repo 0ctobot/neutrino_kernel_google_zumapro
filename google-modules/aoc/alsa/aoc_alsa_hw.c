@@ -3720,13 +3720,18 @@ int aoc_compr_offload_setup(struct aoc_alsa_stream *alsa_stream, int type)
 	pr_info("%s type=%d format=%d sr=%d chan=%d\n", __func__, type, cmd.cfg.format,
 		cmd.cfg.samplerate, cmd.cfg.channels);
 
-	err = aoc_audio_control(CMD_OUTPUT_CHANNEL, (uint8_t *)&cmd, sizeof(cmd), NULL,
+	err = aoc_audio_control(CMD_OUTPUT_CHANNEL, (uint8_t *)&cmd, sizeof(cmd), (uint8_t *)&cmd,
 				alsa_stream->chip);
 	if (err < 0) {
 		pr_err("ERR:%d in set compress offload codec\n", err);
 		return err;
 	}
 
+	err = cmd.parent.reply;
+	if (err < 0) {
+		pr_err("ERR:%d in set compress offload codec cmd reply\n", err);
+		return err;
+	}
 	return 0;
 }
 

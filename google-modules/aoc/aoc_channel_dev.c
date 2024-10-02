@@ -175,7 +175,7 @@ static int aocc_demux_kthread(void *data)
 					  AOCC_MAX_MSG_SIZE, true);
 
 		if (retval < 0 || retval < sizeof(int)) {
-			pr_err("Read failed with %ld", retval);
+			pr_err_ratelimited("Read failed with %ld", retval);
 			kfree(node);
 
 			if (retval == -ENODEV) {

@@ -49,12 +49,6 @@ static void aoc_compr_reset_pointer(struct aoc_alsa_stream *alsa_stream)
 	struct snd_compr_stream *cstream = alsa_stream->cstream;
 	struct aoc_service_dev *dev = alsa_stream->dev;
 
-	if (aoc_compr_offload_get_io_samples(alsa_stream,
-		&alsa_stream->compr_pcm_io_sample_base) < 0) {
-		pr_err("ERR: fail to get audio playback samples\n");
-		return;
-	}
-
 	alsa_stream->hw_ptr_base = (cstream->direction == SND_COMPRESS_PLAYBACK) ?
 						 aoc_ring_bytes_read(dev->service, AOC_DOWN) :
 						 aoc_ring_bytes_written(dev->service, AOC_UP);
@@ -65,6 +59,21 @@ static void aoc_compr_reset_pointer(struct aoc_alsa_stream *alsa_stream)
 	pr_debug("%s hw_ptr_base = %lu compr_pcm_io_sample_base = %llu\n",
 		__func__, alsa_stream->hw_ptr_base, alsa_stream->compr_pcm_io_sample_base);
 
+}
+
+int aoc_compr_offload_reset_io_sample_base(struct aoc_alsa_stream *alsa_stream)
+{
+	int err = 0;
+
+	err = aoc_compr_offload_get_io_samples(alsa_stream,
+		&alsa_stream->compr_pcm_io_sample_base);
+	if (err < 0) {
+		pr_err("ERR: fail to get audio playback samples, err = %d\n", err);
+		return err;
+	}
+	pr_info("%s: compr_pcm_io_sample_base = %llu\n",
+		__func__, alsa_stream->compr_pcm_io_sample_base);
+	return err;
 }
 
 void aoc_compr_offload_isr(struct aoc_service_dev *dev)
@@ -230,12 +239,6 @@ static int aoc_compr_prepare(struct aoc_alsa_stream *alsa_stream)
 		return -EFAULT;
 	}
 
-	if (aoc_compr_offload_get_io_samples(alsa_stream,
-				&alsa_stream->compr_pcm_io_sample_base) < 0) {
-		pr_err("ERR: fail to get audio playback samples\n");
-		return -EFAULT;
-	}
-
 	alsa_stream->hw_ptr_base = (cstream->direction == SND_COMPRESS_PLAYBACK) ?
 						 aoc_ring_bytes_read(dev->service, AOC_DOWN) :
 						 aoc_ring_bytes_written(dev->service, AOC_UP);
@@ -371,6 +374,7 @@ static int aoc_compr_playback_open(struct snd_compr_stream *cstream)
 	/* TODO: temporary compr offload volume set to protect speaker*/
 	aoc_audio_volume_set(chip, chip->compr_offload_volume, idx, 0);
 
+	chip->compr_offload_stream = alsa_stream;
 	mutex_unlock(&chip->audio_mutex);
 
 	return 0;
@@ -408,6 +412,7 @@ static int aoc_compr_playback_free(struct snd_compr_stream *cstream)
 		pr_err("ERR: interrupted while waiting for lock\n");
 		return -EINTR;
 	}
+	chip->compr_offload_stream = NULL;
 
 	pr_notice("alsa compr offload close\n");
 	free_aoc_audio_service(rtd->dai_link->name, alsa_stream->dev);
@@ -558,6 +563,27 @@ static int aoc_compr_trigger(struct snd_soc_component *component, struct snd_com
 	}
 out:
 	return err;
+}
+
+int aoc_compr_get_position(struct aoc_alsa_stream *alsa_stream, uint64_t *position)
+{
+	uint64_t current_sample = 0;
+
+	if (position == NULL) {
+		pr_err("%s: invalid position\n", __func__);
+		return -EINVAL;
+	}
+
+	if (aoc_compr_offload_get_io_samples(alsa_stream, &current_sample) < 0) {
+		pr_err("%s: failed to get playback samples\n", __func__);
+		return -EINVAL;
+	}
+
+	*position = current_sample - alsa_stream->compr_pcm_io_sample_base;
+
+	pr_debug("%s: current_sample=%llu base=%llu\n", __func__,
+			current_sample, alsa_stream->compr_pcm_io_sample_base);
+	return 0;
 }
 
 static int aoc_compr_pointer(struct snd_soc_component *component, struct snd_compr_stream *cstream,

@@ -96,6 +96,9 @@ static int snd_aoc_ctl_info(struct snd_kcontrol *kcontrol,
 		uinfo->type = SNDRV_CTL_ELEM_TYPE_BYTES;
 		/* PDM and All MIC power control*/
 		uinfo->count = (NUM_OF_BUILTIN_MIC + 1) * sizeof(uint32_t);
+	} else if (kcontrol->private_value == OFFLOAD_POSITION) {
+		uinfo->type = SNDRV_CTL_ELEM_TYPE_BYTES;
+		uinfo->count = sizeof(uint64_t);
 	}
 	return 0;
 }
@@ -868,7 +871,7 @@ static int audio_gapless_offload_ctl_get(struct snd_kcontrol *kcontrol,
 }
 
 static int audio_gapless_offload_ctl_set(struct snd_kcontrol *kcontrol,
-					       struct snd_ctl_elem_value *ucontrol)
+					 struct snd_ctl_elem_value *ucontrol)
 {
 	struct aoc_chip *chip = snd_kcontrol_chip(kcontrol);
 	int err = 0;
@@ -877,6 +880,43 @@ static int audio_gapless_offload_ctl_set(struct snd_kcontrol *kcontrol,
 		return -EINTR;
 
 	chip->gapless_offload_enable = ucontrol->value.integer.value[0];
+
+	mutex_unlock(&chip->audio_mutex);
+	return err;
+}
+
+static int audio_offload_position_ctl_get(struct snd_kcontrol *kcontrol,
+					  struct snd_ctl_elem_value *ucontrol)
+{
+	struct aoc_chip *chip = snd_kcontrol_chip(kcontrol);
+	uint64_t current_position = 0;
+	int err = 0;
+
+	if (mutex_lock_interruptible(&chip->audio_mutex))
+		return -EINTR;
+
+	if (chip->compr_offload_stream != NULL) {
+		err = aoc_compr_get_position(chip->compr_offload_stream, &current_position);
+		if (err == 0)
+			memcpy(ucontrol->value.bytes.data, &current_position, sizeof(uint64_t));
+	}
+
+	mutex_unlock(&chip->audio_mutex);
+
+	return err;
+}
+
+static int audio_offload_position_ctl_set(struct snd_kcontrol *kcontrol,
+					       struct snd_ctl_elem_value *ucontrol)
+{
+	struct aoc_chip *chip = snd_kcontrol_chip(kcontrol);
+	int err = 0;
+
+	if (mutex_lock_interruptible(&chip->audio_mutex))
+		return -EINTR;
+
+	if (chip->compr_offload_stream != NULL)
+		err = aoc_compr_offload_reset_io_sample_base(chip->compr_offload_stream);
 
 	mutex_unlock(&chip->audio_mutex);
 	return err;
@@ -2687,6 +2727,18 @@ static struct snd_kcontrol_new snd_aoc_ctl[] = {
 
 	SOC_SINGLE_EXT("Gapless Offload Enable", SND_SOC_NOPM, 0, 1, 0,
 		       audio_gapless_offload_ctl_get, audio_gapless_offload_ctl_set),
+
+	{
+		.iface = SNDRV_CTL_ELEM_IFACE_MIXER,
+		.name = "Offload Position",
+		.index = 0,
+		.access = SNDRV_CTL_ELEM_ACCESS_READWRITE,
+		.private_value = OFFLOAD_POSITION,
+		.info = snd_aoc_ctl_info,
+		.get = audio_offload_position_ctl_get,
+		.put = audio_offload_position_ctl_set,
+		.count = 1,
+	},
 
 	SOC_SINGLE_EXT("Voice PCM Stream Wait Time in MSec", SND_SOC_NOPM, 0, 10000, 0,
 		voice_pcm_wait_time_get, voice_pcm_wait_time_set),

@@ -197,6 +197,7 @@ enum {
 	BUILDIN_US_MIC_CAPTURE_LIST,
 	BUILDIN_MIC_BROKEN_STATE,
 	A2DP_ENCODER_PARAMETERS,
+	OFFLOAD_POSITION,
 };
 
 enum aoc_playback_entry_point {
@@ -245,6 +246,7 @@ struct aoc_chip {
 
 	uint64_t avail_substreams;
 	struct aoc_alsa_stream *alsa_stream[MAX_NUM_OF_SUBSTREAMS];
+	struct aoc_alsa_stream *compr_offload_stream;
 
 	struct aoc_service_dev *dev_alsa_stream[MAX_NUM_OF_SUBSTREAMS];
 	struct aoc_service_dev *dp_dev;
@@ -541,6 +543,8 @@ int aoc_compr_pause(struct aoc_alsa_stream *alsa_stream);
 int aoc_compr_resume(struct aoc_alsa_stream *alsa_stream);
 int aoc_compr_offload_linear_gain_get(struct aoc_chip *chip, long *val);
 int aoc_compr_offload_linear_gain_set(struct aoc_chip *chip, long *val);
+int aoc_compr_offload_reset_io_sample_base(struct aoc_alsa_stream *alsa_stream);
+int aoc_compr_get_position(struct aoc_alsa_stream *alsa_stream, uint64_t *position);
 
 int aoc_mic_loopback(struct aoc_chip *chip, int enable);
 

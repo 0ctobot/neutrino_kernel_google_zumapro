@@ -19,8 +19,6 @@
 #include <soc/google/exynos-itmon.h>
 #endif
 
-#include "ion_physical_heap.h"
-
 #define SSMT_BYPASS_VALUE	0x80000000U
 #define SSMT_NS_READ_PID(n)	(0x4000 + 4 * (n))
 #define SSMT_NS_WRITE_PID(n)	(0x4200 + 4 * (n))
@@ -41,11 +39,8 @@ static int aoc_itmon_notifier(struct notifier_block *nb, unsigned long action,
 	if (itmon_info->port && (strncmp(itmon_info->port, "AOC", sizeof("AOC") - 1) == 0))
 		return NOTIFY_STOP;
 
-	if (itmon_info->target_addr == 0) {
-		dev_err(prvdata->dev,
-			"Possible repro of b/174577569, please upload a bugreport and /data/vendor/ssrdump to that bug\n");
+	if (itmon_info->target_addr == 0)
 		return NOTIFY_STOP;
-	}
 
 	if ((itmon_info->target_addr >= aoc_sram_resource->start +
 			prvdata->aoc_cp_aperture_start_offset) &&
@@ -190,16 +185,16 @@ int aoc_watchdog_restart(struct aoc_prvdata *prvdata,
 	dev_info(prvdata->dev, "aoc reset finished\n");
 	prvdata->aoc_reset_done = false;
 
-	/* Restore SysMMU settings by briefly setting AoC to runtime active. Since SysMMU is a
+	/* Restore IOMMU settings by briefly setting AoC to runtime active. Since IOMMU is a
 	 * supplier to AoC, it will be set to runtime active as a side effect. */
 	rc = pm_runtime_set_active(prvdata->dev);
 	if (rc < 0) {
-		dev_err(prvdata->dev, "sysmmu restore failed: pm_runtime_resume rc = %d\n", rc);
+		dev_err(prvdata->dev, "iommu restore failed: pm_runtime_resume rc = %d\n", rc);
 		return rc;
 	}
 	rc = pm_runtime_set_suspended(prvdata->dev);
 	if (rc < 0) {
-		dev_err(prvdata->dev, "sysmmu restore failed: pm_runtime_suspend rc = %d\n", rc);
+		dev_err(prvdata->dev, "iommu restore failed: pm_runtime_suspend rc = %d\n", rc);
 		return rc;
 	}
 
@@ -265,161 +260,6 @@ void trigger_aoc_ramdump(struct aoc_prvdata *prvdata)
 }
 EXPORT_SYMBOL_GPL(trigger_aoc_ramdump);
 
-static void aoc_pheap_alloc_cb(struct samsung_dma_buffer *buffer, void *ctx)
-{
-	struct device *dev = ctx;
-	struct aoc_prvdata *prvdata = dev_get_drvdata(dev);
-	struct sg_table *sg = &buffer->sg_table;
-	phys_addr_t phys;
-	size_t size;
-
-	if (sg->nents != 1) {
-		dev_warn(dev, "Unable to map sg_table with %d ents\n",
-			 sg->nents);
-		return;
-	}
-
-	phys = sg_phys(&sg->sgl[0]);
-	phys = aoc_dram_translate_to_aoc(prvdata, phys);
-	size = sg->sgl[0].length;
-
-	mutex_lock(&aoc_service_lock);
-	if (prvdata->map_handler) {
-		prvdata->map_handler((u64)buffer->priv, phys, size, true,
-				     prvdata->map_handler_ctx);
-	}
-	mutex_unlock(&aoc_service_lock);
-}
-
-static void aoc_pheap_free_cb(struct samsung_dma_buffer *buffer, void *ctx)
-{
-	struct device *dev = ctx;
-	struct aoc_prvdata *prvdata = dev_get_drvdata(dev);
-	struct sg_table *sg = &buffer->sg_table;
-	phys_addr_t phys;
-	size_t size;
-
-	if (sg->nents != 1) {
-		dev_warn(dev, "Unable to map sg_table with %d ents\n",
-			 sg->nents);
-		return;
-	}
-
-	phys = sg_phys(&sg->sgl[0]);
-	phys = aoc_dram_translate_to_aoc(prvdata, phys);
-	size = sg->sgl[0].length;
-
-	mutex_lock(&aoc_service_lock);
-	if (prvdata->map_handler) {
-		prvdata->map_handler((u64)buffer->priv, phys, size, false,
-				     prvdata->map_handler_ctx);
-	}
-	mutex_unlock(&aoc_service_lock);
-}
-
-static struct dma_heap *aoc_create_dma_buf_heap(struct aoc_prvdata *prvdata, const char *name,
-						phys_addr_t base, size_t size)
-{
-	struct device *dev = prvdata->dev;
-	size_t align = SZ_16K;
-	struct dma_heap *heap;
-
-	heap = ion_physical_heap_create(base, size, align, name, aoc_pheap_alloc_cb,
-					aoc_pheap_free_cb, dev);
-	if (IS_ERR(heap))
-		dev_err(dev, "heap \"%s\" creation failure: %ld\n", name, PTR_ERR(heap));
-
-	return heap;
-}
-
-bool aoc_create_dma_buf_heaps(struct aoc_prvdata *prvdata)
-{
-	phys_addr_t base = prvdata->dram_resource.start + resource_size(&prvdata->dram_resource);
-
-	base -= SENSOR_DIRECT_HEAP_SIZE;
-	prvdata->sensor_heap = aoc_create_dma_buf_heap(prvdata, "sensor_direct_heap",
-						       base, SENSOR_DIRECT_HEAP_SIZE);
-	prvdata->sensor_heap_base = base;
-	if (IS_ERR(prvdata->sensor_heap))
-		return false;
-
-	base -= PLAYBACK_HEAP_SIZE;
-	prvdata->audio_playback_heap = aoc_create_dma_buf_heap(prvdata, "aaudio_playback_heap",
-							       base, PLAYBACK_HEAP_SIZE);
-	prvdata->audio_playback_heap_base = base;
-	if (IS_ERR(prvdata->audio_playback_heap))
-		return false;
-
-	base -= CAPTURE_HEAP_SIZE;
-	prvdata->audio_capture_heap = aoc_create_dma_buf_heap(prvdata, "aaudio_capture_heap",
-							      base, CAPTURE_HEAP_SIZE);
-	prvdata->audio_capture_heap_base = base;
-	if (IS_ERR(prvdata->audio_capture_heap))
-		return false;
-
-	return true;
-}
-EXPORT_SYMBOL_GPL(aoc_create_dma_buf_heaps);
-
-/* Returns true if `base` is located within the aoc dram carveout */
-static bool is_aoc_dma_buf(struct aoc_prvdata *prvdata, phys_addr_t base) {
-	phys_addr_t dram_carveout_start;
-	phys_addr_t dram_carveout_end;
-
-	dram_carveout_start = prvdata->dram_resource.start;
-	dram_carveout_end = dram_carveout_start + resource_size(&prvdata->dram_resource);
-	return (base <= dram_carveout_end && base >= dram_carveout_start);
-}
-
-long aoc_unlocked_ioctl_handle_ion_fd(unsigned int cmd, unsigned long arg)
-{
-	struct aoc_ion_handle handle;
-	struct dma_buf *dmabuf;
-	struct samsung_dma_buffer *dma_heap_buf;
-
-	struct ion_physical_heap *phys_heap;
-	phys_addr_t base;
-	long ret = -EINVAL;
-	struct aoc_prvdata *prvdata = platform_get_drvdata(aoc_platform_device);
-
-	BUILD_BUG_ON(sizeof(struct aoc_ion_handle) !=
-				_IOC_SIZE(AOC_IOCTL_ION_FD_TO_HANDLE));
-
-	if (copy_from_user(&handle, (struct aoc_ion_handle *)arg, _IOC_SIZE(cmd)))
-		return ret;
-
-	dmabuf = dma_buf_get(handle.fd);
-	if (IS_ERR(dmabuf)) {
-		pr_err("fd is not an ion buffer\n");
-		ret = PTR_ERR(dmabuf);
-		return ret;
-	}
-
-	dma_heap_buf = dmabuf->priv;
-	handle.handle = (u64)dma_heap_buf->priv;
-
-	/*
-	 * Ensure base is in aoc dram carveout. Ensures that the dmabuf
-	 * is created and maintained by AoC.
-	 */
-	base = 0;
-	if (dma_heap_buf->heap->priv) {
-		phys_heap = dma_heap_buf->heap->priv;
-		base = phys_heap->base;
-	}
-
-	if (!(is_aoc_dma_buf(prvdata, base)))
-		return ret;
-
-	dma_buf_put(dmabuf);
-
-	if (!copy_to_user((struct aoc_ion_handle *)arg, &handle, _IOC_SIZE(cmd)))
-		ret = 0;
-
-	return ret;
-}
-EXPORT_SYMBOL_GPL(aoc_unlocked_ioctl_handle_ion_fd);
-
 static irqreturn_t watchdog_int_handler(int irq, void *dev)
 {
 	trigger_aoc_ssr(false, NULL);
@@ -451,27 +291,27 @@ int configure_watchdog_interrupt(struct platform_device *pdev, struct aoc_prvdat
 }
 EXPORT_SYMBOL_GPL(configure_watchdog_interrupt);
 
-int configure_sysmmu_interrupts(struct device *dev, struct device_node *sysmmu_node,
+int configure_iommu_interrupts(struct device *dev, struct device_node *iommu_node,
 		struct aoc_prvdata *prvdata)
 {
-	int rc = 0, ret = of_irq_get(sysmmu_node, 0);
+	int rc = 0, ret = of_irq_get(iommu_node, 0);
 
 	if (ret < 0) {
-		dev_err(dev, "failed to find sysmmu non-secure irq: %d\n", ret);
+		dev_err(dev, "failed to find iommu non-secure irq: %d\n", ret);
 		rc = ret;
 		return rc;
 	}
-	prvdata->sysmmu_nonsecure_irq = ret;
-	ret = of_irq_get(sysmmu_node, 1);
+	prvdata->iommu_nonsecure_irq = ret;
+	ret = of_irq_get(iommu_node, 1);
 	if (ret < 0) {
-		dev_err(dev, "failed to find sysmmu secure irq: %d\n", ret);
+		dev_err(dev, "failed to find iommu secure irq: %d\n", ret);
 		rc = ret;
 		return rc;
 	}
-	prvdata->sysmmu_secure_irq = ret;
+	prvdata->iommu_secure_irq = ret;
 	return rc;
 }
-EXPORT_SYMBOL_GPL(configure_sysmmu_interrupts);
+EXPORT_SYMBOL_GPL(configure_iommu_interrupts);
 
 #if IS_ENABLED(CONFIG_SOC_GS101)
 void aoc_configure_ssmt(struct platform_device *pdev)
@@ -507,19 +347,19 @@ EXPORT_SYMBOL_GPL(aoc_configure_ssmt);
 void configure_crash_interrupts(struct aoc_prvdata *prvdata, bool enable)
 {
 	if (prvdata->first_fw_load) {
-		/* Default irq state of watchdog is off and sysmmu is on.
+		/* Default irq state of watchdog is off and iommu is on.
 		 * When loading aoc firmware in first time
 		 * Enable only irq of watchdog for balance irq state
 		 */
 		enable_irq(prvdata->watchdog_irq);
 		prvdata->first_fw_load = false;
 	} else if (enable) {
-		enable_irq(prvdata->sysmmu_nonsecure_irq);
-		enable_irq(prvdata->sysmmu_secure_irq);
+		enable_irq(prvdata->iommu_nonsecure_irq);
+		enable_irq(prvdata->iommu_secure_irq);
 		enable_irq(prvdata->watchdog_irq);
 	} else {
-		disable_irq_nosync(prvdata->sysmmu_nonsecure_irq);
-		disable_irq_nosync(prvdata->sysmmu_secure_irq);
+		disable_irq_nosync(prvdata->iommu_nonsecure_irq);
+		disable_irq_nosync(prvdata->iommu_secure_irq);
 		/* Need to disable it to let APM handle it once we
 		 * retrigger it in aoc_watchdog_restart.
 		 */

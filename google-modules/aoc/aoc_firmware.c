@@ -87,8 +87,8 @@ struct aoc_image_config {
 				uint32_t privilege_level;
 				uint16_t bl_offset;
 				uint16_t bl_size;
-				uint16_t sysmmu_offset;
-				uint16_t sysmmu_size;
+				uint16_t iommu_offset;
+				uint16_t iommu_size;
 			};
 		};
 		uint8_t raw_bytes[256];
@@ -196,27 +196,27 @@ struct aoc_image_config *_aoc_fw_image_config(const struct firmware *fw)
 	}
 }
 
-uint16_t _aoc_fw_sysmmu_offset(const struct firmware *fw)
+uint16_t _aoc_fw_iommu_offset(const struct firmware *fw)
 {
 	struct aoc_image_config *cfg = _aoc_fw_image_config(fw);
 
-	return cfg->sysmmu_offset;
+	return cfg->iommu_offset;
 }
 
-uint16_t _aoc_fw_sysmmu_size(const struct firmware *fw)
+uint16_t _aoc_fw_iommu_size(const struct firmware *fw)
 {
 	struct aoc_image_config *cfg = _aoc_fw_image_config(fw);
 
-	return cfg->sysmmu_size;
+	return cfg->iommu_size;
 }
 
-bool _aoc_fw_is_valid_sysmmu_size(const struct firmware *fw)
+bool _aoc_fw_is_valid_iommu_size(const struct firmware *fw)
 {
 	struct aoc_image_config *cfg = _aoc_fw_image_config(fw);
 
-	return cfg->sysmmu_offset < sizeof(*cfg) &&
-		(cfg->sysmmu_offset + cfg->sysmmu_size) <= sizeof(*cfg) &&
-		(cfg->sysmmu_size % sizeof(struct sysmmu_entry) == 0);
+	return cfg->iommu_offset < sizeof(*cfg) &&
+		(cfg->iommu_offset + cfg->iommu_size) <= sizeof(*cfg) &&
+		(cfg->iommu_size % sizeof(struct iommu_entry) == 0);
 }
 
 uint16_t _aoc_fw_bl_size(const struct firmware *fw)
@@ -233,11 +233,11 @@ u32 *_aoc_fw_bl(const struct firmware *fw)
 	return (u32 *)((uint8_t *)cfg + cfg->bl_offset);
 }
 
-struct sysmmu_entry *_aoc_fw_sysmmu_entry(const struct firmware *fw)
+struct iommu_entry *_aoc_fw_iommu_entry(const struct firmware *fw)
 {
 	struct aoc_image_config *cfg = _aoc_fw_image_config(fw);
 
-	return (struct sysmmu_entry *)((uint8_t *)cfg + cfg->sysmmu_offset);
+	return (struct iommu_entry *)((uint8_t *)cfg + cfg->iommu_offset);
 }
 
 bool _aoc_fw_is_compatible(const struct firmware *fw)

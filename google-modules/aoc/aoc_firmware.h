@@ -15,14 +15,14 @@
 
 #define AOC_AUTH_HEADER_SIZE 4096
 
-struct sysmmu_entry {
+struct iommu_entry {
     uint64_t value;
 };
 
-/* Access macros to decode SYSMMU entry */
-#define SYSMMU_VADDR(v) ((((v) >> 0) & 0x000FFFFF) << 12)
-#define SYSMMU_PADDR(v) ((((v) >> 20) & 0x00FFFFFF) << 12)
-#define SYSMMU_SIZE(v) ((((v) >> 44) & 0x000FFFFF) << 12)
+/* Access macros to decode IOMMU entry */
+#define IOMMU_VADDR(v) ((((v) >> 0) & 0x000FFFFF) << 12)
+#define IOMMU_PADDR(v) ((((v) >> 20) & 0x00FFFFFF) << 12)
+#define IOMMU_SIZE(v) ((((v) >> 44) & 0x000FFFFF) << 12)
 
 /* Dev builds bypass the UUID check on load */
 bool _aoc_fw_is_release(const struct firmware *fw);
@@ -42,13 +42,13 @@ const char *_aoc_fw_version(const struct firmware *fw);
 
 bool _aoc_fw_commit(const struct firmware *fw, void *dest);
 
-uint16_t _aoc_fw_sysmmu_offset(const struct firmware *fw);
+uint16_t _aoc_fw_iommu_offset(const struct firmware *fw);
 
-uint16_t _aoc_fw_sysmmu_size(const struct firmware *fw);
+uint16_t _aoc_fw_iommu_size(const struct firmware *fw);
 
-bool _aoc_fw_is_valid_sysmmu_size(const struct firmware *fw);
+bool _aoc_fw_is_valid_iommu_size(const struct firmware *fw);
 
-struct sysmmu_entry *_aoc_fw_sysmmu_entry(const struct firmware *fw);
+struct iommu_entry *_aoc_fw_iommu_entry(const struct firmware *fw);
 
 struct aoc_image_config *_aoc_fw_image_config(const struct firmware *fw);
 
