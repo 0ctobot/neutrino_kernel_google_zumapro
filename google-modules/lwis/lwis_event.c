@@ -647,6 +647,7 @@ int lwis_client_event_states_clear(struct lwis_client *lwis_client)
 	struct list_head events_to_clear;
 	/* Flags for irqsave */
 	unsigned long flags;
+	int ret;
 
 	INIT_LIST_HEAD(&events_to_clear);
 	/* Disable IRQs and lock the event lock */
@@ -671,6 +672,15 @@ int lwis_client_event_states_clear(struct lwis_client *lwis_client)
 						state->event_control.flags, 0);
 		/* Free the object */
 		kfree(state);
+	}
+
+	if (lwis_client->lwis_dev->irqs) {
+		ret = lwis_interrupt_write_combined_mask_value(lwis_client->lwis_dev->irqs);
+		if (ret) {
+			dev_err(lwis_client->lwis_dev->dev,
+				"Failed to write combined mask value\n");
+			return ret;
+		}
 	}
 
 	return 0;

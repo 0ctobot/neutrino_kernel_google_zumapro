@@ -43,6 +43,12 @@ TRACE_EVENT(tracing_mark_write,
 	trace_tracing_mark_write(lwis_dev, 'E', current->tgid, func_name, 0)
 #define LWIS_ATRACE_FUNC_END(lwis_dev, func_name) LWIS_ATRACE_END(lwis_dev, func_name)
 
+#define LWIS_ATRACE_FUNC_INT_BEGIN(lwis_dev, func_name, value)                                     \
+	trace_tracing_mark_write(lwis_dev, 'B', current->tgid, func_name, value)
+
+#define LWIS_ATRACE_FUNC_INT_END(lwis_dev, func_name, value)                                       \
+	trace_tracing_mark_write(lwis_dev, 'E', current->tgid, func_name, value)
+
 #define LWIS_ATRACE_INT_PID(lwis_dev, func_name, value, pid)                                       \
 	trace_tracing_mark_write(lwis_dev, 'C', pid, func_name, value)
 #define LWIS_ATRACE_INT(lwis_dev, func_name, value)                                                \

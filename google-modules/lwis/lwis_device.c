@@ -122,7 +122,6 @@ static int lwis_open(struct inode *node, struct file *fp)
 	spin_lock_init(&lwis_client->periodic_io_lock);
 	spin_lock_init(&lwis_client->event_lock);
 	spin_lock_init(&lwis_client->flush_lock);
-	spin_lock_init(&lwis_client->buffer_lock);
 
 	/* Empty hash table for client event states */
 	hash_init(lwis_client->event_states);
@@ -1563,6 +1562,7 @@ int lwis_base_probe(struct lwis_device *lwis_dev)
 
 	/* Initialize the spinlock */
 	spin_lock_init(&lwis_dev->lock);
+	spin_lock_init(&lwis_dev->allocator_lock);
 
 	if (lwis_dev->type == DEVICE_TYPE_TOP) {
 		lwis_dev->top_dev = lwis_dev;

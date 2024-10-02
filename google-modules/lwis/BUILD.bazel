@@ -7,8 +7,8 @@ kernel_module(
     srcs = glob([
         "**/*.c",
         "**/*.h",
-        "Kbuild",
     ]) + [
+        "Kbuild",
         "//private/google-modules/soc/gs:gs_soc_headers",
     ],
     outs = [

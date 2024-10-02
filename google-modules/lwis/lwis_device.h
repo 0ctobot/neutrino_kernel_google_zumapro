@@ -283,6 +283,7 @@ struct lwis_device {
 
 	/* LWIS allocator block manager */
 	struct lwis_allocator_block_mgr *block_mgr;
+	spinlock_t allocator_lock;
 
 	/* Worker thread */
 	struct kthread_worker transaction_worker;
@@ -346,8 +347,6 @@ struct lwis_client {
 	enum lwis_client_flush_state flush_state;
 	/* Lock to guard client's flush state changes */
 	spinlock_t flush_lock;
-	/* Lock to guard client's buffer changes */
-	spinlock_t buffer_lock;
 };
 
 /*

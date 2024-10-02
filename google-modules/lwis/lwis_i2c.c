@@ -30,6 +30,9 @@
 #define MIN_DATA_BITS 8
 #define MAX_DATA_BITS 32
 
+/* I2C target address bytes is 7-bit + 1 ack bit */
+#define I2C_TARGET_ADDR_BYTES 1
+
 static inline bool check_bitwidth(const int bitwidth, const int min, const int max)
 {
 	return (bitwidth >= min) && (bitwidth <= max) && ((bitwidth % 8) == 0);
@@ -47,9 +50,11 @@ static int perform_read_transfer(struct i2c_client *client, struct i2c_msg *msg,
 	scnprintf(trace_name, LWIS_MAX_NAME_STRING_LEN, "i2c_read_%s", lwis_dev->name);
 
 	lwis_value_to_be_buf(offset, wbuf, offset_size_bytes);
-	LWIS_ATRACE_FUNC_BEGIN(lwis_dev, trace_name);
+	LWIS_ATRACE_FUNC_INT_BEGIN(lwis_dev, trace_name,
+				   msg[0].len + msg[1].len + num_msg * I2C_TARGET_ADDR_BYTES);
 	ret = i2c_transfer(client->adapter, msg, num_msg);
-	LWIS_ATRACE_FUNC_END(lwis_dev, trace_name);
+	LWIS_ATRACE_FUNC_INT_END(lwis_dev, trace_name,
+				 msg[0].len + msg[1].len + num_msg * I2C_TARGET_ADDR_BYTES);
 	return (ret == num_msg) ? 0 : ret;
 }
 
@@ -67,9 +72,11 @@ static int perform_write_transfer(struct i2c_client *client, struct i2c_msg *msg
 
 	lwis_value_to_be_buf(offset, buf, offset_size_bytes);
 	lwis_value_to_be_buf(value, buf + offset_size_bytes, value_size_bytes);
-	LWIS_ATRACE_FUNC_BEGIN(lwis_dev, trace_name);
+	LWIS_ATRACE_FUNC_INT_BEGIN(lwis_dev, trace_name,
+				   msg[0].len + num_msg * I2C_TARGET_ADDR_BYTES);
 	ret = i2c_transfer(client->adapter, msg, num_msg);
-	LWIS_ATRACE_FUNC_END(lwis_dev, trace_name);
+	LWIS_ATRACE_FUNC_INT_END(lwis_dev, trace_name,
+				 msg[0].len + num_msg * I2C_TARGET_ADDR_BYTES);
 	return (ret == num_msg) ? 0 : ret;
 }
 
@@ -89,9 +96,11 @@ static int perform_write_batch_transfer(struct i2c_client *client, struct i2c_ms
 	lwis_value_to_be_buf(offset, buf, offset_size_bytes);
 	memcpy(buf + offset_size_bytes, value_buf, value_size_bytes);
 
-	LWIS_ATRACE_FUNC_BEGIN(lwis_dev, trace_name);
+	LWIS_ATRACE_FUNC_INT_BEGIN(lwis_dev, trace_name,
+				   msg[0].len + num_msg * I2C_TARGET_ADDR_BYTES);
 	ret = i2c_transfer(client->adapter, msg, num_msg);
-	LWIS_ATRACE_FUNC_END(lwis_dev, trace_name);
+	LWIS_ATRACE_FUNC_INT_END(lwis_dev, trace_name,
+				 msg[0].len + num_msg * I2C_TARGET_ADDR_BYTES);
 	return (ret == num_msg) ? 0 : ret;
 }
 
