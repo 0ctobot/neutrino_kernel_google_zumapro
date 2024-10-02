@@ -112,11 +112,21 @@ static const struct attribute *hdcp_attrs[] = {
 					&dev_attr_hdcp0_count.attr,
 					NULL };
 
+static irqreturn_t exynos_hdcp_irq_handler(int irq, void *dev_id) {
+	struct hdcp_device* hdcp_dev = dev_id;
+
+	hdcp_debug("irq handler called\n");
+	hdcp_auth_worker_schedule(hdcp_dev);
+	return IRQ_HANDLED;
+}
+
 static int exynos_hdcp_probe(struct platform_device *pdev)
 {
 	struct device *dev = &pdev->dev;
 	struct hdcp_device *hdcp_dev = NULL;
 	int ret = 0;
+	int err;
+	unsigned int irq;
 
 	hdcp_dev = devm_kzalloc(dev, sizeof(struct hdcp_device), GFP_KERNEL);
 	if (!hdcp_dev) {
@@ -124,11 +134,26 @@ static int exynos_hdcp_probe(struct platform_device *pdev)
 	}
 	hdcp_dev->dev = dev;
 	platform_set_drvdata(pdev, hdcp_dev);
+
+	irq = irq_of_parse_and_map(dev->of_node, 0);
+	if (!irq) {
+		hdcp_info("fail to get irq from dt\n");
+		return -EINVAL;
+	}
+
+	err = devm_request_irq(dev, irq, exynos_hdcp_irq_handler,
+		IRQF_TRIGGER_RISING, pdev->name, hdcp_dev);
+	if (err) {
+		hdcp_info("Fail to request IRQ handler. err(%d) irq(%d)\n",
+			err, irq);
+		return err;
+	}
+
 	hdcp_auth_worker_init(hdcp_dev);
 
 	ret = sysfs_create_files(&dev->kobj, hdcp_attrs);
 	if (ret)
-		dev_err(dev, "failed to create hdcp sysfs files\n");
+		hdcp_info("failed to create hdcp sysfs files\n");
 
 	return 0;
 }

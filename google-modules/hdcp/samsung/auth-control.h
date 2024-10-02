@@ -27,5 +27,6 @@ int hdcp_get_auth_state(void);
 
 int hdcp_auth_worker_init(struct hdcp_device *dev);
 int hdcp_auth_worker_deinit(struct hdcp_device *dev);
+void hdcp_auth_worker_schedule(struct hdcp_device *dev);
 
 #endif

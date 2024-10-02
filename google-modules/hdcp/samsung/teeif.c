@@ -287,6 +287,10 @@ int hdcp_tee_connect_info(int connect_info) {
 	return hdcp_tee_comm_xchg(HDCP_CMD_CONNECT_INFO, connect_info, NULL, NULL);
 }
 
+int hdcp_tee_get_cp_level(uint32_t* requested_lvl) {
+	return hdcp_tee_comm_xchg(HDCP_CMD_GET_CP_LVL, 0, requested_lvl, NULL);
+}
+
 static int hdcp_tee_comm(struct hci_message *hci) {
 	return hdcp_tee_comm_xchg(HDCP_CMD_PROTOCOL, 0, NULL, hci);
 }
@@ -571,7 +575,7 @@ int teei_gen_stream_manage(uint16_t stream_num,
 
 	memcpy(seq_num_m, hci->genstrminfo.seq_num_m, HDCP_RP_SEQ_NUM_M_LEN);
 	memcpy(k, hci->genstrminfo.k, HDCP_RP_K_LEN);
-	memcpy(streamid_type, hci->genstrminfo.streamid_type, HDCP_RP_STREAMID_TYPE_LEN);
+	memcpy(streamid_type, hci->genstrminfo.streamid_type, HDCP_RP_MAX_STREAMID_TYPE_LEN);
 
 	/* check returned message from SWD */
 

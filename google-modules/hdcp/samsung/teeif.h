@@ -215,7 +215,7 @@ typedef struct {
 	uint8_t streamid[HDCP_RP_MAX_STREAMID_NUM];
 	uint8_t seq_num_m[HDCP_RP_SEQ_NUM_M_LEN];
 	uint8_t k[HDCP_RP_K_LEN];
-	uint8_t streamid_type[HDCP_RP_STREAMID_TYPE_LEN];
+	uint8_t streamid_type[HDCP_RP_MAX_STREAMID_TYPE_LEN];
 } hci_genstreaminfo_t;
 
 typedef struct {
@@ -287,6 +287,7 @@ enum hdcp_auth_cmd {
 	HDCP_CMD_SESSION_SET,
 	HDCP_CMD_SET_TEST_MODE,
 	HDCP_CMD_CONNECT_INFO,
+	HDCP_CMD_GET_CP_LVL,
 };
 
 void hdcp_tee_init(void);
@@ -299,6 +300,7 @@ int hdcp_tee_send_cmd(uint32_t cmd);
 int hdcp_tee_check_protection(int* version);
 int hdcp_tee_set_test_mode(bool enable);
 int hdcp_tee_connect_info(int connect_info);
+int hdcp_tee_get_cp_level(uint32_t* requested_lvl);
 
 /* HDCP TEE interfaces */
 int teei_gen_rtx(uint32_t lk_type,

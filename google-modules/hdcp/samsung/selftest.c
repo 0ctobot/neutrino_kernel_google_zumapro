@@ -224,8 +224,7 @@ static int dp_hdcp_protocol_self_test_internal(void) {
 	size_t i;
 	int rc, version;
 
-	hdcp_dplink_connect_state(DP_CONNECT);
-	msleep(HDCP_SCHEDULE_DELAY_MSEC);
+	hdcp_tee_send_cmd(HDCP_CMD_AUTH_MANUAL_START);
 
 	version = -1;
 	for (i = 0; i < 50; ++i) {
