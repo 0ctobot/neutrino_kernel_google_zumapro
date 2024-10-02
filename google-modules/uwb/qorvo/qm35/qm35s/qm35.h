@@ -28,7 +28,7 @@
 #define QM_BOOT_MS 450
 #define QM_BEFORE_RESET_MS 450
 
-#define DRV_VERSION "7.2.9-rc1"
+#define DRV_VERSION "7.2.11-rc3"
 
 struct regulator;
 

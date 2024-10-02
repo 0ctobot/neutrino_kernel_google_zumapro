@@ -841,13 +841,14 @@ static void qm35_regulators_set(struct qm35_ctx *qm35_hdl, bool on)
 	const char *on_str = on ? "enable" : "disable";
 	bool is_enabled;
 	int ret;
+	unsigned long flags;
 
-	spin_lock(&qm35_hdl->lock);
+	spin_lock_irqsave(&qm35_hdl->lock, flags);
 
 	is_enabled = qm35_hdl->regulators_enabled;
 	qm35_hdl->regulators_enabled = on;
 
-	spin_unlock(&qm35_hdl->lock);
+	spin_unlock_irqrestore(&qm35_hdl->lock, flags);
 
 	/* nothing to do we are already in the desired state */
 	if (is_enabled == on)
