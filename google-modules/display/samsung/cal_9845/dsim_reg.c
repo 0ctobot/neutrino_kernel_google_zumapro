@@ -90,6 +90,10 @@ static struct cal_regs_desc regs_desc[REGS_DSIM_TYPE_MAX][MAX_DSI_CNT];
 #define PLL_LOCK_CNT_MARGIN		(PLL_LOCK_CNT_MUL *	\
 					PLL_LOCK_CNT_MARGIN_RATIO / 100)
 
+#if !defined(CONFIG_BOARD_EMULATOR)
+static DEFINE_MUTEX(dphy_lock);
+#endif
+
 static const u32 DSIM_PHY_BIAS_CON_VAL[] = {
 	0x00000010,
 	0x00000110,
@@ -2095,6 +2099,7 @@ void dsim_reg_init(u32 id, struct dsim_reg_config *config,
 	dsim_reg_enable_word_clock(id, 1);
 
 #if !defined(CONFIG_BOARD_EMULATOR)
+	mutex_lock(&dphy_lock);
 	/* Enable DPHY reset : DPHY reset start */
 	dpu_sysreg_dphy_reset(id, 0);
 #endif
@@ -2103,6 +2108,7 @@ void dsim_reg_init(u32 id, struct dsim_reg_config *config,
 	dsim_reg_set_clocks(id, config, clks, 1);
 	dsim_reg_set_lanes_dphy(id, lanes, true);
 	dpu_sysreg_dphy_reset(id, 1); /* Release DPHY reset */
+	mutex_unlock(&dphy_lock);
 #endif
 
 	dsim_reg_set_link_clock(id, 1);	/* Selection to word clock */

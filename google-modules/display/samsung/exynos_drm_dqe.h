@@ -45,8 +45,8 @@ struct histogram_chan_state {
 	enum histogram_run_state run_state;	/* runner state */
 	struct histogram_bins bins;
 	histogram_chan_callback cb;
-	struct exynos_drm_pending_histogram_event *event;
 	struct histogram_channel_config *config;
+	uint32_t user_handle;
 };
 
 struct exynos_dqe_state {
@@ -73,6 +73,7 @@ struct exynos_dqe_state {
 
 	/* histogram: multi-channel support */
 	struct histogram_chan_state hist_chan[HISTOGRAM_MAX] __attribute__ ((aligned(4)));
+	struct list_head hist_pending_events_list;
 };
 
 struct dither_debug_override {
@@ -144,6 +145,24 @@ struct debugfs_dump {
 	void *priv;
 };
 
+/**
+ * dqe_gray_level_callback_data - data for updating connector gray level
+ *
+ * In environments where the connector may need information about the
+ * lhbm_gray_level by way of a custom callback, this holds the required data to
+ * register and execute that callback.
+ */
+struct dqe_gray_level_callback_data {
+	/**
+	 * @conn: handle for associated drm_connector
+	 */
+	struct drm_connector *conn;
+	/**
+	 * @update_gray_level_callback: callback that updates data on connector
+	 */
+	void (*update_gray_level_callback)(struct drm_connector *conn, int lhbm_gray_level);
+};
+
 struct exynos_dqe {
 	void __iomem *regs;
 	void __iomem *cgc_regs;
@@ -172,14 +191,21 @@ struct exynos_dqe {
 	struct exynos_atc force_atc_config;
 	u32 lpd_atc_regs[LPD_ATC_REG_CNT];
 	struct histogram_channel_config lhbm_hist_config;
+	bool lhbm_hist_configured;
 	int lhbm_gray_level;
+	struct dqe_gray_level_callback_data gray_level_callback_data;
 };
+
+struct drm_crtc_state;
 
 int histogram_request_ioctl(struct drm_device *drm_dev, void *data, struct drm_file *file);
 int histogram_cancel_ioctl(struct drm_device *drm_dev, void *data, struct drm_file *file);
 int histogram_channel_request_ioctl(struct drm_device *drm_dev, void *data, struct drm_file *file);
 int histogram_channel_cancel_ioctl(struct drm_device *drm_dev, void *data, struct drm_file *file);
+int histogram_event_request_ioctl(struct drm_device *drm_dev, void *data, struct drm_file *file);
+int histogram_event_cancel_ioctl(struct drm_device *drm_dev, void *data, struct drm_file *file);
 void handle_histogram_event(struct exynos_dqe *dqe);
+void histogram_flip_done(struct exynos_dqe *dqe, const struct drm_crtc_state *new_crtc_state);
 void exynos_dqe_update(struct exynos_dqe *dqe, struct exynos_dqe_state *state,
 			u32 width, u32 height);
 void exynos_dqe_reset(struct exynos_dqe *dqe);

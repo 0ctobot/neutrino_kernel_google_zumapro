@@ -389,6 +389,21 @@ static const struct exynos_dsi_cmd nt37290_init_cmds[] = {
 	EXYNOS_DSI_CMD_SEQ_REV(PANEL_REV_DVT1, 0xF0, 0x55, 0xAA, 0x52, 0x08, 0x00),
 	EXYNOS_DSI_CMD_SEQ_REV(PANEL_REV_DVT1, 0x6F, 0x14),
 	EXYNOS_DSI_CMD_SEQ_REV(PANEL_REV_DVT1, 0xC2, 0x00, 0x50),
+	/* CMD2 Page 3: tune internal power on sequence */
+	EXYNOS_DSI_CMD_SEQ(0xF0, 0x55, 0xAA, 0x52, 0x08, 0x03),
+	EXYNOS_DSI_CMD_SEQ(0x6F, 0x10),
+	EXYNOS_DSI_CMD_SEQ(0xB6, 0x1F),
+	/* CMD2 Page 5: tune internal power on sequence */
+	EXYNOS_DSI_CMD_SEQ(0xF0, 0x55, 0xAA, 0x52, 0x08, 0x05),
+	EXYNOS_DSI_CMD_SEQ(0xB8, 0x04, 0x00, 0x00, 0x02),
+	EXYNOS_DSI_CMD_SEQ(0xB9, 0x04, 0x00, 0x00, 0x02),
+	EXYNOS_DSI_CMD_SEQ(0xBA, 0x84, 0x00, 0x00, 0x02),
+	/* CMD2 Page 3: tune internal power on sequence */
+	EXYNOS_DSI_CMD_SEQ(0xF0, 0x55, 0xAA, 0x52, 0x08, 0x03),
+	EXYNOS_DSI_CMD_SEQ(0x6F, 0x12),
+	EXYNOS_DSI_CMD_SEQ(0xD8, 0x14),
+	EXYNOS_DSI_CMD_SEQ(0x6F, 0x34),
+	EXYNOS_DSI_CMD_SEQ(0xB6, 0x0F, 0x00, 0x3C, 0x00, 0x3C, 0x00, 0x3C, 0x00, 0x3C),
 	/* CMD2 Page 8: IRC IP settings */
 	EXYNOS_DSI_CMD_SEQ_REV(PANEL_REV_DVT1, 0xF0, 0x55, 0xAA, 0x52, 0x08, 0x08),
 	EXYNOS_DSI_CMD_SEQ_REV(PANEL_REV_DVT1, 0x6F, 0x10),
@@ -397,6 +412,9 @@ static const struct exynos_dsi_cmd nt37290_init_cmds[] = {
 					       0x00),
 	EXYNOS_DSI_CMD_SEQ_REV(PANEL_REV_DVT1, 0x6F, 0x28),
 	EXYNOS_DSI_CMD_SEQ_REV(PANEL_REV_DVT1, 0xB8, 0x08, 0x00, 0x08, 0x00, 0x08, 0x00),
+	/* CMD2 Page 5: remove long TE2 pulse */
+	EXYNOS_DSI_CMD_SEQ(0xF0, 0x55, 0xAA, 0x52, 0x08, 0x05),
+	EXYNOS_DSI_CMD_SEQ(0xB6, 0x06, 0x03),
 
 	/* CMD3 Page 0 */
 	EXYNOS_DSI_CMD_SEQ(0xFF, 0xAA, 0x55, 0xA5, 0x80),
@@ -431,6 +449,8 @@ static const struct exynos_dsi_cmd nt37290_init_cmds[] = {
 	EXYNOS_DSI_CMD_SEQ_DELAY(120, 0x11),
 };
 static DEFINE_EXYNOS_CMD_SET(nt37290_init);
+
+static void nt37290_set_local_hbm_mode(struct exynos_panel *ctx, bool local_hbm_en);
 
 static u8 nt37290_get_te2_option(struct exynos_panel *ctx)
 {
@@ -882,6 +902,19 @@ static void nt37290_set_lp_mode(struct exynos_panel *ctx,
 	dev_dbg(ctx->dev, "%s: done\n", __func__);
 }
 
+#define TE_WIDTH_USEC 162
+static void nt37290_wait_for_vsync_done(struct exynos_panel *ctx, u32 vrefresh)
+{
+	if (vrefresh != 60 && vrefresh != 120) {
+		dev_err(ctx->dev, "%s: unsupported refresh rate (%d)\n",
+			__func__, vrefresh);
+		return;
+	}
+
+	exynos_panel_wait_for_vsync_done(ctx, TE_WIDTH_USEC,
+			EXYNOS_VREFRESH_TO_PERIOD_USEC(vrefresh));
+}
+
 static void nt37290_wait_one_vblank(struct exynos_panel *ctx,
 				    const struct exynos_panel_mode *pmode)
 {
@@ -939,6 +972,7 @@ static int nt37290_enable(struct drm_panel *panel)
 	const struct drm_display_mode *mode;
 	const bool needs_reset = !is_panel_enabled(ctx);
 	bool is_fhd;
+	u32 vrefresh;
 
 	if (!pmode) {
 		dev_err(ctx->dev, "no current mode set\n");
@@ -947,6 +981,7 @@ static int nt37290_enable(struct drm_panel *panel)
 
 	mode = &pmode->mode;
 	is_fhd = mode->hdisplay == 1080;
+	vrefresh = needs_reset ? 60 : drm_mode_vrefresh(mode);
 
 	dev_dbg(ctx->dev, "%s (%s)\n", __func__, is_fhd ? "fhd" : "wqhd");
 
@@ -960,13 +995,24 @@ static int nt37290_enable(struct drm_panel *panel)
 		nt37290_update_panel_feat(ctx, pmode, true);
 	}
 
+	/* make sure both DPU and panel PPS are set in the same VSYNC */
+	if (ctx->mode_in_progress == MODE_RES_IN_PROGRESS)
+		nt37290_wait_for_vsync_done(ctx, vrefresh);
+	else if (ctx->mode_in_progress == MODE_RES_AND_RR_IN_PROGRESS)
+		nt37290_wait_for_vsync_done(ctx, ctx->last_rr);
+
 	exynos_panel_send_cmd_set(ctx,
 				  is_fhd ? &nt37290_dsc_fhd_cmd_set : &nt37290_dsc_wqhd_cmd_set);
 
 	if (pmode->exynos_mode.is_lp_mode)
 		nt37290_set_lp_mode(ctx, pmode);
-	else if (needs_reset || ctx->panel_state == PANEL_STATE_BLANK)
-		EXYNOS_DCS_WRITE_TABLE(ctx, display_on);
+	else {
+		if (!needs_reset)
+			nt37290_change_frequency(ctx, pmode);
+
+		if (needs_reset || ctx->panel_state == PANEL_STATE_BLANK)
+			EXYNOS_DCS_WRITE_TABLE(ctx, display_on);
+	}
 
 	DPU_ATRACE_END(__func__);
 
@@ -988,6 +1034,15 @@ static int nt37290_disable(struct drm_panel *panel)
 	bitmap_clear(spanel->hw_feat, 0, G10_FEAT_MAX);
 	spanel->hw_vrefresh = 60;
 	spanel->hw_idle_vrefresh = 0;
+
+	if (ctx->hbm.local_hbm.enabled) {
+		dev_warn(ctx->dev, "%s: lhbm is still enabled while disabling panel\n",
+			 __func__);
+		mutex_lock(&ctx->mode_lock);
+		/* disable lhbm immediately */
+		nt37290_set_local_hbm_mode(ctx, false);
+		mutex_unlock(&ctx->mode_lock);
+	}
 
 	return exynos_panel_disable(panel);
 }

@@ -427,8 +427,9 @@ static void update_dsi_config_from_gs_connector(struct decon_config *config,
 		config->dsc.dsc_count = gs_mode->dsc.dsc_count;
 		config->dsc.slice_count = gs_mode->dsc.cfg->slice_count;
 		config->dsc.slice_height = gs_mode->dsc.cfg->slice_height;
-		config->dsc.slice_width = DIV_ROUND_UP(config->image_width,
-						       config->dsc.slice_count);
+		config->dsc.slice_width = DIV_ROUND_UP(
+			config->image_width / (config->mode.dsi_mode == DSI_MODE_DUAL_DSI ? 2 : 1),
+			config->dsc.slice_count);
 		config->dsc.cfg = gs_mode->dsc.cfg;
 	}
 
@@ -723,12 +724,78 @@ static int decon_atomic_check(struct exynos_drm_crtc *exynos_crtc,
 	return ret;
 }
 
-static void decon_atomic_begin(struct exynos_drm_crtc *crtc)
+#if IS_ENABLED(CONFIG_GS_DRM_PANEL_UNIFIED)
+/**
+ * Calculates ROI components based on screen size parameters
+ * @w: width of screen, in pixels
+ * @h: height of screen, in pixels
+ * @d: depth of ROI center point, in pixels
+ * @r: radius of ROI, in pixels
+ * @x: output parameter: top left x coordinate, in pixels
+ * @y: output parameter: top left y coordinate, in pixels
+ * @side_len: output parameter: side length of ROI rectangle, in pixels
+ */
+static void decon_calc_hist_roi(int w, int h, int d, int r, int *x, int *y, int *side_len)
+{
+	/* calculate ROI rectangle side length (square inscribed in lhbm circle) */
+	int half_side_len = mult_frac(r, 1000, 1414);
+
+	*x = (w / 2) - half_side_len;
+	*y = (h / 2) + d - half_side_len;
+	*side_len = 2 * half_side_len;
+}
+
+static int decon_update_lhbm_hist_roi(struct decon_device *decon, struct drm_atomic_state *state)
+{
+	struct drm_crtc_state *old_crtc_state, *new_crtc_state;
+	struct gs_drm_connector_state *old_gs_connector_state, *new_gs_connector_state;
+
+	old_crtc_state = drm_atomic_get_old_crtc_state(state, &decon->crtc->base);
+	new_crtc_state = drm_atomic_get_new_crtc_state(state, &decon->crtc->base);
+	if (!old_crtc_state || !new_crtc_state)
+		return 0;
+
+	old_gs_connector_state = crtc_get_gs_connector_state(state, old_crtc_state);
+	new_gs_connector_state = crtc_get_gs_connector_state(state, new_crtc_state);
+	if (!old_gs_connector_state || !new_gs_connector_state)
+		return 0;
+
+	if (decon->dqe) {
+		struct dqe_gray_level_callback_data *cb_data =
+			&decon->dqe->gray_level_callback_data;
+
+		cb_data->update_gray_level_callback = gs_drm_connector_update_gray_level_callback;
+		cb_data->conn = new_gs_connector_state->base.connector;
+	}
+
+	/* update if initial (zero-value data), or if config changed */
+	if ((decon->dqe && !decon->dqe->lhbm_hist_configured &&
+	     new_gs_connector_state->lhbm_hist_data.enabled) ||
+	    gs_drm_connector_hist_data_needs_configure(old_gs_connector_state,
+						       new_gs_connector_state)) {
+		struct gs_drm_connector_lhbm_hist_data *hist_data;
+		int w, h, x, y, side_len;
+
+		hist_data = &new_gs_connector_state->lhbm_hist_data;
+		w = new_crtc_state->mode.hdisplay;
+		h = new_crtc_state->mode.vdisplay;
+		decon_calc_hist_roi(w, h, hist_data->d, hist_data->r, &x, &y, &side_len);
+		return exynos_drm_drv_set_lhbm_hist_gs(decon, x, y, side_len, side_len);
+	}
+
+	return 0;
+}
+#endif
+
+static void decon_atomic_begin(struct exynos_drm_crtc *crtc, struct drm_atomic_state *state)
 {
 	struct decon_device *decon = crtc->ctx;
 
 	decon_debug(decon, "%s +\n", __func__);
 	DPU_EVENT_LOG(DPU_EVT_ATOMIC_BEGIN, decon->id, NULL);
+#if IS_ENABLED(CONFIG_GS_DRM_PANEL_UNIFIED)
+	decon_update_lhbm_hist_roi(decon, state);
+#endif
 	decon_reg_wait_update_done_and_mask(decon->id, &decon->config.mode,
 			SHADOW_UPDATE_TIMEOUT_US);
 	decon_debug(decon, "%s -\n", __func__);
@@ -1033,8 +1100,6 @@ static void decon_atomic_flush(struct exynos_drm_crtc *exynos_crtc,
 
 	if (new_exynos_crtc_state->wb_type == EXYNOS_WB_CWB)
 		decon_reg_set_cwb_enable(decon->id, true);
-	else if (old_exynos_crtc_state->wb_type == EXYNOS_WB_CWB)
-		decon_reg_set_cwb_enable(decon->id, false);
 
 	/* if there are no dpp planes attached, enable colormap as fallback */
 	if ((new_crtc_state->plane_mask & ~exynos_crtc->rcd_plane_mask) == 0) {
@@ -1649,6 +1714,11 @@ static void decon_disable(struct exynos_drm_crtc *crtc)
 		}
 	}
 
+	if (decon->dqe) {
+		decon->dqe->gray_level_callback_data.conn = NULL;
+		decon->dqe->gray_level_callback_data.update_gray_level_callback = NULL;
+	}
+
 	reset = _decon_wait_for_framedone(decon);
 	spin_lock_irqsave(&decon->slock, flags);
 	if (old_decon_state == DECON_STATE_ON) {
@@ -1670,7 +1740,10 @@ static void decon_wait_for_flip_done(struct exynos_drm_crtc *crtc,
 	struct decon_device *decon = crtc->ctx;
 	struct drm_crtc_commit *commit = new_crtc_state->commit;
 	struct decon_mode *mode;
+	struct exynos_drm_crtc_state *new_exynos_crtc_state =
+					to_exynos_crtc_state(new_crtc_state);
 	int fps, recovering;
+	bool fs_success = true;
 
 	if (!new_crtc_state->active)
 		return;
@@ -1710,6 +1783,7 @@ static void decon_wait_for_flip_done(struct exynos_drm_crtc *crtc,
 			 */
 			if (!recovering && !(decon->config.out_type & DECON_OUT_DP))
 				decon_trigger_recovery(decon);
+			fs_success = false;
 		} else {
 			pr_warn("decon%u scheduler late to service fs irq handle (%d fps)\n",
 					decon->id, fps);
@@ -1721,6 +1795,12 @@ static void decon_wait_for_flip_done(struct exynos_drm_crtc *crtc,
 		DPU_EVENT_LOG(DPU_EVT_DECON_TRIG_MASK, decon->id, NULL);
 		decon_reg_set_trigger(decon->id, mode, DECON_TRIG_MASK);
 	}
+
+	if (new_exynos_crtc_state->wb_type == EXYNOS_WB_CWB)
+		decon_reg_set_cwb_enable(decon->id, false);
+
+	if (fs_success && decon->dqe)
+		histogram_flip_done(decon->dqe, new_crtc_state);
 }
 
 static const struct exynos_drm_crtc_ops decon_crtc_ops = {
@@ -2178,6 +2258,13 @@ static int decon_parse_dt(struct decon_device *decon, struct device_node *np)
 			decon_debug(decon, "%6d ", dfs_lv_khz[i]);
 		}
 		decon_debug(decon, "\n");
+	}
+
+	if (of_property_read_u32(np, "max_dfs_lv_for_wb", &decon->bts.max_dfs_lv_for_wb)) {
+		decon->bts.max_dfs_lv_for_wb = 0;
+		decon_debug(decon, "max_dfs_lv_for_wb is not defined in DT.\n");
+	} else {
+		decon_debug(decon, "max_dfs_lv_for_wb(%u)\n", decon->bts.max_dfs_lv_for_wb);
 	}
 
 	decon->dpp_cnt = of_count_phandle_with_args(np, "dpps", NULL);

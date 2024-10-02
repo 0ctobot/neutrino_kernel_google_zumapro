@@ -924,6 +924,16 @@ static void dpu_bts_update_resources(struct decon_device *decon, bool shadow_upd
 	DPU_DEBUG_BTS("  peak = %u, rt = %u, read = %u, write = %u\n",
 		bw.peak, bw.rt, bw.read, bw.write);
 
+	/* When concurrent writeback is enabled, writeback instant off may occur if the outfifo
+	 * for writeback is full meanwhile the outfifo for LCD is not full yet.
+	 * We can limit max_disp_freq to avoid it when concurrent writeback is enabled.
+	 * Currently, the issue only occurs when all layers are solid color layers (read = 0).
+	 */
+	if ((decon->bts.max_dfs_lv_for_wb > 0) && (bw.read == 0) && (bw.write > 0)) {
+		decon->bts.max_disp_freq =
+			min(decon->bts.max_disp_freq, decon->bts.max_dfs_lv_for_wb);
+	}
+
 	dpu_bts_update_scenario(decon, bw);
 	if (shadow_updated) {
 		/* after DECON h/w configs are updated to shadow SFR */

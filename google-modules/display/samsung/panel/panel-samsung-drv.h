@@ -309,13 +309,13 @@ struct exynos_panel_funcs {
 	void (*set_acl_mode)(struct exynos_panel *exynos_panel, enum exynos_acl_mode mode);
 
 	/**
-	 * @set_ssc_mode:
+	 * @set_ssc_en:
 	 *
 	 * This callback is used to implement panel specific logic for ssc mode
 	 * enablement. If this is not defined, it means that panel does not
 	 * support ssc.
 	 */
-	void (*set_ssc_mode)(struct exynos_panel *exynos_panel, bool on);
+	void (*set_ssc_en)(struct exynos_panel *exynos_panel, bool enabled);
 
 	/**
 	 * @set_power:
@@ -576,6 +576,14 @@ struct exynos_panel_funcs {
 	 * This callback is used to get panel power Vreg settings.
 	 */
 	void (*get_pwr_vreg)(struct exynos_panel *exynos_panel, char *buf, size_t len);
+
+	/**
+	 * @on_queue_ddic_cmd
+	 *
+	 * This callback is to nofity the panel driver when a ddic command is queued.
+	 */
+	void (*on_queue_ddic_cmd)(struct exynos_panel *exynos_panel,
+			const struct mipi_dsi_msg *msg, const bool is_last);
 };
 
 /**
@@ -713,6 +721,9 @@ struct exynos_panel_desc {
 	const u32 default_dsi_hs_clk_mbps;
 	/* Set true if need to keep ATC on while switching op_hz if it's already on */
 	const bool keep_atc_on_for_op;
+	/* list of revision of this panel */
+	const size_t num_module_ids;
+	const struct panel_module_id_info *module_ids;
 };
 
 #define PANEL_ID_MAX		40
@@ -808,6 +819,11 @@ struct notify_state_change {
 	bool abort_suspend;
 };
 
+struct panel_module_id_info {
+	u32 module_id;
+	u32 revision;
+};
+
 struct exynos_panel {
 	struct device *dev;
 	struct drm_panel panel;
@@ -886,7 +902,7 @@ struct exynos_panel {
 
 	enum exynos_hbm_mode hbm_mode;
 	bool dimming_on;
-	bool ssc_mode;
+	bool ssc_en;
 	/* indicates the LCD backlight is controlled by DCS */
 	bool bl_ctrl_dcs;
 	enum exynos_cabc_mode cabc_mode;
@@ -1171,7 +1187,7 @@ static inline bool is_vrr_mode(const struct exynos_panel_mode *pmode)
 	ret = exynos_dcs_write_delay(ctx, d, ARRAY_SIZE(d), delay);	\
 	if (ret < 0)							\
 		EXYNOS_DCS_WRITE_PRINT_ERR(ctx, d, ARRAY_SIZE(d), ret);	\
-	else								\
+	else if (delay > 0)						\
 		usleep_range(delay * 1000, delay * 1000 + 10);		\
 } while (0)
 
@@ -1191,7 +1207,7 @@ static inline bool is_vrr_mode(const struct exynos_panel_mode *pmode)
 	ret = exynos_dcs_write_delay(ctx, table, ARRAY_SIZE(table), delay);	\
 	if (ret < 0)								\
 		EXYNOS_DCS_WRITE_PRINT_ERR(ctx, table, ARRAY_SIZE(table), ret);	\
-	else									\
+	else if (delay > 0)							\
 		usleep_range(delay * 1000, delay * 1000 + 10);			\
 } while (0)
 
@@ -1259,6 +1275,7 @@ int exynos_panel_prepare(struct drm_panel *panel);
 int exynos_panel_read_id(struct exynos_panel *ctx);
 int exynos_panel_read_ddic_id(struct exynos_panel *ctx);
 void exynos_panel_get_panel_rev(struct exynos_panel *ctx, u8 rev);
+void exynos_panel_get_revision_by_module_ids(struct exynos_panel *ctx, u32 module_id);
 void exynos_panel_model_init(struct exynos_panel *ctx, const char* project, u8 extra_info);
 int exynos_panel_init(struct exynos_panel *ctx);
 int exynos_panel_reset(struct exynos_panel *ctx);

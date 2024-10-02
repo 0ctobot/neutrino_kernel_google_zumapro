@@ -76,8 +76,6 @@ static const struct exynos_dsi_cmd s6e3fc3_lp_high_cmds[] = {
 
 static const struct exynos_dsi_cmd s6e3fc3_1_pwm_cmds[] = {
 	EXYNOS_DSI_CMD0(test_key_on_f0),
-	EXYNOS_DSI_CMD_SEQ(0xB0, 0x28, 0xF2),
-	EXYNOS_DSI_CMD_SEQ(0xF2, 0xCC),
 	EXYNOS_DSI_CMD_SEQ(0xB0, 0x01, 0xF2, 0x65),
 	EXYNOS_DSI_CMD_SEQ(0x65, 0x00, 0x72),
 	EXYNOS_DSI_CMD_SEQ(0xB0, 0x01, 0xD2, 0x65),
@@ -86,8 +84,6 @@ static const struct exynos_dsi_cmd s6e3fc3_1_pwm_cmds[] = {
 	EXYNOS_DSI_CMD_SEQ(0x65, 0x01, 0x02, 0x22),
 	EXYNOS_DSI_CMD_SEQ(0xB0, 0x02, 0x38, 0x65),
 	EXYNOS_DSI_CMD_SEQ(0x65, 0x01, 0x00, 0x01, 0x00),
-	EXYNOS_DSI_CMD_SEQ(0xB0, 0x00, 0x28, 0xF2),
-	EXYNOS_DSI_CMD_SEQ(0xF2, 0xC4),
 	EXYNOS_DSI_CMD0(freq_update),
 	EXYNOS_DSI_CMD0(test_key_off_f0)
 };
@@ -95,8 +91,6 @@ static DEFINE_EXYNOS_CMD_SET(s6e3fc3_1_pwm);
 
 static const struct exynos_dsi_cmd s6e3fc3_4_pwm_cmds[] = {
 	EXYNOS_DSI_CMD0(test_key_on_f0),
-	EXYNOS_DSI_CMD_SEQ(0xB0, 0x28, 0xF2),
-	EXYNOS_DSI_CMD_SEQ(0xF2, 0xCC),
 	EXYNOS_DSI_CMD_SEQ(0xB0, 0x01, 0xF2, 0x65),
 	EXYNOS_DSI_CMD_SEQ(0x65, 0x01, 0xC4),
 	EXYNOS_DSI_CMD_SEQ(0xB0, 0x01, 0xD2, 0x65),
@@ -105,8 +99,6 @@ static const struct exynos_dsi_cmd s6e3fc3_4_pwm_cmds[] = {
 	EXYNOS_DSI_CMD_SEQ(0x65, 0x01, 0x02, 0x22),
 	EXYNOS_DSI_CMD_SEQ(0xB0, 0x02, 0x38, 0x65),
 	EXYNOS_DSI_CMD_SEQ(0x65, 0x01, 0x00, 0x01, 0x00),
-	EXYNOS_DSI_CMD_SEQ(0xB0, 0x00, 0x28, 0xF2),
-	EXYNOS_DSI_CMD_SEQ(0xF2, 0xC4),
 	EXYNOS_DSI_CMD0(freq_update),
 	EXYNOS_DSI_CMD0(test_key_off_f0)
 };
@@ -132,7 +124,7 @@ static const struct exynos_dsi_cmd s6e3fc3_init_cmds[] = {
 			       0xB9, 0x01, 0x09, 0x5C, 0x00, 0x0B),
 
 	/* FQ CON setting */
-	EXYNOS_DSI_CMD_SEQ(0xB0, 0x27, 0xF2 ),
+	EXYNOS_DSI_CMD_SEQ(0xB0, 0x27, 0xF2),
 	EXYNOS_DSI_CMD_SEQ(0xF2, 0x00),
 	EXYNOS_DSI_CMD0(freq_update),
 
@@ -150,8 +142,6 @@ static const struct exynos_dsi_cmd s6e3fc3_init_cmds[] = {
 	EXYNOS_DSI_CMD_SEQ(0xF2, 0xCC),
 	EXYNOS_DSI_CMD_SEQ(0xB0, 0x01, 0x34, 0x68),
 	EXYNOS_DSI_CMD_SEQ(0x68, 0x21, 0xC6, 0xE9),
-	EXYNOS_DSI_CMD_SEQ(0xB0, 0x00, 0x28, 0xF2),
-	EXYNOS_DSI_CMD_SEQ(0xF2, 0xC4),
 	EXYNOS_DSI_CMD0(test_key_off_f1),
 
 	EXYNOS_DSI_CMD0(test_key_off_f0)
@@ -227,8 +217,6 @@ static void s6e3fc3_update_te2(struct exynos_panel *ctx)
 	}
 
 	EXYNOS_DCS_WRITE_TABLE(ctx, test_key_on_f0);
-	EXYNOS_DCS_WRITE_SEQ(ctx, 0xB0, 0x28, 0xF2); /* global para  */
-	EXYNOS_DCS_WRITE_SEQ(ctx, 0xF2, 0xCC); /* global para 10bit */
 	EXYNOS_DCS_WRITE_SEQ(ctx, 0xB0, 0x00, 0x26, 0xF2); /* global para */
 	EXYNOS_DCS_WRITE_SEQ(ctx, 0xF2, 0x03, 0x14); /* TE2 on */
 	EXYNOS_DCS_WRITE_SEQ(ctx, 0xB0, 0x00, 0xAF, 0xCB); /* global para */
@@ -239,8 +227,6 @@ static void s6e3fc3_update_te2(struct exynos_panel *ctx)
 		EXYNOS_DCS_WRITE_SEQ(ctx, 0xB0, 0x01, 0xAF, 0xCB); /* global para */
 		EXYNOS_DCS_WRITE_TABLE(ctx, lp_setting); /* HLPM mode */
 	}
-	EXYNOS_DCS_WRITE_SEQ(ctx, 0xB0, 0x00, 0x28, 0xF2); /* global para */
-	EXYNOS_DCS_WRITE_SEQ(ctx, 0xF2, 0xC4); /* global para 8bit */
 	EXYNOS_DCS_WRITE_TABLE(ctx, freq_update); /* LTPS update */
 	EXYNOS_DCS_WRITE_TABLE(ctx, test_key_off_f0);
 }
@@ -310,8 +296,6 @@ static int s6e3fc3_lhbm_gamma_read(struct exynos_panel *ctx)
 	int ret;
 
 	EXYNOS_DCS_WRITE_TABLE(ctx, test_key_on_f0);
-	EXYNOS_DCS_WRITE_SEQ(ctx, 0xB0, 0x28, 0xF2); /* global para*/
-	EXYNOS_DCS_WRITE_SEQ(ctx, 0xF2, 0xCC); /* 10 bit */
 	EXYNOS_DCS_WRITE_SEQ(ctx, 0xB0, 0x00, 0x22, 0xD8); /* global para */
 	ret = mipi_dsi_dcs_read(dsi, 0xD8, gamma_cmd + 1, S6E3FC3_LOCAL_HBM_GAMMA_CMD_SIZE - 1);
 	if (ret == (S6E3FC3_LOCAL_HBM_GAMMA_CMD_SIZE - 1)) {
@@ -322,8 +306,6 @@ static int s6e3fc3_lhbm_gamma_read(struct exynos_panel *ctx)
 		dev_err(ctx->dev, "fail to read LHBM gamma\n");
 		ret = -EIO;
 	}
-	EXYNOS_DCS_WRITE_SEQ(ctx, 0xB0, 0x00, 0x28, 0xF2); /* global para*/
-	EXYNOS_DCS_WRITE_SEQ(ctx, 0xF2, 0xC4); /* 8 bit */
 	EXYNOS_DCS_WRITE_TABLE(ctx, test_key_off_f0);
 	return ret;
 }
@@ -331,13 +313,9 @@ static int s6e3fc3_lhbm_gamma_read(struct exynos_panel *ctx)
 static void s6e3fc3_lhbm_gamma_write(struct exynos_panel *ctx)
 {
 	EXYNOS_DCS_WRITE_TABLE(ctx, test_key_on_f0);
-	EXYNOS_DCS_WRITE_SEQ(ctx, 0xB0, 0x28, 0xF2); /* global para*/
-	EXYNOS_DCS_WRITE_SEQ(ctx, 0xF2, 0xCC); /* 10 bit */
 	EXYNOS_DCS_WRITE_SEQ(ctx, 0xB0, 0x03, 0xCD, 0x65); /* global para */
 	exynos_dcs_write(ctx, ctx->hbm.local_hbm.gamma_cmd,
 			 S6E3FC3_LOCAL_HBM_GAMMA_CMD_SIZE); /* write gamma */
-	EXYNOS_DCS_WRITE_SEQ(ctx, 0xB0, 0x00, 0x28, 0xF2); /* global para*/
-	EXYNOS_DCS_WRITE_SEQ(ctx, 0xF2, 0xC4); /* 8 bit */
 	EXYNOS_DCS_WRITE_TABLE(ctx, test_key_off_f0);
 }
 
@@ -406,7 +384,7 @@ static void s6e3fc3_set_hbm_mode(struct exynos_panel *exynos_panel,
 	}
 	if (irc_update) {
 		EXYNOS_DCS_WRITE_SEQ(exynos_panel, 0xF0, 0x5A, 0x5A);
-		EXYNOS_DCS_WRITE_SEQ(exynos_panel, 0xB0, 0x03, 0x8F);
+		EXYNOS_DCS_WRITE_SEQ(exynos_panel, 0xB0, 0x00, 0x03, 0x8F);
 		EXYNOS_DCS_WRITE_SEQ(exynos_panel, 0x8F, IS_HBM_ON_IRC_OFF(mode) ? 0x05 : 0x25);
 		EXYNOS_DCS_WRITE_SEQ(exynos_panel, 0xF0, 0xA5, 0xA5);
 	}
@@ -447,6 +425,16 @@ static bool s6e3fc3_is_mode_seamless(const struct exynos_panel *ctx,
 	return drm_mode_equal_no_clocks(&ctx->current_mode->mode, &pmode->mode);
 }
 
+static void send_10_bit_global_para(struct exynos_panel *ctx)
+{
+	dev_dbg(ctx->dev, "%s\n", __func__);
+
+	EXYNOS_DCS_WRITE_TABLE(ctx, test_key_on_f0);
+	EXYNOS_DCS_WRITE_SEQ(ctx, 0xB0, 0x28, 0xF2); /* global para, bootloader is in 8 bit */
+	EXYNOS_DCS_WRITE_SEQ(ctx, 0xF2, 0xCC); /* 10 bit */
+	EXYNOS_DCS_WRITE_TABLE(ctx, test_key_off_f0);
+}
+
 static void s6e3fc3_debugfs_init(struct drm_panel *panel, struct dentry *root)
 {
 	struct exynos_panel *ctx = container_of(panel, struct exynos_panel, panel);
@@ -462,6 +450,8 @@ static void s6e3fc3_debugfs_init(struct drm_panel *panel, struct dentry *root)
 
 static void s6e3fc3_panel_init(struct exynos_panel *ctx)
 {
+	send_10_bit_global_para(ctx);
+
 	if (ctx->panel_rev >= PANEL_REV_EVT1_1)
 		if (!s6e3fc3_lhbm_gamma_read(ctx))
 			s6e3fc3_lhbm_gamma_write(ctx);
@@ -474,6 +464,51 @@ static void s6e3fc3_get_panel_rev(struct exynos_panel *ctx, u32 id)
 	u8 rev = ((build_code & 0xE0) >> 3) | ((build_code & 0x0C) >> 2);
 
 	exynos_panel_get_panel_rev(ctx, rev);
+}
+
+static bool check_for_8_bit_10_bit_cmds(struct exynos_panel *ctx,
+	const struct mipi_dsi_msg *msg, const bool is_last)
+{
+	static bool has_8_bit = false;
+	static bool has_10_bit = false;
+	static bool global_para_bit_set = false;
+	const u8 *tx_buf = msg->tx_buf;
+
+	if (global_para_bit_set && msg->tx_len == 2 && tx_buf[0] == 0xF2 && tx_buf[1] == 0xCC) {
+		has_10_bit = true;
+		if (!is_last)
+			dev_warn(ctx->dev, "10 bit DDIC command is not flushed!\n");
+	} else if (global_para_bit_set && msg->tx_len == 2 && tx_buf[0] == 0xF2 && tx_buf[1] == 0xC4) {
+		has_8_bit = true;
+		if (!is_last)
+			dev_warn(ctx->dev, "8 bit DDIC command is not flushed!\n");
+	}
+
+	global_para_bit_set = (
+		(msg->tx_len == 3 && tx_buf[0] == 0xB0 && tx_buf[1] == 0x28 && tx_buf[2] == 0xF2) ||
+		(msg->tx_len == 4 && tx_buf[0] == 0xB0 && tx_buf[1] == 0x00 && tx_buf[2] == 0x28 &&
+			tx_buf[3] == 0xF2));
+
+	if (has_8_bit && has_10_bit) {
+		has_8_bit = false;
+		has_10_bit = false;
+		return true;
+	}
+	if (is_last) {
+		has_8_bit = false;
+		has_10_bit = false;
+	}
+
+	return false;
+}
+
+static void s6e3fc3_on_queue_ddic_command(struct exynos_panel *ctx,
+	const struct mipi_dsi_msg *msg, const bool is_last)
+{
+	if (check_for_8_bit_10_bit_cmds(ctx, msg, is_last)) {
+		dev_warn(ctx->dev, "DSIM Contains both 8 and 10 bit DDIC commands in the same batch!\n");
+		dump_stack();
+	}
 }
 
 static const struct exynos_display_underrun_param underrun_param = {
@@ -612,6 +647,7 @@ static const struct exynos_panel_funcs s6e3fc3_exynos_funcs = {
 	.get_te2_edges = exynos_panel_get_te2_edges,
 	.configure_te2_edges = exynos_panel_configure_te2_edges,
 	.update_te2 = s6e3fc3_update_te2,
+	.on_queue_ddic_cmd = s6e3fc3_on_queue_ddic_command,
 };
 
 const struct brightness_capability s6e3fc3_brightness_capability = {

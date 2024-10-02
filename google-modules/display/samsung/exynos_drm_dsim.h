@@ -23,8 +23,9 @@
 #include <video/videomode.h>
 
 #include <dsim_cal.h>
-
+#if IS_ENABLED(CONFIG_DSIM_LOGBUFF)
 #include <misc/logbuffer.h>
+#endif
 #include "exynos_drm_drv.h"
 
 enum dsim_state {
@@ -124,9 +125,9 @@ struct dsim_device {
 	u32 tx_delay_ms;
 	/* override message flag ~EXYNOS_DSI_MSG_QUEUE */
 	bool force_batching;
-
+#if IS_ENABLED(CONFIG_DSIM_LOGBUFF)
 	struct logbuffer *log;
-
+#endif
 	enum dsim_dual_dsi dual_dsi;
 };
 

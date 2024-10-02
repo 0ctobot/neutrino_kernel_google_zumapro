@@ -160,6 +160,7 @@ struct dpu_bts {
 	u32 afbc_clk_ppc_margin;
 	u32 dfs_lv_cnt;
 	u32 dfs_lv_khz[BTS_DFS_MAX];
+	u32 max_dfs_lv_for_wb;
 	u32 vbp;
 	u32 vfp;
 	u32 vsa;

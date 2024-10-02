@@ -232,7 +232,7 @@ struct exynos_drm_crtc_ops {
 		const struct drm_display_mode *adjusted_mode);
 	int (*atomic_check)(struct exynos_drm_crtc *crtc,
 			    struct drm_crtc_state *state);
-	void (*atomic_begin)(struct exynos_drm_crtc *crtc);
+	void (*atomic_begin)(struct exynos_drm_crtc *crtc, struct drm_atomic_state *state);
 	void (*update_plane)(struct exynos_drm_crtc *crtc,
 			     struct exynos_drm_plane *plane);
 	void (*disable_plane)(struct exynos_drm_crtc *crtc,
@@ -352,9 +352,19 @@ struct drm_exynos_file_private {
 	u32 dummy;
 };
 
+struct histogram_event_node {
+	struct drm_pending_event *base;
+	struct list_head node;
+};
+
 struct exynos_drm_pending_histogram_event {
 	struct drm_pending_event base;
 	struct exynos_drm_histogram_channel_event event;
+};
+
+struct exynos_drm_pending_context_histogram_event {
+	struct drm_pending_event base;
+	struct exynos_drm_context_histogram_event event;
 };
 
 struct exynos_drm_priv_state {
@@ -426,6 +436,15 @@ int exynos_atomic_enter_tui(void);
 int exynos_atomic_exit_tui(void);
 
 int exynos_drm_drv_set_lhbm_hist(struct exynos_drm_connector *conn, int x, int y, int w, int h);
+/**
+ * exynos_drm_drv_set_lhbm_hist_gs() - sets decon lhbm hist ROI
+ * @decon: decon device whose ROI is changing
+ * @x: top-left corner x coordinate, in pixels
+ * @y: top-left corner y coordinate, in pixels
+ * @w: width of ROI, in pixels
+ * @h: height of ROI, in pixels
+ */
+int exynos_drm_drv_set_lhbm_hist_gs(struct decon_device *decon, int x, int y, int w, int h);
 int exynos_drm_drv_get_lhbm_gray_level(struct exynos_drm_connector *conn);
 
 extern struct platform_driver decon_driver;

@@ -50,6 +50,13 @@ config DRM_SAMSUNG_DSI
 	  supports to read and write mipi command to and from the mipi panel.
 	  So, this driver can use various panel feature.
 
+config DSIM_LOGBUFF
+	bool "DSIM logbuffer"
+	depends on DRM_SAMSUNG_DSI
+	default n
+	help
+	  This enables support for logging DSI commands in a logbuffer.
+
 config DRM_SAMSUNG_WB
 	bool "WB on Exynos"
 	depends on DRM_SAMSUNG_DECON

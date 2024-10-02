@@ -447,6 +447,30 @@ void exynos_panel_get_panel_rev(struct exynos_panel *ctx, u8 rev)
 }
 EXPORT_SYMBOL_GPL(exynos_panel_get_panel_rev);
 
+void exynos_panel_get_revision_by_module_ids(struct exynos_panel *ctx, u32 module_id)
+{
+	int i;
+	u32 rev;
+
+	if (!ctx->desc || !ctx->desc->module_ids) {
+		dev_err(ctx->dev, "panel revision array is not defined!\n");
+		return;
+	}
+
+	for (i = 0; i < ctx->desc->num_module_ids; i++) {
+		if (ctx->desc->module_ids[i].module_id == module_id) {
+			rev = ctx->desc->module_ids[i].revision;
+			dev_info(ctx->dev, "module id: 0x%x, revision: 0x%x\n", module_id, rev);
+			ctx->panel_rev = rev;
+			return;
+		}
+	}
+
+	dev_warn(ctx->dev, "Unknown rev from panel (0x%x), default to latest\n", module_id);
+	ctx->panel_rev = PANEL_REV_LATEST;
+}
+EXPORT_SYMBOL_GPL(exynos_panel_get_revision_by_module_ids);
+
 void exynos_panel_model_init(struct exynos_panel *ctx, const char* project, u8 extra_info)
 {
 
@@ -494,7 +518,8 @@ int exynos_panel_init(struct exynos_panel *ctx)
 				 "failed to get panel extinfo, default to latest\n");
 			ctx->panel_rev = PANEL_REV_LATEST;
 		} else {
-			funcs->get_panel_rev(ctx, id);
+			/* reverse here to match the id order read from bootloader */
+			funcs->get_panel_rev(ctx, __builtin_bswap32(id));
 		}
 	} else if (!ctx->panel_rev) {
 		dev_warn(ctx->dev,
@@ -1014,7 +1039,7 @@ int exynos_panel_disable(struct drm_panel *panel)
 	ctx->panel_idle_vrefresh = 0;
 	ctx->current_binned_lp = NULL;
 	ctx->cabc_mode = CABC_OFF;
-	ctx->ssc_mode = false;
+	ctx->ssc_en = false;
 
 	mutex_lock(&ctx->mode_lock);
 	_exynos_panel_disable_normal_feat_locked(ctx);
@@ -1641,6 +1666,8 @@ static ssize_t panel_idle_store(struct device *dev, struct device_attribute *att
 {
 	const struct mipi_dsi_device *dsi = to_mipi_dsi_device(dev);
 	struct exynos_panel *ctx = mipi_dsi_get_drvdata(dsi);
+	char str_trace[] = "panel_idle_store_0";
+	u8 idx_str_en = strlen(str_trace) - 1;
 	bool idle_enabled;
 	int ret;
 
@@ -1650,6 +1677,8 @@ static ssize_t panel_idle_store(struct device *dev, struct device_attribute *att
 		return ret;
 	}
 
+	str_trace[idx_str_en] = idle_enabled ? '1' : '0';
+	DPU_ATRACE_BEGIN(str_trace);
 	mutex_lock(&ctx->mode_lock);
 	if (idle_enabled != ctx->panel_idle_enabled) {
 		ctx->panel_idle_enabled = idle_enabled;
@@ -1660,6 +1689,7 @@ static ssize_t panel_idle_store(struct device *dev, struct device_attribute *att
 		panel_update_idle_mode_locked(ctx, true);
 	}
 	mutex_unlock(&ctx->mode_lock);
+	DPU_ATRACE_END(str_trace);
 
 	return count;
 }
@@ -1716,12 +1746,14 @@ static ssize_t min_vrefresh_store(struct device *dev, struct device_attribute *a
 		return ret;
 	}
 
+	DPU_ATRACE_BEGIN(__func__);
 	mutex_lock(&ctx->mode_lock);
 	if (ctx->min_vrefresh != min_vrefresh) {
 		ctx->min_vrefresh = min_vrefresh;
 		panel_update_idle_mode_locked(ctx, true);
 	}
 	mutex_unlock(&ctx->mode_lock);
+	DPU_ATRACE_END(__func__);
 
 	return count;
 }
@@ -1748,12 +1780,14 @@ static ssize_t idle_delay_ms_store(struct device *dev, struct device_attribute *
 		return ret;
 	}
 
+	DPU_ATRACE_BEGIN(__func__);
 	mutex_lock(&ctx->mode_lock);
 	if (ctx->idle_delay_ms != idle_delay_ms) {
 		ctx->idle_delay_ms = idle_delay_ms;
 		panel_update_idle_mode_locked(ctx, true);
 	}
 	mutex_unlock(&ctx->mode_lock);
+	DPU_ATRACE_END(__func__);
 
 	return count;
 }
@@ -3727,17 +3761,17 @@ static ssize_t als_table_show(struct device *dev,
 
 static DEVICE_ATTR_RW(als_table);
 
-static ssize_t ssc_mode_store(struct device *dev,
+static ssize_t ssc_en_store(struct device *dev,
 			       struct device_attribute *attr,
 			       const char *buf, size_t count)
 {
 	struct backlight_device *bd = to_backlight_device(dev);
 	struct exynos_panel *ctx = bl_get_data(bd);
 	const struct exynos_panel_funcs *funcs = ctx->desc->exynos_panel_func;
-	bool ssc_mode;
+	bool enabled;
 	int ret;
 
-	if (!funcs || !funcs->set_ssc_mode)
+	if (!funcs || !funcs->set_ssc_en)
 		return -ENOTSUPP;
 
 	if (!is_panel_active(ctx)) {
@@ -3745,29 +3779,29 @@ static ssize_t ssc_mode_store(struct device *dev,
 		return -EPERM;
 	}
 
-	ret = kstrtobool(buf, &ssc_mode);
+	ret = kstrtobool(buf, &enabled);
 	if (ret) {
 		dev_err(ctx->dev, "invalid ssc_mode value\n");
 		return ret;
 	}
 
 	mutex_lock(&ctx->mode_lock);
-	if (ssc_mode != ctx->ssc_mode) {
-		funcs->set_ssc_mode(ctx, ssc_mode);
+	if (enabled != ctx->ssc_en) {
+		funcs->set_ssc_en(ctx, enabled);
 	}
 	mutex_unlock(&ctx->mode_lock);
 	return count;
 }
 
-static ssize_t ssc_mode_show(struct device *dev,
+static ssize_t ssc_en_show(struct device *dev,
 		struct device_attribute *attr, char *buf)
 {
 	struct backlight_device *bd = to_backlight_device(dev);
 	struct exynos_panel *ctx = bl_get_data(bd);
 
-	return scnprintf(buf, PAGE_SIZE, "%d\n", ctx->ssc_mode);
+	return scnprintf(buf, PAGE_SIZE, "%d\n", ctx->ssc_en);
 }
-static DEVICE_ATTR_RW(ssc_mode);
+static DEVICE_ATTR_RW(ssc_en);
 
 static ssize_t acl_mode_store(struct device *dev,
 				struct device_attribute *attr,
@@ -5719,11 +5753,11 @@ int exynos_panel_common_init(struct mipi_dsi_device *dsi,
 		if (ret)
 			dev_err(ctx->dev, "unable to create acl_mode\n");
 	}
-	if (exynos_panel_func && exynos_panel_func->set_ssc_mode) {
-		dev_info(ctx->dev, "create ssc_mode sysfs node\n");
-		ret = sysfs_create_file(&ctx->bl->dev.kobj, &dev_attr_ssc_mode.attr);
+	if (exynos_panel_func && exynos_panel_func->set_ssc_en) {
+		dev_info(ctx->dev, "create ssc_en sysfs node\n");
+		ret = sysfs_create_file(&ctx->bl->dev.kobj, &dev_attr_ssc_en.attr);
 		if (ret)
-			dev_err(ctx->dev, "unable to create ssc_mode\n");
+			dev_err(ctx->dev, "unable to create ssc_en\n");
 	}
 
 	ctx->mode_in_progress = MODE_DONE;
@@ -5772,7 +5806,7 @@ void exynos_panel_remove(struct mipi_dsi_device *dsi)
 	sysfs_remove_groups(&ctx->bl->dev.kobj, bl_device_groups);
 	sysfs_remove_file(&ctx->bl->dev.kobj, &dev_attr_cabc_mode.attr);
 	sysfs_remove_file(&ctx->bl->dev.kobj, &dev_attr_acl_mode.attr);
-	sysfs_remove_file(&ctx->bl->dev.kobj, &dev_attr_ssc_mode.attr);
+	sysfs_remove_file(&ctx->bl->dev.kobj, &dev_attr_ssc_en.attr);
 	devm_backlight_device_unregister(ctx->dev, ctx->bl);
 }
 EXPORT_SYMBOL_GPL(exynos_panel_remove);

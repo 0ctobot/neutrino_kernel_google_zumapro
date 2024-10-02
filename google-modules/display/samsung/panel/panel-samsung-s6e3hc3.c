@@ -99,7 +99,7 @@ struct s6e3hc3_mode_data {
 	const struct exynos_dsi_cmd_set *wakeup_mode_cmd_set;
 };
 
-static const unsigned char PPS_SETTING[] = {
+static const unsigned char WQHD_PPS_SETTING[DSC_PPS_SIZE] = {
 	0x11, 0x00, 0x00, 0x89, 0x30, 0x80, 0x0C, 0x30,
 	0x05, 0xA0, 0x00, 0x34, 0x02, 0xD0, 0x02, 0xD0,
 	0x02, 0x00, 0x02, 0x68, 0x00, 0x20, 0x05, 0xC6,
@@ -111,11 +111,20 @@ static const unsigned char PPS_SETTING[] = {
 	0x09, 0xBE, 0x19, 0xFC, 0x19, 0xFA, 0x19, 0xF8,
 	0x1A, 0x38, 0x1A, 0x78, 0x1A, 0xB6, 0x2A, 0xF6,
 	0x2B, 0x34, 0x2B, 0x74, 0x3B, 0x74, 0x6B, 0xF4,
-	0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
-	0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
-	0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
-	0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
-	0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00
+};
+
+static const unsigned char FHD_PPS_SETTING[DSC_PPS_SIZE] = {
+	0x11, 0x00, 0x00, 0x89, 0x30, 0x80, 0x09, 0x24,
+	0x04, 0x38, 0x00, 0x4E, 0x02, 0x1C, 0x02, 0x1C,
+	0x02, 0x00, 0x02, 0x0E, 0x00, 0x20, 0x07, 0x93,
+	0x00, 0x07, 0x00, 0x0C, 0x01, 0x40, 0x01, 0x4E,
+	0x18, 0x00, 0x10, 0xF0, 0x03, 0x0C, 0x20, 0x00,
+	0x06, 0x0B, 0x0B, 0x33, 0x0E, 0x1C, 0x2A, 0x38,
+	0x46, 0x54, 0x62, 0x69, 0x70, 0x77, 0x79, 0x7B,
+	0x7D, 0x7E, 0x01, 0x02, 0x01, 0x00, 0x09, 0x40,
+	0x09, 0xBE, 0x19, 0xFC, 0x19, 0xFA, 0x19, 0xF8,
+	0x1A, 0x38, 0x1A, 0x78, 0x1A, 0xB6, 0x2A, 0xF6,
+	0x2B, 0x34, 0x2B, 0x74, 0x3B, 0x74, 0x6B, 0xF4,
 };
 
 #define S6E3HC3_WRCTRLD_DIMMING_BIT    0x08
@@ -134,12 +143,6 @@ static const u8 display_off[] = { 0x28 };
 static const u8 display_on[] = { 0x29 };
 static const u8 sleep_in[] = { 0x10 };
 static const u8 freq_update[] = { 0xF7, 0x0F };
-
-static const struct exynos_dsi_cmd s6e3hc3_off_cmds[] = {
-	EXYNOS_DSI_CMD(display_off, 20),
-	EXYNOS_DSI_CMD(sleep_in, 100),
-};
-static DEFINE_EXYNOS_CMD_SET(s6e3hc3_off);
 
 static const struct exynos_dsi_cmd s6e3hc3_lp_cmds[] = {
 	EXYNOS_DSI_CMD(display_off, 0),
@@ -340,14 +343,14 @@ static void s6e3hc3_update_te2(struct exynos_panel *ctx)
 		ctx->panel_idle_vrefresh ? "active" : "inactive",
 		width[1], width[2], width[3], width[4], width[5], width[6]);
 
-	EXYNOS_DCS_WRITE_SEQ(ctx, 0xF0, 0x5A, 0x5A);
-	EXYNOS_DCS_WRITE_SEQ(ctx, 0xB0, 0x00, 0x4F, 0xF2);
-	EXYNOS_DCS_WRITE_SEQ(ctx, 0xF2, 0x0D);
-	EXYNOS_DCS_WRITE_SEQ(ctx, 0xB0, 0x00, 0x01, 0xB9);
-	EXYNOS_DCS_WRITE_SEQ(ctx, 0xB9, option);
-	EXYNOS_DCS_WRITE_SEQ(ctx, 0xB0, 0x00, 0x14, 0xB9);
-	EXYNOS_DCS_WRITE_TABLE(ctx, width);
-	EXYNOS_DCS_WRITE_SEQ(ctx, 0xF0, 0xA5, 0xA5);
+	EXYNOS_DCS_BUF_ADD_SET(ctx, unlock_cmd_f0);
+	EXYNOS_DCS_BUF_ADD(ctx, 0xB0, 0x00, 0x4F, 0xF2);
+	EXYNOS_DCS_BUF_ADD(ctx, 0xF2, 0x0D);
+	EXYNOS_DCS_BUF_ADD(ctx, 0xB0, 0x00, 0x01, 0xB9);
+	EXYNOS_DCS_BUF_ADD(ctx, 0xB9, option);
+	EXYNOS_DCS_BUF_ADD(ctx, 0xB0, 0x00, 0x14, 0xB9);
+	EXYNOS_DCS_BUF_ADD_SET(ctx, width);
+	EXYNOS_DCS_BUF_ADD_SET_AND_FLUSH(ctx, lock_cmd_f0);
 }
 
 static inline bool is_auto_mode_preferred(struct exynos_panel *ctx)
@@ -530,8 +533,12 @@ static bool s6e3hc3_set_self_refresh(struct exynos_panel *ctx, bool enable)
 		return false;
 
 	/* self refresh is not supported in lp mode since that always makes use of early exit */
-	if (pmode->exynos_mode.is_lp_mode)
+	if (pmode->exynos_mode.is_lp_mode) {
+		/* set 10Hz while self refresh is active, otherwise clear it */
+		ctx->panel_idle_vrefresh = enable ? 10 : 0;
+		notify_panel_mode_changed(ctx, true);
 		return false;
+	}
 
 	idle_vrefresh = s6e3hc3_get_min_idle_vrefresh(ctx, pmode);
 
@@ -540,13 +547,17 @@ static bool s6e3hc3_set_self_refresh(struct exynos_panel *ctx, bool enable)
 		 * if idle mode is on inactivity, may need to update the target fps for auto mode,
 		 * or switch to manual mode if idle should be disabled (idle_vrefresh=0)
 		 */
-		if ((pmode->idle_mode == IDLE_MODE_ON_INACTIVITY) &&
-		    (spanel->auto_mode_vrefresh != idle_vrefresh)) {
-			dev_dbg(ctx->dev,
-				"early exit update needed for mode: %s (idle_vrefresh: %d)\n",
-				pmode->mode.name, idle_vrefresh);
-			s6e3hc3_update_refresh_mode(ctx, pmode, idle_vrefresh);
-			return true;
+		if (pmode->idle_mode == IDLE_MODE_ON_INACTIVITY) {
+			/* simply update idle vrefresh follow by self refresh */
+			ctx->panel_idle_vrefresh = enable ? idle_vrefresh : 0;
+			notify_panel_mode_changed(ctx, false);
+			if (spanel->auto_mode_vrefresh != idle_vrefresh) {
+				dev_dbg(ctx->dev,
+					"early exit update needed for mode: %s (idle_vrefresh: %d)\n",
+					pmode->mode.name, idle_vrefresh);
+				s6e3hc3_update_refresh_mode(ctx, pmode, idle_vrefresh);
+				return true;
+			}
 		}
 		return false;
 	}
@@ -690,6 +701,7 @@ static const struct exynos_dsi_cmd s6e3hc3_init_cmds[] = {
 	EXYNOS_DSI_CMD_SEQ(0xB9, 0xB1, 0xA1),		/* SEQ_TSP_SYNC_ON */
 	EXYNOS_DSI_CMD_SEQ(0xB0, 0x00, 0x05, 0xF2),	/* SEQ_GLOBAL_TSP_SYNC */
 	EXYNOS_DSI_CMD_SEQ(0xF2, 0x52),			/* SEQ_TSP_SYNC_ON */
+	EXYNOS_DSI_CMD0(lock_cmd_f0),
 
 	EXYNOS_DSI_CMD_SEQ(0x2A, 0x00, 0x00, 0x05, 0x9F), /* CASET */
 	EXYNOS_DSI_CMD_SEQ(0x2B, 0x00, 0x00, 0x0C, 0x2F), /* PASET */
@@ -830,20 +842,29 @@ static int s6e3hc3_enable(struct drm_panel *panel)
 	struct exynos_panel *ctx = container_of(panel, struct exynos_panel, panel);
 	const struct exynos_panel_mode *pmode = ctx->current_mode;
 	const struct drm_display_mode *mode;
+	const bool needs_reset = !is_panel_enabled(ctx);
+	bool is_fhd;
 
 	if (!pmode) {
 		dev_err(ctx->dev, "no current mode set\n");
 		return -EINVAL;
 	}
 	mode = &pmode->mode;
+	is_fhd = mode->hdisplay == 1080;
 
 	dev_dbg(ctx->dev, "%s\n", __func__);
 
-	exynos_panel_reset(ctx);
+	if (needs_reset)
+		exynos_panel_reset(ctx);
 
 	/* DSC related configuration */
-	EXYNOS_PPS_LONG_WRITE(ctx); /* PPS_SETTING */
-	exynos_panel_send_cmd_set(ctx, &s6e3hc3_init_cmd_set);
+	EXYNOS_PPS_WRITE_BUF(ctx, is_fhd ? FHD_PPS_SETTING : WQHD_PPS_SETTING);
+	if (needs_reset)
+		exynos_panel_send_cmd_set(ctx, &s6e3hc3_init_cmd_set);
+
+	EXYNOS_DCS_BUF_ADD_SET(ctx, unlock_cmd_f0);
+	EXYNOS_DCS_BUF_ADD(ctx, 0xC3, is_fhd ? 0x01: 0x00);
+	EXYNOS_DCS_BUF_ADD_SET_AND_FLUSH(ctx, lock_cmd_f0);
 	s6e3hc3_write_display_mode(ctx, mode); /* dimming and HBM */
 	s6e3hc3_change_frequency(ctx, pmode);
 	if (is_local_gamma_supported(ctx))
@@ -855,8 +876,29 @@ static int s6e3hc3_enable(struct drm_panel *panel)
 
 	if (pmode->exynos_mode.is_lp_mode)
 		exynos_panel_set_lp_mode(ctx, pmode);
-	else
+	else if (needs_reset || (ctx->panel_state == PANEL_STATE_BLANK))
 		EXYNOS_DCS_WRITE_TABLE(ctx, display_on);
+
+	return 0;
+}
+
+static int s6e3hc3_disable(struct drm_panel *panel)
+{
+	struct exynos_panel *ctx = container_of(panel, struct exynos_panel, panel);
+	int ret;
+
+	/* skip disable sequence if going through modeset */
+	if (ctx->panel_state == PANEL_STATE_MODESET)
+		return 0;
+
+	ret = exynos_panel_disable(panel);
+	if (ret)
+		return ret;
+
+	EXYNOS_DCS_WRITE_TABLE_DELAY(ctx, 20, display_off);
+
+	if (ctx->panel_state == PANEL_STATE_OFF)
+		EXYNOS_DCS_WRITE_TABLE_DELAY(ctx, 100, sleep_in);
 
 	return 0;
 }
@@ -1142,38 +1184,143 @@ static const struct exynos_panel_mode s6e3hc3_modes[] = {
 		},
 		.idle_mode = IDLE_MODE_ON_INACTIVITY,
 	},
+	{
+		.mode = {
+			.name = "1080x2340x60",
+			.clock = 173484,
+			.hdisplay = 1080,
+			.hsync_start = 1080 + 80, // add hfp
+			.hsync_end = 1080 + 80 + 24, // add hsa
+			.htotal = 1080 + 80 + 24 + 36, // add hbp
+			.vdisplay = 2340,
+			.vsync_start = 2340 + 12, // add vfp
+			.vsync_end = 2340 + 12 + 4, // add vsa
+			.vtotal = 2340 + 12 + 4 + 14, // add vbp
+			.flags = 0,
+			.width_mm = 71,
+			.height_mm = 155,
+		},
+		.exynos_mode = {
+			.mode_flags = MIPI_DSI_CLOCK_NON_CONTINUOUS,
+			.vblank_usec = 120,
+			.te_usec = 8500,
+			.bpc = 8,
+			.dsc = {
+				.enabled = true,
+				.dsc_count = 2,
+				.slice_count = 2,
+				.slice_height = 78,
+			},
+			.underrun_param = &underrun_param,
+		},
+		.priv_data = &s6e3hc3_mode_60,
+		.te2_timing = {
+			.rising_edge = 0,
+			.falling_edge = 48,
+		},
+		.idle_mode = IDLE_MODE_UNSUPPORTED,
+	},
+	{
+		.mode = {
+			.name = "1080x2340x120",
+			.clock = 346968,
+			.hdisplay = 1080,
+			.hsync_start = 1080 + 80, // add hfp
+			.hsync_end = 1080 + 80 + 24, // add hsa
+			.htotal = 1080 + 80 + 24 + 36, // add hbp
+			.vdisplay = 2340,
+			.vsync_start = 2340 + 12, // add vfp
+			.vsync_end = 2340 + 12 + 4, // add vsa
+			.vtotal = 2340 + 12 + 4 + 14, // add vbp
+			.flags = 0,
+			.width_mm = 71,
+			.height_mm = 155,
+		},
+		.exynos_mode = {
+			.mode_flags = MIPI_DSI_CLOCK_NON_CONTINUOUS,
+			.vblank_usec = 120,
+			.te_usec = 146,
+			.bpc = 8,
+			.dsc = {
+				.enabled = true,
+				.dsc_count = 2,
+				.slice_count = 2,
+				.slice_height = 78,
+			},
+			.underrun_param = &underrun_param,
+		},
+		.priv_data = &s6e3hc3_mode_120,
+		.te2_timing = {
+			.rising_edge = 0,
+			.falling_edge = 48,
+		},
+		.idle_mode = IDLE_MODE_ON_INACTIVITY,
+	},
 };
 
-static const struct exynos_panel_mode s6e3hc3_lp_mode = {
-	.mode = {
-		.name = "1440x3120x30",
-		.clock = 149310,
-		.hdisplay = 1440,
-		.hsync_start = 1440 + 80, // add hfp
-		.hsync_end = 1440 + 80 + 24, // add hsa
-		.htotal = 1440 + 80 + 24 + 36, // add hbp
-		.vdisplay = 3120,
-		.vsync_start = 3120 + 12, // add vfp
-		.vsync_end = 3120 + 12 + 4, // add vsa
-		.vtotal = 3120 + 12 + 4 + 14, // add vbp
-		.flags = 0,
-		.width_mm = 71,
-		.height_mm = 155,
-	},
-	.exynos_mode = {
-		.mode_flags = MIPI_DSI_CLOCK_NON_CONTINUOUS,
-		.vblank_usec = 120,
-		.te_usec = 25200,
-		.bpc = 8,
-		.dsc = {
-			.enabled = true,
-			.dsc_count = 2,
-			.slice_count = 2,
-			.slice_height = 52,
+static const struct exynos_panel_mode s6e3hc3_lp_modes[] = {
+	{
+		.mode = {
+			.name = "1440x3120x30",
+			.clock = 149310,
+			.hdisplay = 1440,
+			.hsync_start = 1440 + 80, // add hfp
+			.hsync_end = 1440 + 80 + 24, // add hsa
+			.htotal = 1440 + 80 + 24 + 36, // add hbp
+			.vdisplay = 3120,
+			.vsync_start = 3120 + 12, // add vfp
+			.vsync_end = 3120 + 12 + 4, // add vsa
+			.vtotal = 3120 + 12 + 4 + 14, // add vbp
+			.flags = 0,
+			.width_mm = 71,
+			.height_mm = 155,
 		},
-		.underrun_param = &underrun_param,
-		.is_lp_mode = true,
-	}
+		.exynos_mode = {
+			.mode_flags = MIPI_DSI_CLOCK_NON_CONTINUOUS,
+			.vblank_usec = 120,
+			.te_usec = 25200,
+			.bpc = 8,
+			.dsc = {
+				.enabled = true,
+				.dsc_count = 2,
+				.slice_count = 2,
+				.slice_height = 52,
+			},
+			.underrun_param = &underrun_param,
+			.is_lp_mode = true,
+		},
+	},
+	{
+		.mode = {
+			.name = "1080x2340x30",
+			.clock = 86742,
+			.hdisplay = 1080,
+			.hsync_start = 1080 + 80, // add hfp
+			.hsync_end = 1080 + 80 + 24, // add hsa
+			.htotal = 1080 + 80 + 24 + 36, // add hbp
+			.vdisplay = 2340,
+			.vsync_start = 2340 + 12, // add vfp
+			.vsync_end = 2340 + 12 + 4, // add vsa
+			.vtotal = 2340 + 12 + 4 + 14, // add vbp
+			.flags = 0,
+			.width_mm = 71,
+			.height_mm = 155,
+		},
+		.exynos_mode = {
+			.mode_flags = MIPI_DSI_CLOCK_NON_CONTINUOUS,
+			.vblank_usec = 120,
+			.te_usec = 25200,
+			.bpc = 8,
+			.dsc = {
+				.enabled = true,
+				.dsc_count = 2,
+				.slice_count = 2,
+				.slice_height = 78,
+			},
+			.underrun_param = &underrun_param,
+			.is_lp_mode = true,
+		},
+	},
 };
 
 static void s6e3hc3_panel_mode_create_cmdset(struct exynos_panel *ctx,
@@ -1254,7 +1401,7 @@ static int s6e3hc3_panel_probe(struct mipi_dsi_device *dsi)
 }
 
 static const struct drm_panel_funcs s6e3hc3_drm_funcs = {
-	.disable = exynos_panel_disable,
+	.disable = s6e3hc3_disable,
 	.unprepare = exynos_panel_unprepare,
 	.prepare = exynos_panel_prepare,
 	.enable = s6e3hc3_enable,
@@ -1314,8 +1461,6 @@ const struct brightness_capability s6e3hc3_brightness_capability = {
 };
 
 const struct exynos_panel_desc samsung_s6e3hc3 = {
-	.dsc_pps = PPS_SETTING,
-	.dsc_pps_len = ARRAY_SIZE(PPS_SETTING),
 	.data_lane_cnt = 4,
 	.max_brightness = 3152,
 	.dft_brightness = 1023,
@@ -1331,9 +1476,9 @@ const struct exynos_panel_desc samsung_s6e3hc3 = {
 	.num_modes = ARRAY_SIZE(s6e3hc3_modes),
 	.vrefresh_range = s6e3hc3_vrefresh_range,
 	.vrefresh_range_count = ARRAY_SIZE(s6e3hc3_vrefresh_range),
-	.off_cmd_set = &s6e3hc3_off_cmd_set,
-	.lp_mode = &s6e3hc3_lp_mode,
 	.lp_cmd_set = &s6e3hc3_lp_cmd_set,
+	.lp_mode = s6e3hc3_lp_modes,
+	.lp_mode_count = ARRAY_SIZE(s6e3hc3_lp_modes),
 	.lp_vrefresh_range = s6e3hc3_lp_vrefresh_range,
 	.lp_vrefresh_range_count = ARRAY_SIZE(s6e3hc3_lp_vrefresh_range),
 	.binned_lp = s6e3hc3_binned_lp,

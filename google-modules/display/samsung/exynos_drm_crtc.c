@@ -275,7 +275,7 @@ static void exynos_crtc_atomic_begin(struct drm_crtc *crtc,
 	struct exynos_drm_crtc *exynos_crtc = to_exynos_crtc(crtc);
 
 	if (exynos_crtc->ops->atomic_begin)
-		exynos_crtc->ops->atomic_begin(exynos_crtc);
+		exynos_crtc->ops->atomic_begin(exynos_crtc, state);
 }
 
 static void exynos_crtc_atomic_flush(struct drm_crtc *crtc,

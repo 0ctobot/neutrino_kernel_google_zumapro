@@ -65,8 +65,6 @@ kernel_module(
     visibility = [
         "//private/devices/google:__subpackages__",
         "//private/google-modules/aoc/alsa:__pkg__",
-        "//private/google-modules/display/common/gs_panel:__pkg__",
-        "//private/google-modules/display/panels:__subpackages__",
         "//private/google-modules/soc/gs:__pkg__",
         "//private/google-modules/touch:__subpackages__",
     ],

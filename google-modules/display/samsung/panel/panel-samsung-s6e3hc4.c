@@ -65,6 +65,11 @@ struct s6e3hc4_panel {
 	u32 auto_mode_vrefresh;
 	/** @force_changeable_te: force changeable TE (instead of fixed) during early exit */
 	bool force_changeable_te;
+	/**
+	 * @is_pixel_off: pixel-off command is sent to panel. Only sending normal-on or resetting
+	 *			panel can recover to normal mode after entering pixel-off state.
+	 */
+	bool is_pixel_off;
 };
 
 #define to_spanel(ctx) container_of(ctx, struct s6e3hc4_panel, base)
@@ -117,6 +122,13 @@ static const u8 display_on[] = { 0x29 };
 static const u8 sleep_in[] = { 0x10 };
 static const u8 freq_update[] = { 0xF7, 0x0F };
 static const u8 nop[] = { 0x00 };
+static const u8 pixel_off[] = { 0x22 };
+static const u8 normal_on[] = { 0x13 };
+static const u8 sync_begin[] = { 0xE4, 0x00, 0x2C, 0x2C, 0xA2, 0x00, 0x00 };
+static const u8 sync_end[] = { 0xE4, 0x00, 0x2C, 0x2C, 0x82, 0x00, 0x00 };
+static const u8 aod_on[] = { 0x53, 0x24 };
+static const u8 aod_off[] = { 0x53, 0x20 };
+static const u8 min_dbv[] = { 0x51, 0x00, 0x04 };
 
 static const struct exynos_dsi_cmd s6e3hc4_sleepin_cmds[] = {
 	/* SP back failure workaround on EVT */
@@ -129,72 +141,29 @@ static const struct exynos_dsi_cmd s6e3hc4_sleepin_cmds[] = {
 };
 static DEFINE_EXYNOS_CMD_SET(s6e3hc4_sleepin);
 
-static const struct exynos_dsi_cmd s6e3hc4_lp_cmds[] = {
-	EXYNOS_DSI_CMD0(display_off),
-	EXYNOS_DSI_CMD0(unlock_cmd_f0),
-
-	/* Fixed TE: sync on */
-	EXYNOS_DSI_CMD_SEQ(0xB9, 0x51),
-	/* Set freq at 30 Hz */
-	EXYNOS_DSI_CMD_SEQ(0xB0, 0x00, 0x01, 0x60),
-	EXYNOS_DSI_CMD_SEQ(0x60, 0x00),
-	/* Set 10 Hz idle */
-	EXYNOS_DSI_CMD_SEQ(0xB0, 0x00, 0x18, 0xBD),
-	EXYNOS_DSI_CMD_SEQ(0xBD, 0x04, 0x00, 0x06, 0x00, 0x00, 0x00),
-	EXYNOS_DSI_CMD_SEQ(0xBD, 0x25),
-	/* AOD timing */
-	EXYNOS_DSI_CMD_SEQ_REV(PANEL_REV_LT(PANEL_REV_DVT1_1), 0xB0, 0x00, 0x3D, 0xF6),
-	EXYNOS_DSI_CMD_SEQ_REV(PANEL_REV_LT(PANEL_REV_DVT1_1), 0xF6, 0xAF, 0xB1),
-	EXYNOS_DSI_CMD_SEQ_REV(PANEL_REV_LT(PANEL_REV_DVT1_1), 0xB0, 0x00, 0x41, 0xF6),
-	EXYNOS_DSI_CMD_SEQ_REV(PANEL_REV_LT(PANEL_REV_DVT1_1), 0xF6, 0xB3),
-	EXYNOS_DSI_CMD0(freq_update),
-	/* AOD low mode setting */
-	EXYNOS_DSI_CMD_SEQ_REV(PANEL_REV_LT(PANEL_REV_DVT1), 0xB0, 0x01, 0x7D, 0x94),
-	EXYNOS_DSI_CMD_SEQ_REV(PANEL_REV_LT(PANEL_REV_DVT1), 0x94, 0x1C),
-	EXYNOS_DSI_CMD0(lock_cmd_f0),
-};
-static DEFINE_EXYNOS_CMD_SET(s6e3hc4_lp);
-
-static const struct exynos_dsi_cmd s6e3hc4_lp_off_cmds[] = {
-	EXYNOS_DSI_CMD0(display_off),
-	EXYNOS_DSI_CMD0(unlock_cmd_f0),
-	/* AOD low mode off */
-	EXYNOS_DSI_CMD_SEQ(0xB0, 0x00, 0x52, 0x94),
-	EXYNOS_DSI_CMD_SEQ(0x94, 0x00),
-	EXYNOS_DSI_CMD_SEQ(0x53, 0x20),
-	EXYNOS_DSI_CMD0(lock_cmd_f0),
-};
-
 static const struct exynos_dsi_cmd s6e3hc4_lp_low_cmds[] = {
 	EXYNOS_DSI_CMD0(unlock_cmd_f0),
-	/* AOD 10 nit */
-	EXYNOS_DSI_CMD_SEQ(0x53, 0x25),
 	/* AOD low Mode, 10 nit */
 	EXYNOS_DSI_CMD_SEQ(0xB0, 0x00, 0x52, 0x94),
 	EXYNOS_DSI_CMD_SEQ(0x94, 0x01, 0x07, 0x98, 0x02),
-	EXYNOS_DSI_CMD_SEQ(0x51, 0x00, 0x01),
-	EXYNOS_DSI_CMD(lock_cmd_f0, 34),
-	EXYNOS_DSI_CMD0(display_on),
+	EXYNOS_DSI_CMD0(lock_cmd_f0),
+	EXYNOS_DSI_CMD0(min_dbv),
 };
 
 static const struct exynos_dsi_cmd s6e3hc4_lp_high_cmds[] = {
 	EXYNOS_DSI_CMD0(unlock_cmd_f0),
-	/* AOD 50 nit */
-	EXYNOS_DSI_CMD_SEQ(0x53, 0x24),
 	/* AOD high Mode, 50 nit */
 	EXYNOS_DSI_CMD_SEQ(0xB0, 0x00, 0x52, 0x94),
-	EXYNOS_DSI_CMD_SEQ(0x94, 0x00, 0x07, 0x98, 0x02),
-	EXYNOS_DSI_CMD_SEQ(0x51, 0x00, 0x01),
-	EXYNOS_DSI_CMD(lock_cmd_f0, 34),
-	EXYNOS_DSI_CMD0(display_on),
+	EXYNOS_DSI_CMD_SEQ(0x94, 0x00),
+	EXYNOS_DSI_CMD0(lock_cmd_f0),
+	EXYNOS_DSI_CMD0(min_dbv),
 };
 
 static const struct exynos_binned_lp s6e3hc4_binned_lp[] = {
-	BINNED_LP_MODE("off", 0, s6e3hc4_lp_off_cmds),
-	BINNED_LP_MODE_TIMING("low", 80, s6e3hc4_lp_low_cmds,
-			      S6E3HC4_TE2_RISING_EDGE_OFFSET, S6E3HC4_TE2_FALLING_EDGE_OFFSET),
-	BINNED_LP_MODE_TIMING("high", 2047, s6e3hc4_lp_high_cmds,
-			      S6E3HC4_TE2_RISING_EDGE_OFFSET, S6E3HC4_TE2_FALLING_EDGE_OFFSET)
+	BINNED_LP_MODE_TIMING("low", 80, s6e3hc4_lp_low_cmds, S6E3HC4_TE2_RISING_EDGE_OFFSET,
+			      S6E3HC4_TE2_FALLING_EDGE_OFFSET),
+	BINNED_LP_MODE_TIMING("high", 2047, s6e3hc4_lp_high_cmds, S6E3HC4_TE2_RISING_EDGE_OFFSET,
+			      S6E3HC4_TE2_FALLING_EDGE_OFFSET)
 };
 
 static u8 s6e3hc4_get_te2_option(struct exynos_panel *ctx)
@@ -315,23 +284,18 @@ static u32 s6e3hc4_get_min_idle_vrefresh(struct exynos_panel *ctx,
 	return min_idle_vrefresh;
 }
 
-static void s6e3hc4_update_panel_feat(struct exynos_panel *ctx,
-	const struct exynos_panel_mode *pmode, bool enforce)
+static void s6e3hc4_set_panel_feat(struct exynos_panel *ctx,
+	const u32 vrefresh, const u32 idle_vrefresh,
+	const unsigned long *feat, bool enforce)
 {
 	struct s6e3hc4_panel *spanel = to_spanel(ctx);
-	u32 vrefresh, idle_vrefresh = spanel->auto_mode_vrefresh;
 	u8 val;
 	DECLARE_BITMAP(changed_feat, FEAT_MAX);
-
-	if (pmode)
-		vrefresh = drm_mode_vrefresh(&pmode->mode);
-	else
-		vrefresh = drm_mode_vrefresh(&ctx->current_mode->mode);
 
 	if (enforce) {
 		bitmap_fill(changed_feat, FEAT_MAX);
 	} else {
-		bitmap_xor(changed_feat, spanel->feat, spanel->hw_feat, FEAT_MAX);
+		bitmap_xor(changed_feat, feat, spanel->hw_feat, FEAT_MAX);
 		if (bitmap_empty(changed_feat, FEAT_MAX) &&
 			vrefresh == spanel->hw_vrefresh &&
 			idle_vrefresh == spanel->hw_idle_vrefresh)
@@ -340,14 +304,14 @@ static void s6e3hc4_update_panel_feat(struct exynos_panel *ctx,
 
 	spanel->hw_vrefresh = vrefresh;
 	spanel->hw_idle_vrefresh = idle_vrefresh;
-	bitmap_copy(spanel->hw_feat, spanel->feat, FEAT_MAX);
+	bitmap_copy(spanel->hw_feat, feat, FEAT_MAX);
 	dev_dbg(ctx->dev,
 		"op=%s ee=%s hbm=%s irc=%s fi=%s fps=%u idle_fps=%u\n",
-		test_bit(FEAT_OP_NS, spanel->feat) ? "ns" : "hs",
-		test_bit(FEAT_EARLY_EXIT, spanel->feat) ? "on" : "off",
-		test_bit(FEAT_HBM, spanel->feat) ? "on" : "off",
-		test_bit(FEAT_IRC_OFF, spanel->feat) ? "off" : "on",
-		test_bit(FEAT_FRAME_AUTO, spanel->feat) ? "auto" : "manual",
+		test_bit(FEAT_OP_NS, feat) ? "ns" : "hs",
+		test_bit(FEAT_EARLY_EXIT, feat) ? "on" : "off",
+		test_bit(FEAT_HBM, feat) ? "on" : "off",
+		test_bit(FEAT_IRC_OFF, feat) ? "off" : "on",
+		test_bit(FEAT_FRAME_AUTO, feat) ? "auto" : "manual",
 		vrefresh,
 		idle_vrefresh);
 
@@ -356,7 +320,7 @@ static void s6e3hc4_update_panel_feat(struct exynos_panel *ctx,
 	/* TE width setting */
 	if (test_bit(FEAT_OP_NS, changed_feat)) {
 		EXYNOS_DCS_BUF_ADD(ctx, 0xB0, 0x00, 0x04, 0xB9);
-		val = test_bit(FEAT_OP_NS, spanel->feat) ? 0x5E : 0x42;
+		val = test_bit(FEAT_OP_NS, feat) ? 0x5E : 0x42;
 		/* Changeable TE setting for 120Hz */
 		EXYNOS_DCS_BUF_ADD(ctx, 0xB9, 0x0C, val, 0x00, 0x1B,
 			/* Fixed TE setting */
@@ -365,7 +329,7 @@ static void s6e3hc4_update_panel_feat(struct exynos_panel *ctx,
 	/* TE setting */
 	if (test_bit(FEAT_EARLY_EXIT, changed_feat) ||
 		test_bit(FEAT_OP_NS, changed_feat)) {
-		if (test_bit(FEAT_EARLY_EXIT, spanel->feat) && !spanel->force_changeable_te) {
+		if (test_bit(FEAT_EARLY_EXIT, feat) && !spanel->force_changeable_te) {
 			/* Fixed TE */
 			EXYNOS_DCS_BUF_ADD(ctx, 0xB9, 0x51);
 		} else {
@@ -381,7 +345,7 @@ static void s6e3hc4_update_panel_feat(struct exynos_panel *ctx,
 	/* HBM IRC setting */
 	if (test_bit(FEAT_IRC_OFF, changed_feat)) {
 		EXYNOS_DCS_BUF_ADD(ctx, 0xB0, 0x01, 0x9B, 0x92);
-		if (test_bit(FEAT_IRC_OFF, spanel->feat)) {
+		if (test_bit(FEAT_IRC_OFF, feat)) {
 			EXYNOS_DCS_BUF_ADD(ctx, 0x92, 0x01);
 			if (ctx->panel_rev >= PANEL_REV_DVT1) {
 				/* IR compensation SP setting */
@@ -399,10 +363,10 @@ static void s6e3hc4_update_panel_feat(struct exynos_panel *ctx,
 	}
 	/* HBM ELVSS setting */
 	if (ctx->panel_rev <= PANEL_REV_EVT1_1 && test_bit(FEAT_OP_NS, changed_feat)) {
-		val = test_bit(FEAT_OP_NS, spanel->feat) ? 0x7C : 0x76;
+		val = test_bit(FEAT_OP_NS, feat) ? 0x7C : 0x76;
 		EXYNOS_DCS_BUF_ADD(ctx, 0xB0, 0x01, val, 0x94);
 		EXYNOS_DCS_BUF_ADD(ctx, 0x94, 0x02);
-		if (test_bit(FEAT_OP_NS, spanel->feat))
+		if (test_bit(FEAT_OP_NS, feat))
 			EXYNOS_DCS_BUF_ADD(ctx, 0xB0, 0x02, 0x2C, 0x94);
 		else
 			EXYNOS_DCS_BUF_ADD(ctx, 0xB0, 0x01, 0xCC, 0x94);
@@ -418,7 +382,7 @@ static void s6e3hc4_update_panel_feat(struct exynos_panel *ctx,
 	if (test_bit(FEAT_OP_NS, changed_feat)) {
 		/* mode set */
 		EXYNOS_DCS_BUF_ADD(ctx, 0xF2, 0x01);
-		val = test_bit(FEAT_OP_NS, spanel->feat) ? 0x18 : 0x00;
+		val = test_bit(FEAT_OP_NS, feat) ? 0x18 : 0x00;
 		EXYNOS_DCS_BUF_ADD(ctx, 0x60, val);
 	}
 
@@ -433,28 +397,28 @@ static void s6e3hc4_update_panel_feat(struct exynos_panel *ctx,
 	 *
 	 * Description: early-exit sequence overrides some configs HBM set.
 	 */
-	if (test_bit(FEAT_EARLY_EXIT, spanel->feat)) {
-		if (test_bit(FEAT_HBM, spanel->feat))
+	if (test_bit(FEAT_EARLY_EXIT, feat)) {
+		if (test_bit(FEAT_HBM, feat))
 			EXYNOS_DCS_BUF_ADD(ctx, 0xBD, 0x21, 0x00, 0x83, 0x03, 0x01);
 		else
 			EXYNOS_DCS_BUF_ADD(ctx, 0xBD, 0x21, 0x01, 0x83, 0x03, 0x03);
 	} else {
-		if (test_bit(FEAT_HBM, spanel->feat))
+		if (test_bit(FEAT_HBM, feat))
 			EXYNOS_DCS_BUF_ADD(ctx, 0xBD, 0x21, 0x80, 0x83, 0x03, 0x01);
 		else
 			EXYNOS_DCS_BUF_ADD(ctx, 0xBD, 0x21, 0x81, 0x83, 0x03, 0x03);
 	}
-	val = test_bit(FEAT_OP_NS, spanel->feat) ? 0x4E : 0x1E;
+	val = test_bit(FEAT_OP_NS, feat) ? 0x4E : 0x1E;
 	EXYNOS_DCS_BUF_ADD(ctx, 0xB0, 0x00, val, 0xBD);
-	if (test_bit(FEAT_HBM, spanel->feat)) {
-		if (test_bit(FEAT_OP_NS, spanel->feat))
+	if (test_bit(FEAT_HBM, feat)) {
+		if (test_bit(FEAT_OP_NS, feat))
 			EXYNOS_DCS_BUF_ADD(ctx, 0xBD, 0x00, 0x00, 0x00, 0x02,
 				0x00, 0x04, 0x00, 0x0A);
 		else
 			EXYNOS_DCS_BUF_ADD(ctx, 0xBD, 0x00, 0x00, 0x00, 0x01,
 				0x00, 0x03, 0x00, 0x0B);
 	} else {
-		if (test_bit(FEAT_OP_NS, spanel->feat))
+		if (test_bit(FEAT_OP_NS, feat))
 			EXYNOS_DCS_BUF_ADD(ctx, 0xBD, 0x00, 0x00, 0x00, 0x04,
 				0x00, 0x08, 0x00, 0x14);
 		else
@@ -468,31 +432,31 @@ static void s6e3hc4_update_panel_feat(struct exynos_panel *ctx,
 	 * Description: this sequence possibly overrides some configs early-exit
 	 * and operation set, depending on FI mode.
 	 */
-	if (test_bit(FEAT_FRAME_AUTO, spanel->feat)) {
+	if (test_bit(FEAT_FRAME_AUTO, feat)) {
 		EXYNOS_DCS_BUF_ADD(ctx, 0xB0, 0x00, 0x0C, 0xBD);
 		EXYNOS_DCS_BUF_ADD(ctx, 0xBD, 0x00, 0x00);
 		EXYNOS_DCS_BUF_ADD(ctx, 0xB0, 0x00, 0x12, 0xBD);
-		if (test_bit(FEAT_OP_NS, spanel->feat)) {
+		if (test_bit(FEAT_OP_NS, feat)) {
 			if (idle_vrefresh == 10) {
-				val = test_bit(FEAT_HBM, spanel->feat) ? 0x0A : 0x12;
+				val = test_bit(FEAT_HBM, feat) ? 0x0A : 0x12;
 				EXYNOS_DCS_BUF_ADD(ctx,
 					0xBD, 0x00, 0x00, val, 0x00, 0x02, 0x01);
 			} else {
 				/* 30 Hz idle */
-				val = test_bit(FEAT_HBM, spanel->feat) ? 0x02 : 0x03;
+				val = test_bit(FEAT_HBM, feat) ? 0x02 : 0x03;
 				EXYNOS_DCS_BUF_ADD(ctx,
 					0xBD, 0x00, 0x00, val, 0x00, 0x00, 0x00);
 			}
 		} else {
 			if (idle_vrefresh == 10) {
-				if (test_bit(FEAT_HBM, spanel->feat))
+				if (test_bit(FEAT_HBM, feat))
 					EXYNOS_DCS_BUF_ADD(ctx, 0xBD, 0x00, 0x00,
 						0x0B, 0x00, 0x03, 0x01);
 				else
 					EXYNOS_DCS_BUF_ADD(ctx, 0xBD, 0x00, 0x00,
 						0x16, 0x00, 0x06, 0x01);
 			} else if (idle_vrefresh == 30) {
-				if (test_bit(FEAT_HBM, spanel->feat))
+				if (test_bit(FEAT_HBM, feat))
 					EXYNOS_DCS_BUF_ADD(ctx, 0xBD, 0x00, 0x00,
 						0x03, 0x00, 0x02, 0x01);
 				else
@@ -500,7 +464,7 @@ static void s6e3hc4_update_panel_feat(struct exynos_panel *ctx,
 						0x06, 0x00, 0x04, 0x01);
 			} else {
 				/* 60 Hz idle */
-				val = test_bit(FEAT_HBM, spanel->feat) ? 0x01 : 0x02;
+				val = test_bit(FEAT_HBM, feat) ? 0x01 : 0x02;
 				EXYNOS_DCS_BUF_ADD(ctx,
 					0xBD, 0x00, 0x00, val, 0x00, 0x00, 0x00);
 			}
@@ -508,7 +472,7 @@ static void s6e3hc4_update_panel_feat(struct exynos_panel *ctx,
 		EXYNOS_DCS_BUF_ADD(ctx, 0xBD, 0x23);
 	} else {
 		EXYNOS_DCS_BUF_ADD(ctx, 0xBD, 0x21);
-		if (test_bit(FEAT_OP_NS, spanel->feat)) {
+		if (test_bit(FEAT_OP_NS, feat)) {
 			if (vrefresh == 10)
 				val = 0x1B;
 			else if (vrefresh == 30)
@@ -531,6 +495,30 @@ static void s6e3hc4_update_panel_feat(struct exynos_panel *ctx,
 	EXYNOS_DCS_BUF_ADD_SET(ctx, freq_update);
 	EXYNOS_DCS_BUF_ADD_SET_AND_FLUSH(ctx, lock_cmd_f0);;
 }
+
+/**
+ * s6e3hc4_disable_panel_feat - set the panel at the state of powering up except refresh rate
+ * @ctx: exynos_panel struct
+ *
+ * This function disables HBM, switches to HS, sets manual mode and changeable TE.
+ */
+static void s6e3hc4_disable_panel_feat(struct exynos_panel *ctx)
+{
+	const struct exynos_panel_mode *pmode = ctx->current_mode;
+	u32 vrefresh = pmode ? drm_mode_vrefresh(&pmode->mode) : 60;
+	DECLARE_BITMAP(feat, FEAT_MAX);
+
+	bitmap_zero(feat, FEAT_MAX);
+	s6e3hc4_set_panel_feat(ctx, vrefresh, 0, feat, true);
+}
+
+static void s6e3hc4_update_panel_feat(struct exynos_panel *ctx, u32 vrefresh, bool enforce)
+{
+	struct s6e3hc4_panel *spanel = to_spanel(ctx);
+
+	s6e3hc4_set_panel_feat(ctx, vrefresh, spanel->auto_mode_vrefresh, spanel->feat, enforce);
+}
+
 
 static void s6e3hc4_update_refresh_mode(struct exynos_panel *ctx,
 					const struct exynos_panel_mode *pmode,
@@ -561,7 +549,7 @@ static void s6e3hc4_update_refresh_mode(struct exynos_panel *ctx,
 	 * new frame commit will correct it if the guess is wrong.
 	 */
 	ctx->panel_idle_vrefresh = idle_vrefresh;
-	s6e3hc4_update_panel_feat(ctx, pmode, false);
+	s6e3hc4_update_panel_feat(ctx, vrefresh, false);
 	notify_panel_mode_changed(ctx, false);
 }
 
@@ -745,14 +733,33 @@ static void s6e3hc4_write_display_mode(struct exynos_panel *ctx,
 static int s6e3hc4_set_brightness(struct exynos_panel *ctx, u16 br)
 {
 	u16 brightness;
+	struct s6e3hc4_panel *spanel = to_spanel(ctx);
 
 	if (ctx->current_mode->exynos_mode.is_lp_mode) {
 		const struct exynos_panel_funcs *funcs;
 
+		/* don't stay at pixel-off state in AOD, or black screen is possibly seen */
+		if (spanel->is_pixel_off) {
+			EXYNOS_DCS_WRITE_TABLE(ctx, normal_on);
+			spanel->is_pixel_off = false;
+		}
 		funcs = ctx->desc->exynos_panel_func;
 		if (funcs && funcs->set_binned_lp)
 			funcs->set_binned_lp(ctx, br);
 		return 0;
+	}
+
+	/* Use pixel off command instead of setting DBV 0 */
+	if (!br) {
+		if (!spanel->is_pixel_off) {
+			EXYNOS_DCS_WRITE_TABLE(ctx, pixel_off);
+			spanel->is_pixel_off = true;
+			dev_dbg(ctx->dev, "%s: pixel off instead of dbv 0\n", __func__);
+		}
+		return 0;
+	} else if (br && spanel->is_pixel_off) {
+		EXYNOS_DCS_WRITE_TABLE(ctx, normal_on);
+		spanel->is_pixel_off = false;
 	}
 
 	if (ctx->panel_rev <= PANEL_REV_EVT1 && br >= MAX_BR_HBM_EVT1) {
@@ -766,55 +773,234 @@ static int s6e3hc4_set_brightness(struct exynos_panel *ctx, u16 br)
 	return exynos_dcs_set_brightness(ctx, brightness);
 }
 
-static void s6e3hc4_set_nolp_mode(struct exynos_panel *ctx,
-				  const struct exynos_panel_mode *pmode)
+static const struct exynos_dsi_cmd s6e3hc4_display_on_cmds[] = {
+	EXYNOS_DSI_CMD0(unlock_cmd_f0),
+	EXYNOS_DSI_CMD0(sync_begin),
+	/* AMP type change */
+	EXYNOS_DSI_CMD_SEQ(0xB0, 0x00, 0x4F, 0xF4),
+	EXYNOS_DSI_CMD_SEQ(0xF4, 0x70),
+	/* Vreg = 6.8V */
+	EXYNOS_DSI_CMD_SEQ(0xB0, 0x00, 0x31, 0xF4),
+	EXYNOS_DSI_CMD_SEQ(0xF4, 0x17, 0x17, 0x17, 0x17, 0x17),
+	EXYNOS_DSI_CMD0(sync_end),
+	EXYNOS_DSI_CMD0(lock_cmd_f0),
+
+	EXYNOS_DSI_CMD0(display_on),
+};
+static DEFINE_EXYNOS_CMD_SET(s6e3hc4_display_on);
+
+static const struct exynos_dsi_cmd s6e3hc4_display_off_cmds[] = {
+	EXYNOS_DSI_CMD0(display_off),
+
+	EXYNOS_DSI_CMD0(unlock_cmd_f0),
+	EXYNOS_DSI_CMD0(sync_begin),
+	/* Vreg = 4.5 */
+	EXYNOS_DSI_CMD_SEQ(0xB0, 0x00, 0x31, 0xF4),
+	EXYNOS_DSI_CMD_SEQ(0xF4, 0x00, 0x00, 0x00, 0x00, 0x00),
+	/* AMP type change */
+	EXYNOS_DSI_CMD_SEQ(0xB0, 0x00, 0x4F, 0xF4),
+	EXYNOS_DSI_CMD_SEQ(0xF4, 0x50),
+	EXYNOS_DSI_CMD0(sync_end),
+	EXYNOS_DSI_CMD0(lock_cmd_f0),
+};
+static DEFINE_EXYNOS_CMD_SET(s6e3hc4_display_off);
+
+#define TE_WIDTH_USEC_60HZ 8400
+#define TE_WIDTH_USEC_120HZ 150
+#define TE_WIDTH_USEC_AOD 600
+#define TE_PERIOD_DELTA_TOLERANCE_USEC 2000
+
+static u32 s6e3hc4_get_te_width_us(u32 vrefresh)
 {
-	u32 vrefresh = drm_mode_vrefresh(&pmode->mode);
-	u32 delay_us = mult_frac(1000, 1020, vrefresh);
+	if (vrefresh == 30)
+		return TE_WIDTH_USEC_AOD;
+	else if (vrefresh == 120)
+		return TE_WIDTH_USEC_120HZ;
+	return TE_WIDTH_USEC_60HZ;
+}
 
-	/* clear the brightness level */
-	EXYNOS_DCS_WRITE_SEQ(ctx, 0x51, 0x00, 0x00);
+static void s6e3hc4_wait_for_vsync_done(struct exynos_panel *ctx, u32 vrefresh)
+{
+	exynos_panel_wait_for_vsync_done(ctx, s6e3hc4_get_te_width_us(vrefresh),
+			EXYNOS_VREFRESH_TO_PERIOD_USEC(vrefresh));
+}
 
-	EXYNOS_DCS_WRITE_TABLE(ctx, display_off);
-	/* AOD low mode setting off */
+/**
+ * s6e3hc4_wait_for_vsync_done_changeable - wait for finishing vsync for changeable TE
+ * to avoid fake TE in some case, e.g. during transition from fixed TE to changeable TE
+ * @ctx: panel struct
+ * @vrefresh: current refresh rate
+ */
+static void s6e3hc4_wait_for_vsync_done_changeable(struct exynos_panel *ctx, u32 vrefresh)
+{
+	ktime_t t;
+	s64 delta_us;
+	int i = 0, period_us = EXYNOS_VREFRESH_TO_PERIOD_USEC(vrefresh);
+	const int timeout = 5;
+	u32 te_width_us = s6e3hc4_get_te_width_us(vrefresh);
+
+	while (i++ < timeout) {
+		exynos_panel_wait_for_vblank(ctx);
+		t = ktime_get();
+		exynos_panel_wait_for_vblank(ctx);
+		delta_us = ktime_us_delta(ktime_get(), t);
+		if (delta_us > (period_us - TE_PERIOD_DELTA_TOLERANCE_USEC) &&
+			delta_us < (period_us + TE_PERIOD_DELTA_TOLERANCE_USEC))
+			break;
+	}
+	if (i >= timeout)
+		dev_warn(ctx->dev, "timeout of waiting for changeable TE @ %d Hz\n", vrefresh);
+	usleep_range(te_width_us, te_width_us + 10);
+}
+
+/**
+ * s6e3hc4_panel_set_lp_mode - enter AOD from normal mode
+ * @ctx: panel struct
+ * @pmode: targeting panel mode
+ */
+static void s6e3hc4_panel_set_lp_mode(struct exynos_panel *ctx,
+				      const struct exynos_panel_mode *pmode)
+{
+	struct s6e3hc4_panel *spanel = to_spanel(ctx);
+	bool panel_enabled = is_panel_enabled(ctx);
+	u32 vrefresh = spanel->hw_vrefresh;
+	bool is_changeable_te = !test_bit(FEAT_EARLY_EXIT, spanel->feat);
+
+	dev_dbg(ctx->dev, "%s: panel: %s\n", __func__, panel_enabled ? "ON" : "OFF");
+
+	s6e3hc4_disable_panel_feat(ctx);
+	if (!panel_enabled) {
+		/* init sequence has sent display-off command already */
+		s6e3hc4_wait_for_vsync_done(ctx, 60);
+	} else {
+		if (vrefresh < 120 && is_changeable_te)
+			s6e3hc4_wait_for_vsync_done_changeable(ctx, vrefresh);
+		else
+			s6e3hc4_wait_for_vsync_done(ctx, vrefresh);
+		exynos_panel_send_cmd_set(ctx, &s6e3hc4_display_off_cmd_set);
+
+		s6e3hc4_wait_for_vsync_done(ctx, spanel->hw_vrefresh);
+	}
+	EXYNOS_DCS_BUF_ADD_SET_AND_FLUSH(ctx, aod_on);
+	exynos_panel_send_cmd_set(ctx, &s6e3hc4_display_on_cmd_set);
 	EXYNOS_DCS_BUF_ADD_SET(ctx, unlock_cmd_f0);
+	/* AOD low Mode */
+	EXYNOS_DCS_BUF_ADD(ctx, 0xB0, 0x00, 0x52, 0x94);
+	EXYNOS_DCS_BUF_ADD(ctx, 0x94, 0x01, 0x07, 0x98, 0x02);
+	if (ctx->panel_rev < PANEL_REV_DVT1_1) {
+		/* AOD timing */
+		EXYNOS_DCS_BUF_ADD(ctx, 0xB0, 0x00, 0x3D, 0xF6);
+		EXYNOS_DCS_BUF_ADD(ctx, 0xF6, 0xAF, 0xB1);
+		EXYNOS_DCS_BUF_ADD(ctx, 0xB0, 0x00, 0x41, 0xF6);
+		EXYNOS_DCS_BUF_ADD(ctx, 0xF6, 0xB3);
+		/* AOD low mode setting */
+		EXYNOS_DCS_BUF_ADD(ctx, 0xB0, 0x01, 0x7D, 0x94);
+		EXYNOS_DCS_BUF_ADD(ctx, 0x94, 0x1C);
+	}
+	/* Fixed TE: sync on */
+	EXYNOS_DCS_BUF_ADD(ctx, 0xB9, 0x51);
+	/* Set freq at 30 Hz */
+	EXYNOS_DCS_BUF_ADD(ctx, 0xB0, 0x00, 0x01, 0x60);
+	EXYNOS_DCS_BUF_ADD(ctx, 0x60, 0x00);
+	/* Set 10 Hz idle */
+	EXYNOS_DCS_BUF_ADD(ctx, 0xB0, 0x00, 0x18, 0xBD);
+	EXYNOS_DCS_BUF_ADD(ctx, 0xBD, 0x04, 0x00, 0x06, 0x00, 0x00, 0x00);
+	/* auto mode */
+	EXYNOS_DCS_BUF_ADD(ctx, 0xBD, 0x25);
+	EXYNOS_DCS_BUF_ADD_SET(ctx, freq_update);
+	EXYNOS_DCS_BUF_ADD_SET_AND_FLUSH(ctx, lock_cmd_f0);
+	spanel->hw_vrefresh = 30;
+
+	dev_info(ctx->dev, "enter LP mode\n");
+}
+
+/**
+ * s6e3hc4_set_nolp_mode - exit AOD to normal mode
+ * @ctx: panel struct
+ * @pmode: targeting panel mode
+ */
+static void s6e3hc4_set_nolp_mode(struct exynos_panel *ctx, const struct exynos_panel_mode *pmode)
+{
+	struct s6e3hc4_panel *spanel = to_spanel(ctx);
+
+	/* disabling idle is a must before running into AOD */
+	EXYNOS_DCS_BUF_ADD_SET(ctx, unlock_cmd_f0);
+	/* manual mode */
+	EXYNOS_DCS_BUF_ADD(ctx, 0xBD, 0x21);
+	/* Changeable TE is a must to ensure command sync */
+	EXYNOS_DCS_BUF_ADD(ctx, 0xB9, 0x04);
+	/* 30 Hz */
+	EXYNOS_DCS_BUF_ADD(ctx, 0xB0, 0x00, 0x01, 0x60);
+	EXYNOS_DCS_BUF_ADD(ctx, 0x60, 0x00);
+	EXYNOS_DCS_BUF_ADD_SET(ctx, freq_update);
+	EXYNOS_DCS_BUF_ADD_SET_AND_FLUSH(ctx, lock_cmd_f0);
+	spanel->hw_idle_vrefresh = 0;
+
+	s6e3hc4_wait_for_vsync_done(ctx, 30);
+	exynos_panel_send_cmd_set(ctx, &s6e3hc4_display_off_cmd_set);
+	EXYNOS_DCS_BUF_ADD_SET(ctx, unlock_cmd_f0);
+	/* disabling AOD low Mode is a must before aod-off */
 	EXYNOS_DCS_BUF_ADD(ctx, 0xB0, 0x00, 0x52, 0x94);
 	EXYNOS_DCS_BUF_ADD(ctx, 0x94, 0x00);
-	EXYNOS_DCS_BUF_ADD_SET_AND_FLUSH(ctx, lock_cmd_f0);
-	s6e3hc4_update_panel_feat(ctx, pmode, true);
+	EXYNOS_DCS_BUF_ADD_SET(ctx, lock_cmd_f0);
+	EXYNOS_DCS_BUF_ADD_SET_AND_FLUSH(ctx, aod_off);
+
+	s6e3hc4_wait_for_vsync_done(ctx, 30);
+	s6e3hc4_update_panel_feat(ctx, drm_mode_vrefresh(&pmode->mode), true);
 	/* backlight control and dimming */
 	s6e3hc4_write_display_mode(ctx, &pmode->mode);
 	s6e3hc4_change_frequency(ctx, pmode);
-	usleep_range(delay_us, delay_us + 10);
-	EXYNOS_DCS_WRITE_TABLE(ctx, display_on);
+	exynos_panel_send_cmd_set(ctx, &s6e3hc4_display_on_cmd_set);
 
 	dev_info(ctx->dev, "exit LP mode\n");
 }
 
 static const struct exynos_dsi_cmd s6e3hc4_init_cmds[] = {
+	EXYNOS_DSI_CMD_SEQ_DELAY(10, MIPI_DCS_EXIT_SLEEP_MODE),
 	EXYNOS_DSI_CMD0_REV(unlock_cmd_fc, PANEL_REV_LT(PANEL_REV_DVT1_1)),
 	EXYNOS_DSI_CMD_SEQ_REV(PANEL_REV_LT(PANEL_REV_DVT1_1), 0xB0, 0x00, 0x0D, 0xFE),
 	EXYNOS_DSI_CMD_SEQ_REV(PANEL_REV_LT(PANEL_REV_DVT1_1), 0xFE, 0x00),
 	EXYNOS_DSI_CMD_SEQ_REV(PANEL_REV_LT(PANEL_REV_EVT1_1), 0xB0, 0x01, 0x37, 0x90),
 	EXYNOS_DSI_CMD_SEQ_REV(PANEL_REV_LT(PANEL_REV_EVT1_1), 0x90, 0x00),
 	EXYNOS_DSI_CMD0_REV(lock_cmd_fc, PANEL_REV_LT(PANEL_REV_DVT1_1)),
-	EXYNOS_DSI_CMD(nop, 120),
+
+	EXYNOS_DSI_CMD0(unlock_cmd_f0),
+	/* disable black insertion */
+	EXYNOS_DSI_CMD_SEQ(0xBB, 0x0B, 0x04, 0x04, 0x41, 0x3D, 0x0C),
+	/* Delete Toggle */
+	EXYNOS_DSI_CMD_SEQ(0xB0, 0x00, 0x58, 0x94),
+	EXYNOS_DSI_CMD_SEQ(0x94, 0x0C, 0x60, 0x0C, 0x60),
+	EXYNOS_DSI_CMD0(sync_begin),
+	/* VLIN1 7.9V */
+	EXYNOS_DSI_CMD_SEQ(0xB0, 0x00, 0x12, 0xB1),
+	EXYNOS_DSI_CMD_SEQ(0xB1, 0x08),
+	/* VGH 7.4V */
+	EXYNOS_DSI_CMD_SEQ(0xB0, 0x00, 0x0E, 0xF4),
+	EXYNOS_DSI_CMD_SEQ(0xF4, 0x18, 0x18, 0x18, 0x18, 0x18),
+	/* VREG 4.5V */
+	EXYNOS_DSI_CMD_SEQ(0xB0, 0x00, 0x31, 0xF4),
+	EXYNOS_DSI_CMD_SEQ(0xF4, 0x00, 0x00, 0x00, 0x00, 0x00),
+	EXYNOS_DSI_CMD0(sync_end),
+	EXYNOS_DSI_CMD(lock_cmd_f0, 110),
 
 	/* Enable TE*/
 	EXYNOS_DSI_CMD_SEQ(0x35),
-	EXYNOS_DSI_CMD0(unlock_cmd_f0),
 
+	EXYNOS_DSI_CMD0(unlock_cmd_f0),
+	/* AOD SAP settings */
+	EXYNOS_DSI_CMD_SEQ(0xB0, 0x00, 0x04, 0xF6),
+	EXYNOS_DSI_CMD_SEQ(0xF6, 0x5A),
 	/* Enable SP */
 	EXYNOS_DSI_CMD_SEQ_REV(PANEL_REV_LT(PANEL_REV_EVT1_1), 0xB0, 0x00, 0x58, 0x69),
 	EXYNOS_DSI_CMD_SEQ_REV(PANEL_REV_LT(PANEL_REV_EVT1_1), 0x69, 0x01),
 	EXYNOS_DSI_CMD_SEQ_REV(PANEL_REV_GE(PANEL_REV_DVT1), 0xB0, 0x02, 0xF3, 0x68),
-	EXYNOS_DSI_CMD_SEQ_REV(PANEL_REV_GE(PANEL_REV_DVT1), 0x68, 0x09, 0X09, 0X09, 0x0A, 0x0A, 0x0A),
+	EXYNOS_DSI_CMD_SEQ_REV(PANEL_REV_GE(PANEL_REV_DVT1), 0x68, 0x09, 0X09, 0X09, 0x0A, 0x0A,
+			       0x0A),
 	/* FFC: 165 Mhz, 1% tolerance */
 	EXYNOS_DSI_CMD_SEQ(0xB0, 0x00, 0x36, 0xC5),
 	EXYNOS_DSI_CMD_SEQ(0xC5, 0x11, 0x10, 0x50, 0x05, 0x4E, 0x74),
 	/* NS transition flicker setting */
 	EXYNOS_DSI_CMD_SEQ(0xAB, 0x83),
-
 	/* TSP sync auto mode settings*/
 	EXYNOS_DSI_CMD_SEQ(0xB0, 0x00, 0x3C, 0xB9),
 	EXYNOS_DSI_CMD_SEQ(0xB9, 0x19, 0x09),
@@ -822,11 +1008,9 @@ static const struct exynos_dsi_cmd s6e3hc4_init_cmds[] = {
 	EXYNOS_DSI_CMD_SEQ(0xB9, 0x30, 0x03),
 	EXYNOS_DSI_CMD_SEQ(0xB0, 0x00, 0x05, 0xF2),
 	EXYNOS_DSI_CMD_SEQ(0xF2, 0xC8, 0xC0),
-
 	/* Set frame insertion count */
 	EXYNOS_DSI_CMD_SEQ(0xB0, 0x00, 0x10, 0xBD),
 	EXYNOS_DSI_CMD_SEQ(0xBD, 0x00),
-
 	EXYNOS_DSI_CMD0(freq_update),
 	EXYNOS_DSI_CMD0(lock_cmd_f0),
 
@@ -844,6 +1028,7 @@ static int s6e3hc4_enable(struct drm_panel *panel)
 	const struct drm_display_mode *mode;
 	const bool needs_reset = !is_panel_enabled(ctx);
 	bool is_fhd;
+	u32 vrefresh;
 
 	if (!pmode) {
 		dev_err(ctx->dev, "no current mode set\n");
@@ -851,21 +1036,28 @@ static int s6e3hc4_enable(struct drm_panel *panel)
 	}
 	mode = &pmode->mode;
 	is_fhd = mode->hdisplay == 1080;
+	vrefresh = needs_reset ? 60 : drm_mode_vrefresh(mode);
 
 	dev_dbg(ctx->dev, "%s\n", __func__);
 
 	if (needs_reset)
 		exynos_panel_reset(ctx);
 
+	/* wait TE falling for RRS since DSC and framestart must in the same VSYNC */
+	if (ctx->mode_in_progress == MODE_RES_IN_PROGRESS)
+		s6e3hc4_wait_for_vsync_done(ctx, vrefresh);
+	else if (ctx->mode_in_progress == MODE_RES_AND_RR_IN_PROGRESS)
+		s6e3hc4_wait_for_vsync_done(ctx, ctx->last_rr);
+
 	/* DSC related configuration */
 	EXYNOS_DCS_WRITE_SEQ(ctx, 0x9D, 0x01);
 	EXYNOS_PPS_WRITE_BUF(ctx, is_fhd ? FHD_PPS_SETTING : WQHD_PPS_SETTING);
 
 	if (needs_reset) {
-		u32 delay = 10;
+		struct s6e3hc4_panel *spanel = to_spanel(ctx);
 
-		EXYNOS_DCS_WRITE_SEQ_DELAY(ctx, delay, MIPI_DCS_EXIT_SLEEP_MODE);
 		exynos_panel_send_cmd_set(ctx, &s6e3hc4_init_cmd_set);
+		spanel->is_pixel_off = false;
 	}
 
 	EXYNOS_DCS_BUF_ADD_SET(ctx, unlock_cmd_f0);
@@ -876,14 +1068,18 @@ static int s6e3hc4_enable(struct drm_panel *panel)
 	}
 	EXYNOS_DCS_BUF_ADD_SET_AND_FLUSH(ctx, lock_cmd_f0);
 
-	s6e3hc4_update_panel_feat(ctx, pmode, true);
-	s6e3hc4_write_display_mode(ctx, mode); /* dimming and HBM */
-	s6e3hc4_change_frequency(ctx, pmode);
+	if (pmode->exynos_mode.is_lp_mode) {
+		s6e3hc4_panel_set_lp_mode(ctx, pmode);
+	} else {
+		s6e3hc4_update_panel_feat(ctx, drm_mode_vrefresh(&pmode->mode), true);
+		s6e3hc4_write_display_mode(ctx, mode); /* dimming and HBM */
+		s6e3hc4_change_frequency(ctx, pmode);
 
-	if (pmode->exynos_mode.is_lp_mode)
-		exynos_panel_set_lp_mode(ctx, pmode);
-	else if (needs_reset || (ctx->panel_state == PANEL_STATE_BLANK))
-		EXYNOS_DCS_WRITE_TABLE(ctx, display_on);
+		if (needs_reset || (ctx->panel_state == PANEL_STATE_BLANK)) {
+			s6e3hc4_wait_for_vsync_done(ctx, vrefresh);
+			exynos_panel_send_cmd_set(ctx, &s6e3hc4_display_on_cmd_set);
+		}
+	}
 
 	return 0;
 }
@@ -893,6 +1089,8 @@ static int s6e3hc4_disable(struct drm_panel *panel)
 	struct exynos_panel *ctx = container_of(panel, struct exynos_panel, panel);
 	struct s6e3hc4_panel *spanel = to_spanel(ctx);
 	int ret;
+	u32 vrefresh = spanel->hw_vrefresh;
+	bool is_changeable_te = !test_bit(FEAT_EARLY_EXIT, spanel->feat);
 
 	/* skip disable sequence if going through modeset */
 	if (ctx->panel_state == PANEL_STATE_MODESET)
@@ -902,6 +1100,18 @@ static int s6e3hc4_disable(struct drm_panel *panel)
 	if (ret)
 		return ret;
 
+	s6e3hc4_disable_panel_feat(ctx);
+	if (vrefresh < 120 && is_changeable_te)
+		s6e3hc4_wait_for_vsync_done_changeable(ctx, vrefresh);
+	else
+		s6e3hc4_wait_for_vsync_done(ctx, vrefresh);
+
+	exynos_panel_send_cmd_set(ctx, &s6e3hc4_display_off_cmd_set);
+	s6e3hc4_wait_for_vsync_done(ctx, spanel->hw_vrefresh);
+
+	if (ctx->panel_state == PANEL_STATE_OFF)
+		exynos_panel_send_cmd_set(ctx, &s6e3hc4_sleepin_cmd_set);
+
 	/* HBM is disabled in exynos_panel_disable() */
 	clear_bit(FEAT_HBM, spanel->feat);
 	clear_bit(FEAT_IRC_OFF, spanel->feat);
@@ -910,11 +1120,6 @@ static int s6e3hc4_disable(struct drm_panel *panel)
 	bitmap_clear(spanel->hw_feat, 0, FEAT_MAX);
 	spanel->hw_vrefresh = 60;
 	spanel->hw_idle_vrefresh = 0;
-
-	EXYNOS_DCS_WRITE_TABLE_DELAY(ctx, 20, display_off);
-
-	if (ctx->panel_state == PANEL_STATE_OFF)
-		exynos_panel_send_cmd_set(ctx, &s6e3hc4_sleepin_cmd_set);
 
 	return 0;
 }
@@ -1009,13 +1214,17 @@ static void s6e3hc4_set_hbm_mode(struct exynos_panel *ctx,
 		else
 			set_bit(FEAT_IRC_OFF, spanel->feat);
 #endif
-		s6e3hc4_update_panel_feat(ctx, NULL, false);
-		s6e3hc4_write_display_mode(ctx, &pmode->mode);
 	} else {
 		clear_bit(FEAT_HBM, spanel->feat);
 		clear_bit(FEAT_IRC_OFF, spanel->feat);
-		s6e3hc4_write_display_mode(ctx, &pmode->mode);
-		s6e3hc4_update_panel_feat(ctx, NULL, false);
+	}
+
+	if (!pmode->exynos_mode.is_lp_mode) {
+		if (!IS_HBM_ON(mode))
+			s6e3hc4_write_display_mode(ctx, &pmode->mode);
+		s6e3hc4_update_panel_feat(ctx, drm_mode_vrefresh(&pmode->mode), false);
+		if (IS_HBM_ON(mode))
+			s6e3hc4_write_display_mode(ctx, &pmode->mode);
 	}
 }
 
@@ -1087,7 +1296,7 @@ static int s6e3hc4_set_op_hz(struct exynos_panel *ctx, unsigned int hz)
 		set_bit(FEAT_OP_NS, spanel->feat);
 	else
 		clear_bit(FEAT_OP_NS, spanel->feat);
-	s6e3hc4_update_panel_feat(ctx, NULL, false);
+	s6e3hc4_update_panel_feat(ctx, vrefresh, false);
 	dev_info(ctx->dev, "set op_hz at %d\n", hz);
 	return 0;
 }
@@ -1180,7 +1389,7 @@ static const struct exynos_panel_mode s6e3hc4_modes[] = {
 		.exynos_mode = {
 			.mode_flags = MIPI_DSI_CLOCK_NON_CONTINUOUS,
 			.vblank_usec = 120,
-			.te_usec = 150,
+			.te_usec = TE_WIDTH_USEC_120HZ,
 			.bpc = 8,
 			.dsc = {
 				.enabled = true,
@@ -1249,7 +1458,7 @@ static const struct exynos_panel_mode s6e3hc4_modes[] = {
 		.exynos_mode = {
 			.mode_flags = MIPI_DSI_CLOCK_NON_CONTINUOUS,
 			.vblank_usec = 120,
-			.te_usec = 150,
+			.te_usec = TE_WIDTH_USEC_120HZ,
 			.bpc = 8,
 			.dsc = {
 				.enabled = true,
@@ -1287,7 +1496,7 @@ static const struct exynos_panel_mode s6e3hc4_lp_modes[] = {
 		.exynos_mode = {
 			.mode_flags = MIPI_DSI_CLOCK_NON_CONTINUOUS,
 			.vblank_usec = 120,
-			.te_usec = 25300,
+			.te_usec = TE_WIDTH_USEC_AOD,
 			.bpc = 8,
 			.dsc = {
 				.enabled = true,
@@ -1318,7 +1527,7 @@ static const struct exynos_panel_mode s6e3hc4_lp_modes[] = {
 		.exynos_mode = {
 			.mode_flags = MIPI_DSI_CLOCK_NON_CONTINUOUS,
 			.vblank_usec = 120,
-			.te_usec = 25300,
+			.te_usec = TE_WIDTH_USEC_AOD,
 			.bpc = 8,
 			.dsc = {
 				.enabled = true,
@@ -1361,6 +1570,15 @@ static void s6e3hc4_debugfs_init(struct drm_panel *panel, struct dentry *root)
 	dput(panel_root);
 }
 
+static void s6e3hc4_panel_init(struct exynos_panel *ctx)
+{
+	EXYNOS_DCS_BUF_ADD_SET(ctx, unlock_cmd_f0);
+	/* AOD SAP settings */
+	EXYNOS_DCS_BUF_ADD(ctx, 0xB0, 0x00, 0x04, 0xF6);
+	EXYNOS_DCS_BUF_ADD(ctx, 0xF6, 0x5A);
+	EXYNOS_DCS_BUF_ADD_SET_AND_FLUSH(ctx, lock_cmd_f0);
+}
+
 static int s6e3hc4_panel_probe(struct mipi_dsi_device *dsi)
 {
 	struct s6e3hc4_panel *spanel;
@@ -1371,6 +1589,8 @@ static int s6e3hc4_panel_probe(struct mipi_dsi_device *dsi)
 
 	spanel->base.op_hz = 120;
 	spanel->hw_vrefresh = 60;
+	spanel->is_pixel_off = false;
+
 	return exynos_panel_common_init(dsi, &spanel->base);
 }
 
@@ -1385,13 +1605,14 @@ static const struct drm_panel_funcs s6e3hc4_drm_funcs = {
 
 static const struct exynos_panel_funcs s6e3hc4_exynos_funcs = {
 	.set_brightness = s6e3hc4_set_brightness,
-	.set_lp_mode = exynos_panel_set_lp_mode,
+	.set_lp_mode = s6e3hc4_panel_set_lp_mode,
 	.set_nolp_mode = s6e3hc4_set_nolp_mode,
 	.set_binned_lp = exynos_panel_set_binned_lp,
 	.set_hbm_mode = s6e3hc4_set_hbm_mode,
 	.set_local_hbm_mode = s6e3hc4_set_local_hbm_mode,
 	.is_mode_seamless = s6e3hc4_is_mode_seamless,
 	.mode_set = s6e3hc4_mode_set,
+	.panel_init = s6e3hc4_panel_init,
 	.get_panel_rev = s6e3hc4_get_panel_rev,
 	.get_te2_edges = exynos_panel_get_te2_edges,
 	.configure_te2_edges = exynos_panel_configure_te2_edges,
@@ -1455,7 +1676,6 @@ const struct exynos_panel_desc samsung_s6e3hc4 = {
 	.lp_mode_count = ARRAY_SIZE(s6e3hc4_lp_modes),
 	.lp_vrefresh_range = s6e3hc4_lp_vrefresh_range,
 	.lp_vrefresh_range_count = ARRAY_SIZE(s6e3hc4_lp_vrefresh_range),
-	.lp_cmd_set = &s6e3hc4_lp_cmd_set,
 	.binned_lp = s6e3hc4_binned_lp,
 	.num_binned_lp = ARRAY_SIZE(s6e3hc4_binned_lp),
 	.is_panel_idle_supported = true,
