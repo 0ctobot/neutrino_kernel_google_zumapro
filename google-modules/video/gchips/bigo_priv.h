@@ -56,6 +56,9 @@ struct bigo_bw {
 	u32 rd_bw_afbc;
 	u32 wr_bw_afbc;
 	u32 pk_bw_afbc;
+	u32 rd_bw_enc;
+	u32 wr_bw_enc;
+	u32 pk_bw_enc;
 };
 
 struct power_manager {

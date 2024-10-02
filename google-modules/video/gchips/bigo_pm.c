@@ -116,9 +116,15 @@ static void bigo_get_bw(struct bigo_core *core, struct bts_bw *bw)
 			bw->write = bandwidth->wr_bw_afbc;
 			bw->peak = bandwidth->pk_bw_afbc;
 		} else {
-			bw->read = bandwidth->rd_bw;
-			bw->write = bandwidth->wr_bw;
-			bw->peak = bandwidth->pk_bw;
+			if (inst->is_decoder_usage) {
+				bw->read = bandwidth->rd_bw;
+				bw->write = bandwidth->wr_bw;
+				bw->peak = bandwidth->pk_bw;
+			} else {
+				bw->read = bandwidth->rd_bw_enc;
+				bw->write = bandwidth->wr_bw_enc;
+				bw->peak = bandwidth->pk_bw_enc;
+			}
 		}
 	} else {
 		memset(bw, 0, sizeof(*bw));
