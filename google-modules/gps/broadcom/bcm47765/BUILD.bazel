@@ -7,11 +7,12 @@ kernel_module(
     srcs = glob([
         "**/*.c",
         "**/*.h",
-        "Kbuild",
     ]) + [
+        "Kbuild",
         "//private/google-modules/soc/gs:gs_soc_headers",
     ],
     outs = [
+        "bbd_pps_gpio.ko",
         "bcm47765.ko",
     ],
     kernel_build = "//private/google-modules/soc/gs:gs_kernel_build",

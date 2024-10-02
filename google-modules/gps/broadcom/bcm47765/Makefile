@@ -8,6 +8,8 @@ M ?= $(shell pwd)
 
 
 KBUILD_OPTIONS += CONFIG_BCM_GPS_SPI_DRIVER=m
+KBUILD_OPTIONS += CONFIG_BCM_GPS_PPS_DRIVER=m
+
 EXTRA_CFLAGS += -DCONFIG_BCM_GPS_SPI_DRIVER
 
 include $(KERNEL_SRC)/../private/google-modules/soc/gs/Makefile.include
