@@ -88,6 +88,7 @@ struct gcip_image_config_parser {
 };
 
 #define GCIP_IMG_CFG_ADDR_SHIFT 12
+#define GCIP_IMG_CFG_PAGE_SHIFT 12
 #define GCIP_IMG_CFG_MB_SHIFT 20
 #define GCIP_IMG_CFG_SIZE_MODE_BIT BIT(GCIP_IMG_CFG_ADDR_SHIFT - 1)
 #define GCIP_IMG_CFG_SECURE_SIZE_MASK (GCIP_IMG_CFG_SIZE_MODE_BIT - 1u)
@@ -98,7 +99,7 @@ struct gcip_image_config_parser {
 static inline u32 gcip_ns_config_to_size(u32 cfg)
 {
 	if (cfg & GCIP_IMG_CFG_SIZE_MODE_BIT)
-		return (cfg & GCIP_IMG_CFG_NS_SIZE_MASK) << PAGE_SHIFT;
+		return (cfg & GCIP_IMG_CFG_NS_SIZE_MASK) << GCIP_IMG_CFG_PAGE_SHIFT;
 
 	return (cfg & GCIP_IMG_CFG_NS_SIZE_MASK) << GCIP_IMG_CFG_MB_SHIFT;
 }
@@ -107,9 +108,9 @@ static inline u32 gcip_ns_config_to_size(u32 cfg)
 static inline u32 gcip_config_to_size(u32 cfg)
 {
 	if (cfg & GCIP_IMG_CFG_SIZE_MODE_BIT)
-		return (cfg & GCIP_IMG_CFG_SECURE_SIZE_MASK) << PAGE_SHIFT;
+		return (cfg & GCIP_IMG_CFG_SECURE_SIZE_MASK) << GCIP_IMG_CFG_PAGE_SHIFT;
 
-	return BIT(cfg & GCIP_IMG_CFG_SECURE_SIZE_MASK) << PAGE_SHIFT;
+	return BIT(cfg & GCIP_IMG_CFG_SECURE_SIZE_MASK) << GCIP_IMG_CFG_PAGE_SHIFT;
 }
 
 /*

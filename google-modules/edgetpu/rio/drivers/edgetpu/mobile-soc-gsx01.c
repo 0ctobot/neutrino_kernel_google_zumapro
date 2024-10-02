@@ -362,7 +362,7 @@ long edgetpu_soc_pm_get_rate(struct edgetpu_dev *etdev, int flags)
 	case 206:
 		curr_state = TPU_ACTIVE_LOW;
 		break;
-	case 118:
+	case 130:
 		curr_state = TPU_ACTIVE_MEDIUM;
 		break;
 	case 182:
