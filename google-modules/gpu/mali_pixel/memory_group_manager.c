@@ -28,9 +28,9 @@
 
 #include <uapi/gpu/arm/midgard/platform/pixel/pixel_memory_group_manager.h>
 
-
+#define NUM_PAGES_IN_2MB_LARGE_PAGE (SZ_2M / PAGE_SIZE)
 #define ORDER_SMALL_PAGE 0
-#define ORDER_LARGE_PAGE 9
+#define ORDER_LARGE_PAGE const_ilog2(NUM_PAGES_IN_2MB_LARGE_PAGE)
 
 /**
  * enum mgm_group_id - Symbolic names for used memory groups

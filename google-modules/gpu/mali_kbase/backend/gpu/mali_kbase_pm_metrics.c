@@ -47,8 +47,8 @@
 #endif
 
 #if MALI_USE_CSF
-/* To get the GPU_ITER_ACTIVE value in nano seconds unit */
-#define GPU_ITER_ACTIVE_SCALING_FACTOR ((u64)1E9)
+/* To get the GPU_UTIL_counter value in nano seconds unit */
+#define GPU_UTIL_SCALING_FACTOR ((u64)1E9)
 #endif
 
 /*
@@ -110,21 +110,21 @@ int kbasep_pm_metrics_init(struct kbase_device *kbdev)
 	kbdev->pm.backend.metrics.kbdev = kbdev;
 	kbdev->pm.backend.metrics.time_period_start = ktime_get_raw();
 
-	perf_counters[ITER_ACTIVE_IDX].scaling_factor =
-		GPU_ITER_ACTIVE_SCALING_FACTOR;
+	perf_counters[GPU_UTIL_IDX].scaling_factor =
+		GPU_UTIL_SCALING_FACTOR;
 
 	/* Normalize values by GPU frequency */
-	perf_counters[ITER_ACTIVE_IDX].gpu_norm = true;
+	perf_counters[GPU_UTIL_IDX].gpu_norm = true;
 
-	/* We need the GPU_ITER_ACTIVE counter, which is in the CSHW group */
-	perf_counters[ITER_ACTIVE_IDX].type = KBASE_IPA_CORE_TYPE_CSHW;
+	/* We need the GPU_UTIL counter, which is in the CSHW group */
+	perf_counters[GPU_UTIL_IDX].type = KBASE_IPA_CORE_TYPE_CSHW;
 
-	/* We need the GPU_ITER_ACTIVE counter */
-	perf_counters[ITER_ACTIVE_IDX].idx = IPA_GPU_ITER_ACTIVE_CNT_IDX;
+	/* We need the GPU_UTIL counter index */
+	perf_counters[GPU_UTIL_IDX].idx = IPA_GPU_UTIL_CNT_IDX;
 
-	// do same for MCU_ACTIVE
+	// Configure MCU_ACTIVE counter
 	perf_counters[MCU_ACTIVE_IDX].scaling_factor =
-		GPU_ITER_ACTIVE_SCALING_FACTOR;
+		GPU_UTIL_SCALING_FACTOR;
 
 	perf_counters[MCU_ACTIVE_IDX].gpu_norm = true;
 
@@ -137,7 +137,9 @@ int kbasep_pm_metrics_init(struct kbase_device *kbdev)
 	if (err) {
 		dev_err(kbdev->dev, "Failed to register IPA with kbase_ipa_control: err=%d", err);
 		return -1;
-	}
+	} else
+		dev_info(kbdev->dev, "Configured GPU_UTIL counter (Id: %d) from CSHW group for DVFS.",
+					IPA_GPU_UTIL_CNT_IDX);
 #else
 	KBASE_DEBUG_ASSERT(kbdev != NULL);
 	kbdev->pm.backend.metrics.kbdev = kbdev;
@@ -211,9 +213,9 @@ static bool kbase_pm_get_dvfs_utilisation_calc(struct kbase_device *kbdev)
 	gpu_iter_active_counter = counters[0];
 	mcu_active_counter = counters[1];
 
-	/* Read the timestamp after reading the GPU_ITER_ACTIVE counter value.
+	/* Read the timestamp after reading the GPU_UTIL counter value.
 	 * This ensures the time gap between the 2 reads is consistent for
-	 * a meaningful comparison between the increment of GPU_ITER_ACTIVE and
+	 * a meaningful comparison between the increment of GPU_UTIL and
 	 * elapsed time. The lock taken inside kbase_ipa_control_query()
 	 * function can cause lot of variation.
 	 */
@@ -221,7 +223,7 @@ static bool kbase_pm_get_dvfs_utilisation_calc(struct kbase_device *kbdev)
 
 	if (err) {
 		dev_err(kbdev->dev,
-			"Failed to query the increment of GPU_ITER_ACTIVE counter: err=%d",
+			"Failed to query the increment of GPU_UTIL counter: err=%d",
 			err);
 	} else {
 		u64 diff_ns;
@@ -250,13 +252,13 @@ static bool kbase_pm_get_dvfs_utilisation_calc(struct kbase_device *kbdev)
 		diff_ns = (u64)diff_ns_signed;
 
 #if !IS_ENABLED(CONFIG_MALI_NO_MALI)
-		/* The GPU_ITER_ACTIVE counter shouldn't clock-up more time than has
+		/* The GPU_UTIL counter shouldn't clock-up more time than has
 		 * actually elapsed - but still some margin needs to be given
 		 * when doing the comparison. There could be some drift between
 		 * the CPU and GPU clock.
 		 *
 		 * Can do the check only in a real driver build, as an arbitrary
-		 * value for GPU_ITER_ACTIVE can be fed into dummy model in no_mali
+		 * value for GPU_UTIL can be fed into dummy model in no_mali
 		 * configuration which may not correspond to the real elapsed
 		 * time.
 		 */

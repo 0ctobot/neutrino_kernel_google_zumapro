@@ -64,7 +64,6 @@ config MALI_NO_MALI
 	  All calls to the simulated hardware will complete immediately as if the hardware
 	  completed the task.
 
-
 endchoice
 
 
@@ -205,45 +204,6 @@ config LARGE_PAGE_SUPPORT
 	  This depends on GPU support.
 
 	  If in doubt, say Y.
-
-choice
-	prompt "Error injection level"
-	depends on MALI_MIDGARD && MALI_EXPERT
-	default MALI_ERROR_INJECT_NONE
-	help
-	  Enables insertion of errors to test module failure and recovery mechanisms.
-
-config MALI_ERROR_INJECT_NONE
-	bool "disabled"
-	depends on MALI_MIDGARD && MALI_EXPERT
-	help
-	  Error injection is disabled.
-
-config MALI_ERROR_INJECT_TRACK_LIST
-	bool "error track list"
-	depends on MALI_MIDGARD && MALI_EXPERT && NO_MALI
-	help
-	  Errors to inject are pre-configured by the user.
-
-config MALI_ERROR_INJECT_RANDOM
-	bool "random error injection"
-	depends on MALI_MIDGARD && MALI_EXPERT && NO_MALI
-	help
-	  Injected errors are random, rather than user-driven.
-
-endchoice
-
-config MALI_ERROR_INJECT_ON
-	string
-	depends on MALI_MIDGARD && MALI_EXPERT
-	default "0" if MALI_ERROR_INJECT_NONE
-	default "1" if MALI_ERROR_INJECT_TRACK_LIST
-	default "2" if MALI_ERROR_INJECT_RANDOM
-
-config MALI_ERROR_INJECT
-	bool
-	depends on MALI_MIDGARD && MALI_EXPERT
-	default y if !MALI_ERROR_INJECT_NONE
 
 config MALI_DEBUG
 	bool "Enable debug build"

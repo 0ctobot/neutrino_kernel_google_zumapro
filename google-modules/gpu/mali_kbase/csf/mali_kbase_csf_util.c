@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: GPL-2.0 WITH Linux-syscall-note
 /*
  *
- * (C) COPYRIGHT 2023 ARM Limited. All rights reserved.
+ * (C) COPYRIGHT 2023-2024 ARM Limited. All rights reserved.
  *
  * This program is free software and is provided to you under the terms of the
  * GNU General Public License version 2 as published by the Free Software
@@ -27,7 +27,8 @@
 #include <linux/version_compat_defs.h>
 #include <linux/vmalloc.h>
 
-#define KBASEP_PRINTER_BUFFER_MAX_SIZE (2 * PAGE_SIZE)
+/* PIXEL: Cross-process dependencies on Android generate larger output */
+#define KBASEP_PRINTER_BUFFER_MAX_SIZE (64 * PAGE_SIZE)
 
 #define KBASEP_PRINT_FORMAT_BUFFER_MAX_SIZE 256
 
@@ -115,7 +116,7 @@ struct kbasep_printer *kbasep_printer_buffer_init(struct kbase_device *kbdev,
 
 	if (kbpr) {
 		if (kfifo_alloc(&kbpr->fifo, KBASEP_PRINTER_BUFFER_MAX_SIZE, GFP_KERNEL)) {
-			kfree(kbpr);
+			vfree(kbpr);
 			return NULL;
 		}
 		kbpr->kbdev = kbdev;
@@ -224,7 +225,7 @@ __attribute__((format(__printf__, 2, 3))) void kbasep_print(struct kbasep_printe
 	va_list arglist;
 
 	va_start(arglist, fmt);
-	len = vsnprintf(buffer, KBASEP_PRINT_FORMAT_BUFFER_MAX_SIZE, fmt, arglist);
+	len = vscnprintf(buffer, KBASEP_PRINT_FORMAT_BUFFER_MAX_SIZE, fmt, arglist);
 	if (len <= 0) {
 		pr_err("message write to the buffer failed");
 		goto exit;

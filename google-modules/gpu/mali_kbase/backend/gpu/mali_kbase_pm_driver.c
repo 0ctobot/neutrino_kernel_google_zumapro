@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: GPL-2.0 WITH Linux-syscall-note
 /*
  *
- * (C) COPYRIGHT 2010-2023 ARM Limited. All rights reserved.
+ * (C) COPYRIGHT 2010-2024 ARM Limited. All rights reserved.
  *
  * This program is free software and is provided to you under the terms of the
  * GNU General Public License version 2 as published by the Free Software
@@ -74,6 +74,19 @@ MODULE_PARM_DESC(corestack_driver_control,
 KBASE_EXPORT_TEST_API(corestack_driver_control);
 
 /**
+ * enum kbase_gpu_state - The state of data in the GPU.
+ *
+ * @GPU_STATE_INTACT: The GPU state is intact
+ * @GPU_STATE_LOST: The GPU state is lost
+ * @GPU_STATE_IN_RESET: The GPU is in reset state
+ *
+ * This enumeration is private to the file. It is used as
+ * the return values of platform specific PM
+ * callback (*power_on_callback).
+ */
+enum kbase_gpu_state { GPU_STATE_INTACT = 0, GPU_STATE_LOST, GPU_STATE_IN_RESET };
+
+/**
  * enum kbasep_pm_action - Actions that can be performed on a core.
  *
  * @ACTION_PRESENT: The cores that are present
@@ -113,7 +126,15 @@ bool kbase_pm_is_mcu_desired(struct kbase_device *kbdev)
 	if (kbdev->pm.backend.l2_force_off_after_mcu_halt)
 		return false;
 
-	if (kbdev->csf.scheduler.pm_active_count && kbdev->pm.backend.mcu_desired)
+	/* Check if policy changing transition needs MCU to be off. */
+	if (unlikely(kbdev->pm.backend.policy_change_clamp_state_to_off))
+		return false;
+
+	if (kbdev->pm.backend.mcu_desired)
+		return true;
+
+	/* For always_on policy, the MCU needs to be kept on */
+	if (kbase_pm_no_mcu_core_pwroff(kbdev))
 		return true;
 
 #ifdef KBASE_PM_RUNTIME
@@ -122,13 +143,7 @@ bool kbase_pm_is_mcu_desired(struct kbase_device *kbdev)
 		return true;
 #endif
 
-	/* MCU is supposed to be ON, only when scheduler.pm_active_count is
-	 * non zero. But for always_on policy, the MCU needs to be kept on,
-	 * unless policy changing transition needs it off.
-	 */
-
-	return (kbdev->pm.backend.mcu_desired && kbase_pm_no_mcu_core_pwroff(kbdev) &&
-		!kbdev->pm.backend.policy_change_clamp_state_to_off);
+	return false;
 }
 #endif
 
@@ -982,8 +997,8 @@ static int kbase_pm_mcu_update_state(struct kbase_device *kbdev)
 				kbase_hwcnt_backend_csf_set_hw_availability(
 					&kbdev->hwcnt_gpu_iface,
 					kbdev->gpu_props.curr_config.l2_slices,
-					kbdev->gpu_props.curr_config.shader_present &
-						kbdev->pm.debug_core_mask);
+					kbdev->gpu_props.curr_config.shader_present,
+					kbdev->pm.debug_core_mask);
 				kbase_hwcnt_context_enable(kbdev->hwcnt_gpu_ctx);
 				kbase_csf_scheduler_spin_unlock(kbdev, flags);
 				backend->hwcnt_disabled = false;
@@ -1395,6 +1410,8 @@ static void wait_as_active_int(struct kbase_device *kbdev)
 
 static bool can_power_down_l2(struct kbase_device *kbdev)
 {
+	lockdep_assert_held(&kbdev->hwaccess_lock);
+
 	/* Defer the power-down if MMU is in process of page migration. */
 	return !kbdev->mmu_page_migrate_in_progress;
 }
@@ -2966,7 +2983,7 @@ static void update_user_reg_page_mapping(struct kbase_device *kbdev)
 void kbase_pm_clock_on(struct kbase_device *kbdev, bool is_resume)
 {
 	struct kbase_pm_backend_data *backend = &kbdev->pm.backend;
-	bool reset_required = is_resume;
+	int ret = is_resume;
 	unsigned long flags;
 
 	ATRACE_BEGIN(__func__);
@@ -3009,7 +3026,7 @@ void kbase_pm_clock_on(struct kbase_device *kbdev, bool is_resume)
 		ATRACE_END();
 		return;
 	} else if (backend->callback_power_on) {
-		reset_required = backend->callback_power_on(kbdev);
+		ret = backend->callback_power_on(kbdev);
 	}
 
 	spin_lock_irqsave(&kbdev->hwaccess_lock, flags);
@@ -3022,7 +3039,12 @@ void kbase_pm_clock_on(struct kbase_device *kbdev, bool is_resume)
 #endif
 
 
-	if (reset_required) {
+	if (ret == GPU_STATE_IN_RESET) {
+		/* GPU is already in reset state after power on and no
+		 * soft-reset needed. Just reconfiguration is needed.
+		 */
+		kbase_pm_init_hw(kbdev, PM_ENABLE_IRQS | PM_NO_RESET);
+	} else if (ret == GPU_STATE_LOST) {
 		/* GPU state was lost, reset GPU to ensure it is in a
 		 * consistent state
 		 */
@@ -3071,7 +3093,7 @@ void kbase_pm_clock_on(struct kbase_device *kbdev, bool is_resume)
 	backend->l2_desired = true;
 #if MALI_USE_CSF
 	{
-		if (reset_required) {
+		if (ret != GPU_STATE_INTACT) {
 			/* GPU reset was done after the power on, so send the post
 			 * reset event instead. This is okay as GPU power off event
 			 * is same as pre GPU reset event.
@@ -3314,6 +3336,7 @@ static int kbase_set_tiler_quirks(struct kbase_device *kbdev)
 	return 0;
 }
 
+
 static int kbase_pm_hw_issues_detect(struct kbase_device *kbdev)
 {
 	struct device_node *np = kbdev->dev->of_node;
@@ -3366,6 +3389,7 @@ static int kbase_pm_hw_issues_detect(struct kbase_device *kbdev)
 		error = kbase_set_mmu_quirks(kbdev);
 	}
 
+
 	return error;
 }
 
@@ -3385,6 +3409,7 @@ static void kbase_pm_hw_issues_apply(struct kbase_device *kbdev)
 #else
 	kbase_reg_write32(kbdev, GPU_CONTROL_ENUM(JM_CONFIG), kbdev->hw_quirks_gpu);
 #endif
+
 }
 
 void kbase_pm_cache_snoop_enable(struct kbase_device *kbdev)
@@ -3479,6 +3504,25 @@ static int kbase_pm_hw_reset(struct kbase_device *kbdev)
 	return 0;
 }
 
+static int kbase_pm_do_reset_soft(struct kbase_device *kbdev)
+{
+	int ret;
+
+	if (kbdev->pm.backend.callback_soft_reset) {
+		ret = kbdev->pm.backend.callback_soft_reset(kbdev);
+		if (ret < 0)
+			return ret;
+		else if (ret > 0)
+			return 0;
+	} else {
+		{
+			kbase_reg_write32(kbdev, GPU_CONTROL_ENUM(GPU_COMMAND),
+					  GPU_COMMAND_SOFT_RESET);
+		}
+	}
+	return 0;
+}
+
 static int kbase_pm_do_reset(struct kbase_device *kbdev)
 {
 	struct kbasep_reset_timeout_data rtdata;
@@ -3497,24 +3541,17 @@ static int kbase_pm_do_reset(struct kbase_device *kbdev)
 
 	KBASE_TLSTREAM_JD_GPU_SOFT_RESET(kbdev, kbdev);
 
-	reg_offset = GPU_CONTROL_ENUM(GPU_IRQ_MASK);
-	reg_val = RESET_COMPLETED;
+	{
+		/* b/290409680 - unmask irq before the soft reset */
+		reg_offset = GPU_CONTROL_ENUM(GPU_IRQ_MASK);
+		reg_val = RESET_COMPLETED;
 
-	/* Unmask the reset complete interrupt only */
-	kbase_reg_write32(kbdev, reg_offset, reg_val);
+		/* Unmask the reset complete interrupt only */
+		kbase_reg_write32(kbdev, reg_offset, reg_val);
 
-
-	if (kbdev->pm.backend.callback_soft_reset) {
-		ret = kbdev->pm.backend.callback_soft_reset(kbdev);
-		if (ret < 0)
+		ret = kbase_pm_do_reset_soft(kbdev);
+		if (ret)
 			return ret;
-		else if (ret > 0)
-			return 0;
-	} else {
-		{
-			kbase_reg_write32(kbdev, GPU_CONTROL_ENUM(GPU_COMMAND),
-					  GPU_COMMAND_SOFT_RESET);
-		}
 	}
 
 	/* Initialize a structure for tracking the status of the reset */
@@ -3566,7 +3603,7 @@ static int kbase_pm_do_reset(struct kbase_device *kbdev)
 	 */
 #ifdef CONFIG_MALI_ARBITER_SUPPORT
 	if (!kbdev->arb.arb_if) {
-#endif /* CONFIG_MALI_ARBITER_SUPPORT */
+#endif
 		dev_err(kbdev->dev,
 			"Failed to soft-reset GPU (timed out after %d ms), now attempting a hard reset\n",
 			RESET_TIMEOUT);
@@ -3602,7 +3639,7 @@ static int kbase_pm_do_reset(struct kbase_device *kbdev)
 		return kbase_pm_hw_reset(kbdev);
 #ifdef CONFIG_MALI_ARBITER_SUPPORT
 	}
-#endif /* CONFIG_MALI_ARBITER_SUPPORT */
+#endif
 
 	return -EINVAL;
 }
@@ -3653,9 +3690,7 @@ int kbase_pm_init_hw(struct kbase_device *kbdev, unsigned int flags)
 	spin_unlock_irqrestore(&kbdev->hwaccess_lock, irq_flags);
 
 	/* Soft reset the GPU */
-#ifdef CONFIG_MALI_ARBITER_SUPPORT
 	if (!(flags & PM_NO_RESET))
-#endif /* CONFIG_MALI_ARBITER_SUPPORT */
 		err = kbdev->protected_ops->protected_mode_disable(kbdev->protected_dev);
 
 	spin_lock_irqsave(&kbdev->hwaccess_lock, irq_flags);
@@ -3676,7 +3711,6 @@ int kbase_pm_init_hw(struct kbase_device *kbdev, unsigned int flags)
 	if (err)
 		goto exit;
 
-
 	if (flags & PM_HW_ISSUES_DETECT) {
 		err = kbase_pm_hw_issues_detect(kbdev);
 		if (err)
@@ -3686,6 +3720,9 @@ int kbase_pm_init_hw(struct kbase_device *kbdev, unsigned int flags)
 	kbase_pm_hw_issues_apply(kbdev);
 	kbase_cache_set_coherency_mode(kbdev, kbdev->system_coherency);
 	kbase_amba_set_shareable_cache_support(kbdev);
+#if MALI_USE_CSF
+	kbase_backend_update_gpu_timestamp_offset(kbdev);
+#endif
 
 	/* Sanity check protected mode was left after reset */
 	WARN_ON(kbase_reg_read32(kbdev, GPU_CONTROL_ENUM(GPU_STATUS)) &

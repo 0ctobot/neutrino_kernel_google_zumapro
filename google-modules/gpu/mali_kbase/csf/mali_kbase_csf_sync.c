@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: GPL-2.0 WITH Linux-syscall-note
 /*
  *
- * (C) COPYRIGHT 2023 ARM Limited. All rights reserved.
+ * (C) COPYRIGHT 2023-2024 ARM Limited. All rights reserved.
  *
  * This program is free software and is provided to you under the terms of the
  * GNU General Public License version 2 as published by the Free Software
@@ -117,13 +117,13 @@ static void kbasep_csf_sync_print_kcpu_fence_wait_or_signal(char *buffer, int *l
 	timeline_name = fence->ops->get_timeline_name(fence);
 	is_signaled = info.status > 0;
 
-	*length += snprintf(buffer + *length, CSF_SYNC_DUMP_SIZE - *length,
-			    "cmd:%s obj:0x%pK live_value:0x%.8x | ", cmd_name, fence, is_signaled);
+	*length += scnprintf(buffer + *length, CSF_SYNC_DUMP_SIZE - *length,
+			     "cmd:%s obj:0x%pK live_value:0x%.8x | ", cmd_name, fence, is_signaled);
 
 	/* Note: fence->seqno was u32 until 5.1 kernel, then u64 */
-	*length += snprintf(buffer + *length, CSF_SYNC_DUMP_SIZE - *length,
-			    "timeline_name:%s timeline_context:0x%.16llx fence_seqno:0x%.16llx",
-			    timeline_name, fence->context, (u64)fence->seqno);
+	*length += scnprintf(buffer + *length, CSF_SYNC_DUMP_SIZE - *length,
+			     "timeline_name:%s timeline_context:0x%.16llx fence_seqno:0x%.16llx",
+			     timeline_name, fence->context, (u64)fence->seqno);
 
 	kbase_fence_put(fence);
 }
@@ -149,19 +149,19 @@ static void kbasep_csf_sync_print_kcpu_cqs_wait(struct kbase_context *kctx, char
 		int ret = kbasep_csf_sync_get_cqs_live_u32(kctx, cqs_obj->addr, &live_val);
 		bool live_val_valid = (ret >= 0);
 
-		*length +=
-			snprintf(buffer + *length, CSF_SYNC_DUMP_SIZE - *length,
-				 "cmd:CQS_WAIT_OPERATION obj:0x%.16llx live_value:", cqs_obj->addr);
+		*length += scnprintf(
+			buffer + *length, CSF_SYNC_DUMP_SIZE - *length,
+			"cmd:CQS_WAIT_OPERATION obj:0x%.16llx live_value:", cqs_obj->addr);
 
 		if (live_val_valid)
-			*length += snprintf(buffer + *length, CSF_SYNC_DUMP_SIZE - *length,
-					    "0x%.16llx", (u64)live_val);
+			*length += scnprintf(buffer + *length, CSF_SYNC_DUMP_SIZE - *length,
+					     "0x%.16llx", (u64)live_val);
 		else
-			*length += snprintf(buffer + *length, CSF_SYNC_DUMP_SIZE - *length,
-					    CQS_UNREADABLE_LIVE_VALUE);
+			*length += scnprintf(buffer + *length, CSF_SYNC_DUMP_SIZE - *length,
+					     CQS_UNREADABLE_LIVE_VALUE);
 
-		*length += snprintf(buffer + *length, CSF_SYNC_DUMP_SIZE - *length,
-				    " | op:gt arg_value:0x%.8x", cqs_obj->val);
+		*length += scnprintf(buffer + *length, CSF_SYNC_DUMP_SIZE - *length,
+				     " | op:gt arg_value:0x%.8x", cqs_obj->val);
 	}
 }
 
@@ -187,18 +187,18 @@ static void kbasep_csf_sync_print_kcpu_cqs_set(struct kbase_context *kctx, char 
 		bool live_val_valid = (ret >= 0);
 
 		*length +=
-			snprintf(buffer + *length, CSF_SYNC_DUMP_SIZE - *length,
-				 "cmd:CQS_SET_OPERATION obj:0x%.16llx live_value:", cqs_obj->addr);
+			scnprintf(buffer + *length, CSF_SYNC_DUMP_SIZE - *length,
+				  "cmd:CQS_SET_OPERATION obj:0x%.16llx live_value:", cqs_obj->addr);
 
 		if (live_val_valid)
-			*length += snprintf(buffer + *length, CSF_SYNC_DUMP_SIZE - *length,
-					    "0x%.16llx", (u64)live_val);
+			*length += scnprintf(buffer + *length, CSF_SYNC_DUMP_SIZE - *length,
+					     "0x%.16llx", (u64)live_val);
 		else
-			*length += snprintf(buffer + *length, CSF_SYNC_DUMP_SIZE - *length,
-					    CQS_UNREADABLE_LIVE_VALUE);
+			*length += scnprintf(buffer + *length, CSF_SYNC_DUMP_SIZE - *length,
+					     CQS_UNREADABLE_LIVE_VALUE);
 
-		*length += snprintf(buffer + *length, CSF_SYNC_DUMP_SIZE - *length,
-				    " | op:add arg_value:0x%.8x", 1);
+		*length += scnprintf(buffer + *length, CSF_SYNC_DUMP_SIZE - *length,
+				     " | op:add arg_value:0x%.8x", 1);
 	}
 }
 
@@ -277,19 +277,19 @@ static void kbasep_csf_sync_print_kcpu_cqs_wait_op(struct kbase_context *kctx, c
 
 		bool live_val_valid = (ret >= 0);
 
-		*length +=
-			snprintf(buffer + *length, CSF_SYNC_DUMP_SIZE - *length,
-				 "cmd:CQS_WAIT_OPERATION obj:0x%.16llx live_value:", wait_op->addr);
+		*length += scnprintf(
+			buffer + *length, CSF_SYNC_DUMP_SIZE - *length,
+			"cmd:CQS_WAIT_OPERATION obj:0x%.16llx live_value:", wait_op->addr);
 
 		if (live_val_valid)
-			*length += snprintf(buffer + *length, CSF_SYNC_DUMP_SIZE - *length,
-					    "0x%.16llx", live_val);
+			*length += scnprintf(buffer + *length, CSF_SYNC_DUMP_SIZE - *length,
+					     "0x%.16llx", live_val);
 		else
-			*length += snprintf(buffer + *length, CSF_SYNC_DUMP_SIZE - *length,
-					    CQS_UNREADABLE_LIVE_VALUE);
+			*length += scnprintf(buffer + *length, CSF_SYNC_DUMP_SIZE - *length,
+					     CQS_UNREADABLE_LIVE_VALUE);
 
-		*length += snprintf(buffer + *length, CSF_SYNC_DUMP_SIZE - *length,
-				    " | op:%s arg_value:0x%.16llx", op_name, wait_op->val);
+		*length += scnprintf(buffer + *length, CSF_SYNC_DUMP_SIZE - *length,
+				     " | op:%s arg_value:0x%.16llx", op_name, wait_op->val);
 	}
 }
 
@@ -319,18 +319,18 @@ static void kbasep_csf_sync_print_kcpu_cqs_set_op(struct kbase_context *kctx, ch
 		bool live_val_valid = (ret >= 0);
 
 		*length +=
-			snprintf(buffer + *length, CSF_SYNC_DUMP_SIZE - *length,
-				 "cmd:CQS_SET_OPERATION obj:0x%.16llx live_value:", set_op->addr);
+			scnprintf(buffer + *length, CSF_SYNC_DUMP_SIZE - *length,
+				  "cmd:CQS_SET_OPERATION obj:0x%.16llx live_value:", set_op->addr);
 
 		if (live_val_valid)
-			*length += snprintf(buffer + *length, CSF_SYNC_DUMP_SIZE - *length,
-					    "0x%.16llx", live_val);
+			*length += scnprintf(buffer + *length, CSF_SYNC_DUMP_SIZE - *length,
+					     "0x%.16llx", live_val);
 		else
-			*length += snprintf(buffer + *length, CSF_SYNC_DUMP_SIZE - *length,
-					    CQS_UNREADABLE_LIVE_VALUE);
+			*length += scnprintf(buffer + *length, CSF_SYNC_DUMP_SIZE - *length,
+					     CQS_UNREADABLE_LIVE_VALUE);
 
-		*length += snprintf(buffer + *length, CSF_SYNC_DUMP_SIZE - *length,
-				    " | op:%s arg_value:0x%.16llx", op_name, set_op->val);
+		*length += scnprintf(buffer + *length, CSF_SYNC_DUMP_SIZE - *length,
+				     " | op:%s arg_value:0x%.16llx", op_name, set_op->val);
 	}
 }
 
@@ -360,8 +360,8 @@ static void kbasep_csf_sync_kcpu_print_queue(struct kbase_context *kctx,
 		int length = 0;
 
 		started_or_pending = ((i == 0) && queue->command_started) ? 'S' : 'P';
-		length += snprintf(buffer, CSF_SYNC_DUMP_SIZE, "queue:KCPU-%d-%d exec:%c ",
-				   kctx->id, queue->id, started_or_pending);
+		length += scnprintf(buffer, CSF_SYNC_DUMP_SIZE, "queue:KCPU-%d-%d exec:%c ",
+				    kctx->id, queue->id, started_or_pending);
 
 		cmd = &queue->commands[(u8)(queue->start_offset + i)];
 		switch (cmd->type) {
@@ -388,12 +388,12 @@ static void kbasep_csf_sync_kcpu_print_queue(struct kbase_context *kctx,
 			kbasep_csf_sync_print_kcpu_cqs_set_op(kctx, buffer, &length, cmd);
 			break;
 		default:
-			length += snprintf(buffer + length, CSF_SYNC_DUMP_SIZE - length,
-					   ", U, Unknown blocking command");
+			length += scnprintf(buffer + length, CSF_SYNC_DUMP_SIZE - length,
+					    ", U, Unknown blocking command");
 			break;
 		}
 
-		length += snprintf(buffer + length, CSF_SYNC_DUMP_SIZE - length, "\n");
+		length += scnprintf(buffer + length, CSF_SYNC_DUMP_SIZE - length, "\n");
 		kbasep_print(kbpr, buffer);
 	}
 
@@ -409,7 +409,7 @@ int kbasep_csf_sync_kcpu_dump_print(struct kbase_context *kctx, struct kbasep_pr
 	kbasep_print(kbpr, "CSF KCPU queues sync info (version: v" __stringify(
 				   MALI_CSF_SYNC_DUMP_VERSION) "):\n");
 
-	kbasep_print(kbpr, "KCPU queues for ctx %d:\n", kctx->id);
+	kbasep_print(kbpr, "KCPU queues for ctx %d_%d (%s):\n", kctx->tgid, kctx->id, kctx->comm);
 
 	queue_idx = find_first_bit(kctx->csf.kcpu_queues.in_use, KBASEP_MAX_KCPU_QUEUES);
 
@@ -798,8 +798,8 @@ static void kbasep_csf_dump_active_group_sync_state(struct kbase_context *kctx,
 {
 	unsigned int i;
 
-	kbasep_print(kbpr, "GPU queues for group %u (slot %d) of ctx %d_%d\n", group->handle,
-		     group->csg_nr, kctx->tgid, kctx->id);
+	kbasep_print(kbpr, "GPU queues for group %u (slot %d) of ctx %d_%d (%s)\n", group->handle,
+		     group->csg_nr, kctx->tgid, kctx->id, kctx->comm);
 
 	for (i = 0; i < MAX_SUPPORTED_STREAMS_PER_GROUP; i++)
 		kbasep_csf_dump_active_queue_sync_info(kbpr, group->bound_queues[i]);
@@ -814,21 +814,26 @@ int kbasep_csf_sync_gpu_dump_print(struct kbase_context *kctx, struct kbasep_pri
 		return -EINVAL;
 
 	kbdev = kctx->kbdev;
+
+	/* PIXEL: Dump *all* CSGs belonging to kctx, not just those currently resident */
+	rt_mutex_lock(&kctx->csf.lock);
 	kbase_csf_scheduler_lock(kbdev);
 	kbase_csf_csg_update_status(kbdev);
 
 	kbasep_print(kbpr, "CSF GPU queues sync info (version: v" __stringify(
 				   MALI_CSF_SYNC_DUMP_VERSION) "):\n");
 
-	for (gr = 0; gr < kbdev->csf.global_iface.group_num; gr++) {
-		struct kbase_queue_group *const group =
-			kbdev->csf.scheduler.csg_slots[gr].resident_group;
-		if (!group || group->kctx != kctx)
+	for (gr = 0; gr < MAX_QUEUE_GROUP_NUM; gr++) {
+		struct kbase_queue_group *const group = kctx->csf.queue_groups[gr];
+
+		if (!group)
 			continue;
+
 		kbasep_csf_dump_active_group_sync_state(kctx, kbpr, group);
 	}
 
 	kbase_csf_scheduler_unlock(kbdev);
+	rt_mutex_unlock(&kctx->csf.lock);
 
 	return 0;
 }

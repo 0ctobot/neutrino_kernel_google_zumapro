@@ -72,7 +72,7 @@ endif
 CONFIG_MALI_PLATFORM_NAME="pixel"
 
 # Driver version string which is returned to userspace via an ioctl
-MALI_RELEASE_NAME ?= '"r47p0-01eac0"'
+MALI_RELEASE_NAME ?= '"r49p0-00eac0"'
 # Set up defaults if not defined by build system
 ifeq ($(CONFIG_MALI_DEBUG), y)
     MALI_UNIT_TEST = 1

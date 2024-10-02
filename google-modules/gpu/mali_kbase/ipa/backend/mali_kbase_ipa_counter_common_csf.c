@@ -24,7 +24,7 @@
 
 #define DEFAULT_SCALING_FACTOR 5
 
-/* If the value of GPU_ITER_ACTIVE is below this, use the simple model
+/* If the value of GPU_UTIL counter is below this, use the simple model
  * instead, to avoid extrapolating small amounts of counter data across
  * large sample periods.
  */
@@ -89,13 +89,13 @@ static int kbase_ipa_attach_ipa_control(struct kbase_ipa_counter_model_data *mod
 	int err;
 	size_t i;
 
-	/* Value for GPU_ITER_ACTIVE counter also needs to be
-         * queried. It is required for the normalization of top-level and shader
-         * core counters.
-         *
-         * The MCU_ACTIVE counter is used alongside GPU_ITER_ACTIVE in this
-         * function and all modifications pertaining to it are applicable for
-         * MCU_ACTIVE as well.
+	/* Value for GPU_UTIL counter also needs to be queried.
+	 * It is required for the normalization of top-level and shader
+	 * core counters.
+	 *
+	 * The MCU_ACTIVE counter is used alongside GPU_UTIL counter in this
+	 * function and all modifications pertaining to it are applicable for
+	 * MCU_ACTIVE as well.
 	 */
 	model_data->num_counters = IPA_NUM_PERF_COUNTERS +
 				   model_data->num_top_level_cntrs +
@@ -108,12 +108,12 @@ static int kbase_ipa_attach_ipa_control(struct kbase_ipa_counter_model_data *mod
 		return -ENOMEM;
 	}
 
-	/* Fill in the description for GPU_ITER_ACTIVE counter which is always
+	/* Fill in the description for GPU_UTIL counter which is always
 	 * needed, as mentioned above, regardless of the energy model used
 	 * by the CSF GPUs.
 	 */
 	perf_counters[cnt_idx].type = KBASE_IPA_CORE_TYPE_CSHW;
-	perf_counters[cnt_idx].idx = IPA_GPU_ITER_ACTIVE_CNT_IDX;
+	perf_counters[cnt_idx].idx = IPA_GPU_UTIL_CNT_IDX;
 	perf_counters[cnt_idx].gpu_norm = false;
 	perf_counters[cnt_idx].scaling_factor = 1;
 	cnt_idx++;
@@ -301,7 +301,7 @@ int kbase_ipa_counter_dynamic_coeff(struct kbase_ipa_model *model, u32 *coeffp)
 	 * 0 <= active_cycles < 2^31
 	 */
 	if (*cnt_values_p > U32_MAX) {
-		dev_warn(kbdev->dev, "Increment in GPU_ITER_ACTIVE counter more than expected");
+		dev_warn(kbdev->dev, "Increment in GPU_UTIL counter more than expected");
 		return -ERANGE;
 	}
 

@@ -353,7 +353,7 @@ static void get_and_init_fw_core_dump(struct kbase_device *kbdev, struct sscd_se
 	}
 
 	seg->size = sizeof(struct pixel_fw_core_dump) + core_dump_size;
-	seg->addr = kzalloc(seg->size, GFP_KERNEL);
+	seg->addr = vzalloc(seg->size);
 
 	if (seg->addr == NULL) {
 		seg->size = 0;
@@ -402,7 +402,7 @@ static void get_and_init_fw_core_dump(struct kbase_device *kbdev, struct sscd_se
 	if (unlikely(size != core_dump_size))
 	{
 		dev_err(kbdev->dev, "firmware core dump size and buffer size are different");
-		kfree(seg->addr);
+		vfree(seg->addr);
 		seg->addr = NULL;
 		seg->size = 0;
 	}
@@ -478,7 +478,7 @@ static void segments_term(struct kbase_device *kbdev, struct sscd_segment* segme
 	kfree(segments[PM_EVENT_LOG].addr);
 	kfree(segments[KTRACE].addr);
 	kfree(segments[CONTEXTS].addr);
-	kfree(segments[FW_CORE_DUMP].addr);
+	vfree(segments[FW_CORE_DUMP].addr);
 	/* Null out the pointers */
 	memset(segments, 0, sizeof(struct sscd_segment) * NUM_SEGMENTS);
 }

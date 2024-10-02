@@ -240,15 +240,25 @@ struct kbase_kcpu_command {
  * @kctx:			The context to which this command queue belongs.
  * @commands:			Array of commands which have been successfully
  *				enqueued to this command queue.
- * @csf_kcpu_worker:		Dedicated worker for processing kernel CPU command
- *				queues.
  * @work:			struct kthread_work which contains a pointer to
  *				the function which handles processing of kcpu
  *				commands enqueued into a kcpu command queue;
  *				part of kernel API for processing workqueues
+ *				This would be used if the context is not
+ *				prioritised, otherwise it would be handled by
+ *				kbase_csf_scheduler_kthread().
  * @timeout_work:		struct kthread_work which contains a pointer to the
  *				function which handles post-timeout actions
  *				queue when a fence signal timeout occurs.
+ * @high_prio_work:		A counterpart to @work, this queue would be
+ *				added to a list to be processed by
+ *				kbase_csf_scheduler_kthread() if it is
+ *				prioritised.
+ * @pending_kick:		Indicates that kbase_csf_scheduler_kthread()
+ *				should re-evaluate pending commands for this
+ *				queue. This would be set to false when the work
+ *				is done. This is used mainly for
+ *				synchronisation with queue termination.
  * @start_offset:		Index of the command to be executed next
  * @id:				KCPU command queue ID.
  * @num_pending_cmds:		The number of commands enqueued but not yet
@@ -288,9 +298,10 @@ struct kbase_kcpu_command_queue {
 	struct mutex lock;
 	struct kbase_context *kctx;
 	struct kbase_kcpu_command commands[KBASEP_KCPU_QUEUE_SIZE];
-	struct kthread_worker csf_kcpu_worker;
 	struct kthread_work work;
 	struct kthread_work timeout_work;
+	struct list_head high_prio_work;
+	atomic_t pending_kick;
 	u8 start_offset;
 	u8 id;
 	u16 num_pending_cmds;
@@ -302,9 +313,7 @@ struct kbase_kcpu_command_queue {
 	bool command_started;
 	struct list_head jit_blocked;
 	bool has_error;
-#ifdef CONFIG_MALI_FENCE_DEBUG
 	struct timer_list fence_timeout;
-#endif /* CONFIG_MALI_FENCE_DEBUG */
 #if IS_ENABLED(CONFIG_SYNC_FILE)
 	struct kbase_kcpu_dma_fence_meta *metadata;
 #endif /* CONFIG_SYNC_FILE */
@@ -336,6 +345,18 @@ int kbase_csf_kcpu_queue_new(struct kbase_context *kctx, struct kbase_ioctl_kcpu
  */
 int kbase_csf_kcpu_queue_delete(struct kbase_context *kctx,
 				struct kbase_ioctl_kcpu_queue_delete *del);
+
+/**
+ * kbase_csf_kcpu_queue_process - Proces pending KCPU queue commands
+ *
+ * @queue:		The queue to process pending commands for
+ * @drain_queue:	Whether to skip all blocking commands in the queue.
+ *			This is expected to be set to true on queue
+ *			termination.
+ *
+ * Return: 0 if successful or a negative error code on failure.
+ */
+void kbase_csf_kcpu_queue_process(struct kbase_kcpu_command_queue *queue, bool drain_queue);
 
 /**
  * kbase_csf_kcpu_queue_enqueue - Enqueue a KCPU command into a KCPU command
