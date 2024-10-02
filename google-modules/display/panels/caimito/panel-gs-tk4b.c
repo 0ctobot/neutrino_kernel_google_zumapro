@@ -8,7 +8,6 @@
 #include <linux/thermal.h>
 #include <video/mipi_display.h>
 
-#include "trace/dpu_trace.h"
 #include "trace/panel_trace.h"
 
 #include "gs_panel/drm_panel_funcs_defaults.h"
@@ -642,13 +641,13 @@ static void tk4b_pre_update_ffc(struct gs_panel *ctx)
 
 	dev_dbg(ctx->dev, "%s\n", __func__);
 
-	DPU_ATRACE_BEGIN(__func__);
+	PANEL_ATRACE_BEGIN(__func__);
 
 	/* FFC off */
 	GS_DCS_BUF_ADD_CMD(dev, 0xF0, 0x55, 0xAA, 0x52, 0x08, 0x01);
 	GS_DCS_BUF_ADD_CMD_AND_FLUSH(dev, 0xC3, 0x00);
 
-	DPU_ATRACE_END(__func__);
+	PANEL_ATRACE_END(__func__);
 }
 
 static void tk4b_update_ffc(struct gs_panel *ctx, unsigned int hs_clk_mbps)
@@ -658,7 +657,7 @@ static void tk4b_update_ffc(struct gs_panel *ctx, unsigned int hs_clk_mbps)
 	dev_dbg(ctx->dev, "%s: hs_clk_mbps: current=%d, target=%d\n",
 		__func__, ctx->dsi_hs_clk_mbps, hs_clk_mbps);
 
-	DPU_ATRACE_BEGIN(__func__);
+	PANEL_ATRACE_BEGIN(__func__);
 
 	if (hs_clk_mbps != MIPI_DSI_FREQ_MBPS_DEFAULT &&
 	    hs_clk_mbps != MIPI_DSI_FREQ_MBPS_ALTERNATIVE) {
@@ -691,7 +690,7 @@ static void tk4b_update_ffc(struct gs_panel *ctx, unsigned int hs_clk_mbps)
 	GS_DCS_BUF_ADD_CMD(dev, 0xF0, 0x55, 0xAA, 0x52, 0x08, 0x01);
 	GS_DCS_BUF_ADD_CMD_AND_FLUSH(dev, 0xC3, 0xDD);
 
-	DPU_ATRACE_END(__func__);
+	PANEL_ATRACE_END(__func__);
 }
 
 static int tk4b_set_brightness(struct gs_panel *ctx, u16 br)
@@ -814,17 +813,42 @@ static const struct gs_display_underrun_param underrun_param = {
 #define TO_6BIT_SIGNED(v) ((v) & 0x3F)
 
 static const struct drm_dsc_config tk4b_dsc_cfg = {
+	.line_buf_depth = 9,
+	.bits_per_component = 8,
+	.convert_rgb = true,
+	.slice_count = 2,
+	.slice_width = 540,
+	.slice_height = 24,
+	.simple_422 = false,
+	.pic_width = 1080,
+	.pic_height = 2424,
+	.rc_tgt_offset_high = 3,
+	.rc_tgt_offset_low = 3,
+	.bits_per_pixel = 128,
+	.rc_edge_factor = 6,
+	.rc_quant_incr_limit1 = 11,
+	.rc_quant_incr_limit0 = 11,
+	.initial_xmit_delay = 512,
+	.initial_dec_delay = 549,
+	.block_pred_enable = true,
 	.first_line_bpg_offset = 13,
+	.initial_offset = 6144,
+	.rc_buf_thresh = {
+		14, 28, 42, 56,
+		70, 84, 98, 105,
+		112, 119, 121, 123,
+		125, 126
+	},
 	.rc_range_params = {
-		{0, 0, 0},
-		{0, 0, 0},
-		{0, 0, 0},
-		{0, 0, 0},
-		{0, 0, 0},
-		{0, 0, 0},
-		{0, 0, 0},
-		{0, 0, 0},
-		{0, 0, 0},
+		{0, 4, TO_6BIT_SIGNED(2)},
+		{0, 4, TO_6BIT_SIGNED(0)},
+		{1, 5, TO_6BIT_SIGNED(0)},
+		{1, 6, TO_6BIT_SIGNED(-2)},
+		{3, 7, TO_6BIT_SIGNED(-4)},
+		{3, 7, TO_6BIT_SIGNED(-6)},
+		{3, 7, TO_6BIT_SIGNED(-8)},
+		{3, 8, TO_6BIT_SIGNED(-8)},
+		{3, 9, TO_6BIT_SIGNED(-8)},
 		{4, 10, TO_6BIT_SIGNED(-10)},
 		{5, 10, TO_6BIT_SIGNED(-10)},
 		{5, 11, TO_6BIT_SIGNED(-10)},
@@ -832,11 +856,25 @@ static const struct drm_dsc_config tk4b_dsc_cfg = {
 		{8, 12, TO_6BIT_SIGNED(-12)},
 		{12, 13, TO_6BIT_SIGNED(-12)},
 	},
+	.rc_model_size = 8192,
+	.flatness_min_qp = 3,
+	.flatness_max_qp = 12,
+	.initial_scale_value = 32,
+	.scale_decrement_interval = 7,
+	.scale_increment_interval = 565,
+	.nfl_bpg_offset = 1158,
+	.slice_bpg_offset = 1085,
+	.final_offset = 4336,
+	.vbr_enable = false,
+	.slice_chunk_size = 540,
 	/* Used DSC v1.2 */
 	.dsc_version_major = 1,
 	.dsc_version_minor = 2,
-	.slice_count = 2,
-	.slice_height = 24,
+	.native_422 = false,
+	.native_420 = false,
+	.second_line_bpg_offset = 0,
+	.nsl_bpg_offset = 0,
+	.second_line_offset_adj = 0,
 };
 
 #define TK4B_DSC {\

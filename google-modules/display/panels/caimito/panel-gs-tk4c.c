@@ -6,7 +6,6 @@
 #include <linux/module.h>
 #include <video/mipi_display.h>
 
-#include "trace/dpu_trace.h"
 #include "trace/panel_trace.h"
 
 #include "gs_panel/drm_panel_funcs_defaults.h"
@@ -518,7 +517,7 @@ static void tk4c_pre_update_ffc(struct gs_panel *ctx)
 
 	dev_dbg(ctx->dev, "%s\n", __func__);
 
-	DPU_ATRACE_BEGIN(__func__);
+	PANEL_ATRACE_BEGIN(__func__);
 
 	/* FFC off */
 	GS_DCS_BUF_ADD_CMDLIST(dev, test_key_enable);
@@ -528,7 +527,7 @@ static void tk4c_pre_update_ffc(struct gs_panel *ctx)
 	GS_DCS_BUF_ADD_CMDLIST(dev, test_key_fc_disable);
 	GS_DCS_BUF_ADD_CMDLIST_AND_FLUSH(dev, test_key_disable);
 
-	DPU_ATRACE_END(__func__);
+	PANEL_ATRACE_END(__func__);
 }
 
 static void tk4c_update_ffc(struct gs_panel *ctx, unsigned int hs_clk_mbps)
@@ -538,7 +537,7 @@ static void tk4c_update_ffc(struct gs_panel *ctx, unsigned int hs_clk_mbps)
 	dev_dbg(ctx->dev, "%s: hs_clk_mbps: current=%u, target=%u\n",
 		__func__, ctx->dsi_hs_clk_mbps, hs_clk_mbps);
 
-	DPU_ATRACE_BEGIN(__func__);
+	PANEL_ATRACE_BEGIN(__func__);
 
 	GS_DCS_BUF_ADD_CMDLIST(dev, test_key_enable);
 	GS_DCS_BUF_ADD_CMDLIST(dev, test_key_fc_enable);
@@ -562,7 +561,7 @@ static void tk4c_update_ffc(struct gs_panel *ctx, unsigned int hs_clk_mbps)
 	GS_DCS_BUF_ADD_CMDLIST(dev, test_key_fc_disable);
 	GS_DCS_BUF_ADD_CMDLIST_AND_FLUSH(dev, test_key_disable);
 
-	DPU_ATRACE_END(__func__);
+	PANEL_ATRACE_END(__func__);
 }
 
 static void tk4c_set_ssc_en(struct gs_panel *ctx, bool enabled)
