@@ -199,7 +199,8 @@ static void *cpif_alloc_tmp_page(struct cpif_page_pool *pool, u64 alloc_size)
 						alloc_size);
 				return NULL;
 			}
-			new_pg = __dev_alloc_pages(GFP_ATOMIC | CPIF_GFP_MASK, 0); /* try 4KB */
+			/* try PAGE_SIZE */
+			new_pg = __dev_alloc_pages(GFP_ATOMIC | CPIF_GFP_MASK, 0);
 			if (unlikely(!new_pg)) {
 				mif_err_limited("cannot alloc new page\n");
 				return NULL;
@@ -210,7 +211,7 @@ static void *cpif_alloc_tmp_page(struct cpif_page_pool *pool, u64 alloc_size)
 		if (tmp->page) /* unref, or possibly free the page */
 			__free_pages(tmp->page, get_order(pool->tmp_page_size));
 		tmp->page = new_pg;
-		pool->tmp_page_size = 4096 * (1 << page_order);
+		pool->tmp_page_size = PAGE_SIZE * (1 << page_order);
 		pool->using_tmp_alloc = true;
 		tmp->usable = true;
 		tmp->offset = pool->tmp_page_size - alloc_size;
