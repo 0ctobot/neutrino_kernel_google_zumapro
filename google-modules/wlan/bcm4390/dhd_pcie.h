@@ -1014,10 +1014,10 @@ extern void dhd_bus_doorbell_timeout_reset(struct dhd_bus *bus);
 #define DHD_PCIE_DMA_MASK_FOR_GS101 36
 #endif /* DHD_SET_PCIE_DMA_MASK_FOR_GS101 */
 
-#ifdef CONFIG_ARCH_TEGRA
+#ifdef CONFIG_PCI_TEGRA
 extern int tegra_pcie_pm_suspend(void);
 extern int tegra_pcie_pm_resume(void);
-#endif /* CONFIG_ARCH_TEGRA */
+#endif /* CONFIG_PCI_TEGRA */
 
 extern int dhd_buzzz_dump_dngl(dhd_bus_t *bus);
 extern int dhdpcie_send_mb_data(dhd_bus_t *bus, uint32 h2d_mb_data, const char *context);

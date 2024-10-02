@@ -30,6 +30,11 @@ ifeq ($(KERNEL_SRC),)
   endif
 endif
 
+# undef STB when GG is defined
+ifneq ($(CONFIG_SOC_GOOGLE),)
+  CONFIG_ARCH_BRCMSTB=
+endif
+
 #####################
 # SDIO/PCIe Basic feature
 #####################
