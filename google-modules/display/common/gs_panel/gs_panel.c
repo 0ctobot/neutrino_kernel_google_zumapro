@@ -96,6 +96,8 @@ static int gs_panel_parse_gpios(struct gs_panel *ctx)
 		return PTR_ERR(gpio->reset_gpio);
 	}
 
+	gpio->keep_reset_high = of_property_read_bool(dev->of_node, "keep-reset-high");
+
 	gpio->enable_gpio = devm_gpiod_get_optional(dev, "enable", GPIOD_OUT_LOW);
 	if (gpio->enable_gpio == NULL) {
 		dev_dbg(dev, "no enable gpio found\n");
@@ -184,6 +186,36 @@ static int gs_panel_parse_regulators(struct gs_panel *ctx)
 	if (!PTR_ERR_OR_ZERO(reg)) {
 		dev_dbg(dev, "panel vddr found\n");
 		gs_reg->vddr = reg;
+	}
+
+	ret = of_property_read_u32(dev->of_node, "avdd-microvolt", &gs_reg->avdd_uV);
+	if (ret) {
+		gs_reg->avdd_uV = 0;
+		dev_dbg(dev, "no avdd-microvolt found for panel\n");
+	}
+
+	ret = of_property_read_u32(dev->of_node, "avee-microvolt", &gs_reg->avee_uV);
+	if (ret) {
+		gs_reg->avee_uV = 0;
+		dev_dbg(dev, "no avee-microvolt found for panel\n");
+	}
+
+	reg = devm_regulator_get_optional(dev, "disp_avdd");
+	if (!IS_ERR_OR_NULL(reg)) {
+		dev_dbg(dev, "panel disp_avdd found\n");
+		gs_reg->avdd = reg;
+	} else if (gs_reg->avdd_uV != 0) {
+		dev_err(dev, "found avdd-microvolt but failed to get disp_avdd (%pe)\n", reg);
+		return -EPROBE_DEFER;
+	}
+
+	reg = devm_regulator_get_optional(dev, "disp_avee");
+	if (!IS_ERR_OR_NULL(reg)) {
+		dev_dbg(dev, "panel disp_avee found\n");
+		gs_reg->avee = reg;
+	} else if (gs_reg->avee_uV != 0) {
+		dev_err(dev, "found avee-microvolt but failed to get disp_avee (%pe)\n", reg);
+		return -EPROBE_DEFER;
 	}
 
 	return 0;
@@ -967,7 +999,7 @@ static int gs_bl_find_range(struct gs_panel *ctx, int brightness, u32 *range)
 	return 0;
 }
 
-static int gs_update_status(struct backlight_device *bl)
+static int gs_update_backlight_status(struct backlight_device *bl)
 {
 	struct gs_panel *ctx = bl_get_data(bl);
 	struct device *dev = ctx->dev;
@@ -983,6 +1015,7 @@ static int gs_update_status(struct backlight_device *bl)
 		return -EPERM;
 	}
 
+	PANEL_ATRACE_BEGIN(__func__);
 	/* check if backlight is forced off */
 	if (bl->props.power != FB_BLANK_UNBLANK)
 		brightness = 0;
@@ -1011,12 +1044,13 @@ static int gs_update_status(struct backlight_device *bl)
 	}
 
 	mutex_unlock(&ctx->mode_lock); /*TODO(b/267170999): MODE*/
+	PANEL_ATRACE_END(__func__);
 	return 0;
 }
 
 static const struct backlight_ops gs_backlight_ops = {
 	.get_brightness = gs_get_brightness,
-	.update_status = gs_update_status,
+	.update_status = gs_update_backlight_status,
 };
 
 int gs_panel_update_brightness_desc(struct gs_panel_brightness_desc *desc,
@@ -1055,6 +1089,7 @@ void gs_panel_set_dimming(struct gs_panel *ctx, bool dimming_on)
 	if (!gs_panel_has_func(ctx, set_dimming))
 		return;
 
+	PANEL_ATRACE_INT("panel_dimming_on", dimming_on);
 	mutex_lock(&ctx->mode_lock); /* TODO(b/267170999): MODE */
 	if (dimming_on != ctx->dimming_on) {
 		ctx->desc->gs_panel_func->set_dimming(ctx, dimming_on);
@@ -1124,6 +1159,8 @@ static int _gs_panel_reg_ctrl(struct gs_panel *ctx, const struct panel_reg_ctrl 
 		[PANEL_REG_ID_VDDI] = ctx->regulator.vddi,
 		[PANEL_REG_ID_VDDR_EN] = ctx->regulator.vddr_en,
 		[PANEL_REG_ID_VDDR] = ctx->regulator.vddr,
+		[PANEL_REG_ID_AVDD] = ctx->regulator.avdd,
+		[PANEL_REG_ID_AVEE] = ctx->regulator.avee,
 	};
 	u32 i;
 
@@ -1146,6 +1183,16 @@ static int _gs_panel_reg_ctrl(struct gs_panel *ctx, const struct panel_reg_ctrl 
 			dev_err(ctx->dev, "failed to %s regulator id=%d\n",
 				enable ? "enable" : "disable", id);
 			return ret;
+		}
+
+		if (enable) {
+			u32 avdd_uV = ctx->regulator.avdd_uV;
+			u32 avee_uV = ctx->regulator.avee_uV;
+
+			if (id == PANEL_REG_ID_AVDD)
+				regulator_set_voltage(reg, avdd_uV, avdd_uV);
+			else if (id == PANEL_REG_ID_AVEE)
+				regulator_set_voltage(reg, avee_uV, avee_uV);
 		}
 
 		if (delay_ms)
@@ -1185,7 +1232,7 @@ static int _gs_panel_set_power(struct gs_panel *ctx, bool on)
 		reg_ctrl = get_enable_reg_ctrl_or_default(ctx);
 	} else {
 		gs_panel_pre_power_off(ctx);
-		if (!IS_ERR_OR_NULL(ctx->gpio.reset_gpio))
+		if (!IS_ERR_OR_NULL(ctx->gpio.reset_gpio) && !ctx->gpio.keep_reset_high)
 			gpiod_set_value(ctx->gpio.reset_gpio, 0);
 		if (!IS_ERR_OR_NULL(ctx->gpio.enable_gpio))
 			gpiod_set_value(ctx->gpio.enable_gpio, 0);
@@ -1246,9 +1293,33 @@ static void gs_panel_normal_mode_work(struct work_struct *work)
 			      msecs_to_jiffies(ctx->normal_mode_work_delay_ms));
 }
 
+void gs_panel_update_lhbm_hist_data_helper(struct gs_panel *ctx, struct drm_atomic_state *state,
+					   bool enabled, int d, int r)
+{
+	struct gs_drm_connector *gs_connector = ctx->gs_connector;
+	struct drm_connector_state *new_conn_state;
+	struct gs_drm_connector_state *new_gs_connector_state;
+	struct gs_drm_connector_lhbm_hist_data *hist_data;
+
+	if (!gs_connector) {
+		dev_warn(ctx->dev, "No connector found for panel; cannot update lhbm hist data\n");
+		return;
+	}
+
+	new_conn_state = drm_atomic_get_new_connector_state(state, &gs_connector->base);
+	new_gs_connector_state = to_gs_connector_state(new_conn_state);
+
+	hist_data = &new_gs_connector_state->lhbm_hist_data;
+
+	hist_data->enabled = enabled;
+	hist_data->d = d;
+	hist_data->r = r;
+}
+EXPORT_SYMBOL_GPL(gs_panel_update_lhbm_hist_data_helper);
+
 /* INITIALIZATION */
 
-int gs_panel_first_enable(struct gs_panel *ctx)
+int gs_panel_first_enable_helper(struct gs_panel *ctx)
 {
 	const struct gs_panel_funcs *funcs = ctx->desc->gs_panel_func;
 	struct device *dev = ctx->dev;
@@ -1295,6 +1366,7 @@ int gs_panel_first_enable(struct gs_panel *ctx)
 
 	return ret;
 }
+EXPORT_SYMBOL_GPL(gs_panel_first_enable_helper);
 
 static void gs_panel_post_power_on(struct gs_panel *ctx)
 {
@@ -1690,7 +1762,7 @@ void gs_panel_reset_helper(struct gs_panel *ctx)
 
 	dev_dbg(dev, "%s -\n", __func__);
 
-	gs_panel_first_enable(ctx);
+	gs_panel_first_enable_helper(ctx);
 
 	gs_panel_post_power_on(ctx);
 }
@@ -1900,39 +1972,6 @@ u32 panel_calc_linear_luminance(const u32 value, const u32 coef_x_1k, const int 
 	return mult_frac(value, coef_x_1k, 1000) + offset;
 }
 EXPORT_SYMBOL_GPL(panel_calc_linear_luminance);
-
-int gs_panel_register_op_hz_notifier(struct drm_connector *connector, struct notifier_block *nb)
-{
-	int retval;
-
-	if (is_gs_drm_connector(connector)) {
-		struct gs_drm_connector *gs_connector = to_gs_connector(connector);
-		struct gs_panel *ctx = gs_connector_to_panel(gs_connector);
-
-		retval = blocking_notifier_chain_register(&ctx->op_hz_notifier_head, nb);
-		if (retval != 0)
-			dev_warn(ctx->dev, "register notifier failed(%d)\n", retval);
-		else
-			blocking_notifier_call_chain(&ctx->op_hz_notifier_head,
-						     GS_PANEL_NOTIFIER_SET_OP_HZ, &ctx->op_hz);
-	} else {
-		dev_warn(connector->kdev,
-			 "register notifier failed(unexpected type of connector)\n");
-		retval = -EINVAL;
-	}
-
-	return retval;
-}
-EXPORT_SYMBOL_GPL(gs_panel_register_op_hz_notifier);
-
-int gs_panel_unregister_op_hz_notifier(struct drm_connector *connector, struct notifier_block *nb)
-{
-	struct gs_drm_connector *gs_connector = to_gs_connector(connector);
-	struct gs_panel *ctx = gs_connector_to_panel(gs_connector);
-
-	return blocking_notifier_chain_unregister(&ctx->op_hz_notifier_head, nb);
-}
-EXPORT_SYMBOL_GPL(gs_panel_unregister_op_hz_notifier);
 
 MODULE_AUTHOR("Taylor Nelms <tknelms@google.com>");
 MODULE_DESCRIPTION("MIPI-DSI panel driver abstraction for use across panel vendors");

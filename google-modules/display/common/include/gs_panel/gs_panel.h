@@ -561,6 +561,16 @@ struct gs_panel_funcs {
 	void (*pre_update_ffc)(struct gs_panel *gs_panel);
 
 	/**
+	 * @rr_need_te_high
+	 *
+	 * check if a panel needs for rr commands to be sent
+	 * during a TE high window
+	 *
+	 * @pmode: mode that panel is transitioning to
+	 */
+	bool (*rr_need_te_high)(struct gs_panel *gs_panel, const struct gs_panel_mode *pmode);
+
+	/**
 	 * @set_te2_rate
 	 *
 	 * This callback is used to set TE2 rate.
@@ -702,6 +712,8 @@ enum panel_reg_id {
 	PANEL_REG_ID_VDDD,
 	PANEL_REG_ID_VDDR_EN,
 	PANEL_REG_ID_VDDR,
+	PANEL_REG_ID_AVDD,
+	PANEL_REG_ID_AVEE,
 	PANEL_REG_ID_MAX,
 };
 
@@ -819,6 +831,7 @@ struct gs_panel_gpio {
 	struct gpio_desc *vddd_gpio;
 
 	enum gpio_level vddd_gpio_fixed_level;
+	bool keep_reset_high;
 };
 
 /**
@@ -831,8 +844,12 @@ struct gs_panel_regulator {
 	struct regulator *vddd;
 	struct regulator *vddr_en;
 	struct regulator *vddr;
+	struct regulator *avdd;
+	struct regulator *avee;
 	u32 vddd_normal_uV;
 	u32 vddd_lp_uV;
+	u32 avdd_uV;
+	u32 avee_uV;
 	/** @need_post_vddd_lp: indicates need to adjust vddd lp in self refresh */
 	bool need_post_vddd_lp;
 	/** @post_vddd_lp_enabled: adjust lp vddd in self refresh instead of mode set */
@@ -1385,6 +1402,18 @@ static inline int gs_dcs_set_brightness(struct gs_panel *ctx, u16 br)
 
 /* Driver-facing functions (high-level) */
 
+/**
+ * gs_panel_first_enable_helper - Panel-level initialization for gs_panel
+ * @ctx: handle for gs_panel
+ *
+ * This function should be called after the panel has received power,
+ * and it does certain one-time initializations and configurations, including
+ * reading panel module ID and serial number, getting panel revision, and
+ * calling panel_init, etc.
+ *
+ * Return: Enable results; 0 for success, negative value for error
+ */
+int gs_panel_first_enable_helper(struct gs_panel *ctx);
 void gs_panel_reset_helper(struct gs_panel *ctx);
 int gs_panel_set_power_helper(struct gs_panel *ctx, bool on);
 /**
@@ -1493,6 +1522,20 @@ int gs_panel_get_current_mode_te2(struct gs_panel *ctx, struct gs_panel_te2_timi
  */
 void gs_panel_update_te2(struct gs_panel *ctx);
 
+/**
+ * gs_panel_update_lhbm_hist_data_helper() - Update lhbm_hist_data on panel connector
+ * @ctx: Reference to panel data
+ * @enabled: whether to enable or disable updating lhbm histogram roi data
+ * @d: Depth of ROI center point off center, in pixels
+ * @r: Radius of ROI circle, in pixels
+ *
+ * Note that this will update d and r regardless of the enable value
+ *
+ * This is meant to be called by panel drivers during the `atomic_check` operation
+ */
+void gs_panel_update_lhbm_hist_data_helper(struct gs_panel *ctx, struct drm_atomic_state *state,
+					   bool enabled, int d, int r);
+
 /* Helper Utilities */
 
 /**
@@ -1521,14 +1564,6 @@ u32 panel_calc_gamma_2_2_luminance(const u32 value, const u32 max_value, const u
  * Return: prorated luminance
  */
 u32 panel_calc_linear_luminance(const u32 value, const u32 coef_x_1k, const int offset);
-
-/* notifer */
-enum gs_panel_notifier_action {
-	GS_PANEL_NOTIFIER_SET_OP_HZ = 0,
-};
-
-int gs_panel_register_op_hz_notifier(struct drm_connector *connector, struct notifier_block *nb);
-int gs_panel_unregister_op_hz_notifier(struct drm_connector *connector, struct notifier_block *nb);
 
 /* HBM */
 

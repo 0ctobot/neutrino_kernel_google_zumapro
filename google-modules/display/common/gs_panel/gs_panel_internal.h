@@ -15,6 +15,7 @@
 
 struct gs_panel;
 struct gs_drm_connector;
+struct gs_panel_mode;
 struct dentry;
 struct mipi_dsi_device;
 enum gs_panel_state;
@@ -45,6 +46,19 @@ const struct drm_bridge_funcs *get_panel_drm_bridge_funcs(void);
  * bookkeeping regarding drm properties.
  */
 void gs_panel_set_backlight_state(struct gs_panel *ctx, enum gs_panel_state panel_state);
+/**
+ * gs_panel_wait_for_cmd_tx_window() - wait for correct rr transmit window
+ * @current_mode: current panel mode
+ * @target_mode: mode the panel is transitioning into
+ * @ctx: Pointer to gs_panel
+ *
+ * Some panels require sending refresh rate update (or other) commands at a
+ * particular window of time. This function determines whether that is the case,
+ * and waits until that point in time.
+ */
+void gs_panel_wait_for_cmd_tx_window(struct drm_crtc *crtc,
+				     const struct gs_panel_mode *current_mode,
+				     const struct gs_panel_mode *target_mode, struct gs_panel *ctx);
 
 /* gs_panel_sysfs.c */
 /**
@@ -152,7 +166,6 @@ ssize_t gs_dsi_dcs_transfer(struct mipi_dsi_device *dsi, u8 type, const void *da
 			    u16 flags);
 
 /* gs_panel.c */
-int gs_panel_first_enable(struct gs_panel *ctx);
 void panel_update_idle_mode_locked(struct gs_panel *ctx, bool allow_delay_update);
 
 /**

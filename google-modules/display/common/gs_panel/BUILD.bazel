@@ -23,6 +23,5 @@ kernel_module(
     ],
     deps = [
         "//private/google-modules/display/common/gs_drm",
-        "//private/google-modules/display/samsung:display.samsung",
     ],
 )

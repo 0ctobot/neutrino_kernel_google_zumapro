@@ -15,6 +15,7 @@
 #include <drm/drm_vblank.h>
 
 #include "gs_panel/gs_panel.h"
+#include "trace/panel_trace.h"
 
 /* Sysfs Node */
 
@@ -248,11 +249,13 @@ static ssize_t refresh_ctrl_store(struct device *dev, struct device_attribute *a
 
 	mutex_lock(&ctx->mode_lock);
 	ctx->refresh_ctrl = ctrl;
-	if (!gs_is_panel_initialized(ctx) || !gs_is_panel_enabled(ctx))
+	if (!gs_is_panel_initialized(ctx) || !gs_is_panel_enabled(ctx)) {
 		dev_info(dev, "%s: cache ctrl=0x%08lX\n", __func__,
 			 ctrl & GS_PANEL_REFRESH_CTRL_FEATURE_MASK);
-	else
+	} else {
+		PANEL_ATRACE_INT("refresh_ctrl_value", ctrl);
 		ctx->desc->gs_panel_func->refresh_ctrl(ctx);
+	}
 	ctx->refresh_ctrl &= GS_PANEL_REFRESH_CTRL_FEATURE_MASK;
 	mutex_unlock(&ctx->mode_lock);
 
@@ -512,7 +515,7 @@ static ssize_t available_disp_stats_show(struct device *dev,
 	return len;
 }
 
-static ssize_t te_info_show(struct device *dev, struct device_attribute *attr, char *buf)
+static ssize_t te_rate_hz_show(struct device *dev, struct device_attribute *attr, char *buf)
 {
 	const struct mipi_dsi_device *dsi = to_mipi_dsi_device(dev);
 	struct gs_panel *ctx = mipi_dsi_get_drvdata(dsi);
@@ -537,7 +540,23 @@ static ssize_t te_info_show(struct device *dev, struct device_attribute *attr, c
 	}
 	mutex_unlock(&ctx->mode_lock);
 
-	return scnprintf(buf, PAGE_SIZE, "%s@%d\n", changeable ? "changeable" : "fixed", freq);
+	return sysfs_emit(buf, "%d\n", freq);
+}
+
+static ssize_t te_option_show(struct device *dev, struct device_attribute *attr, char *buf)
+{
+	const struct mipi_dsi_device *dsi = to_mipi_dsi_device(dev);
+	struct gs_panel *ctx = mipi_dsi_get_drvdata(dsi);
+	bool changeable;
+
+	if (!gs_is_panel_active(ctx))
+		return -EPERM;
+
+	mutex_lock(&ctx->mode_lock);
+	changeable = (ctx->hw_status.te.option == TEX_OPT_CHANGEABLE);
+	mutex_unlock(&ctx->mode_lock);
+
+	return sysfs_emit(buf, "%s\n", changeable ? "changeable" : "fixed");
 }
 
 static ssize_t te2_rate_hz_store(struct device *dev, struct device_attribute *attr,
@@ -698,6 +717,45 @@ static ssize_t error_count_unknown_show(struct device *dev, struct device_attrib
 	return count;
 }
 
+static ssize_t force_power_on_store(struct device *dev, struct device_attribute *attr,
+					const char *buf, size_t count)
+{
+	const struct mipi_dsi_device *dsi = to_mipi_dsi_device(dev);
+	struct gs_panel *ctx = mipi_dsi_get_drvdata(dsi);
+	int ret;
+	bool force_on;
+
+	ret = kstrtobool(buf, &force_on);
+	if (ret) {
+		dev_err(dev, "invalid force_power_on value\n");
+		return ret;
+	}
+
+	mutex_lock(&ctx->mode_lock);
+	if (force_on && ctx->panel_state == GPANEL_STATE_OFF) {
+		drm_panel_prepare(&ctx->base);
+		ctx->panel_state = GPANEL_STATE_BLANK;
+	}
+
+	ctx->force_power_on = force_on;
+	mutex_unlock(&ctx->mode_lock);
+
+	return count;
+}
+
+static ssize_t force_power_on_show(struct device *dev, struct device_attribute *attr, char *buf)
+{
+	const struct mipi_dsi_device *dsi = to_mipi_dsi_device(dev);
+	struct gs_panel *ctx = mipi_dsi_get_drvdata(dsi);
+	u32 count;
+
+	mutex_lock(&ctx->mode_lock);
+	count = sysfs_emit(buf, "%d\n", ctx->force_power_on);
+	mutex_unlock(&ctx->mode_lock);
+
+	return count;
+}
+
 static ssize_t frame_rate_store(struct device *dev, struct device_attribute *attr,
 				const char *buf, size_t count)
 {
@@ -739,17 +797,18 @@ static DEVICE_ATTR_RW(te2_timing);
 static DEVICE_ATTR_RW(te2_lp_timing);
 static DEVICE_ATTR_RO(time_in_state);
 static DEVICE_ATTR_RO(available_disp_stats);
-static DEVICE_ATTR_RO(te_info);
+static DEVICE_ATTR_RO(te_rate_hz);
+static DEVICE_ATTR_RO(te_option);
 static DEVICE_ATTR_RW(te2_rate_hz);
 static DEVICE_ATTR_RW(te2_option);
 static DEVICE_ATTR_RO(power_state);
 static DEVICE_ATTR_RO(error_count_te);
 static DEVICE_ATTR_RO(error_count_unknown);
+static DEVICE_ATTR_RW(force_power_on);
 static DEVICE_ATTR_WO(frame_rate);
 /* TODO(tknelms): re-implement below */
 #if 0
 static DEVICE_ATTR_WO(gamma);
-static DEVICE_ATTR_RW(force_power_on);
 static DEVICE_ATTR_RW(osc2_clk_khz);
 static DEVICE_ATTR_RO(available_osc2_clk_khz);
 #endif
@@ -767,16 +826,17 @@ static const struct attribute *panel_attrs[] = { &dev_attr_serial_number.attr,
 						 &dev_attr_min_vrefresh.attr,
 						 &dev_attr_te2_timing.attr,
 						 &dev_attr_te2_lp_timing.attr,
-						 &dev_attr_te_info.attr,
+						 &dev_attr_te_rate_hz.attr,
+						 &dev_attr_te_option.attr,
 						 &dev_attr_te2_rate_hz.attr,
 						 &dev_attr_te2_option.attr,
 						 &dev_attr_power_state.attr,
 						 &dev_attr_error_count_te.attr,
 						 &dev_attr_error_count_unknown.attr,
+						 &dev_attr_force_power_on.attr,
 /* TODO(tknelms): re-implement below */
 #if 0
 						 &dev_attr_gamma.attr,
-						 &dev_attr_force_power_on.attr,
 						 &dev_attr_osc2_clk_khz.attr,
 						 &dev_attr_available_osc2_clk_khz.attr,
 #endif

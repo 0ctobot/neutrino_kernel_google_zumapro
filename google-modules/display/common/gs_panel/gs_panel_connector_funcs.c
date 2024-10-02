@@ -19,8 +19,6 @@
 #include "gs_panel/gs_panel.h"
 #include "trace/panel_trace.h"
 
-#include "trace/dpu_trace.h"
-
 /* drm_connector_helper_funcs */
 
 static int gs_panel_connector_modes(struct drm_connector *connector)
@@ -51,6 +49,10 @@ static void gs_panel_connector_attach_touch(struct gs_panel *ctx,
 	}
 
 	bridge = of_drm_find_bridge(ctx->touch_dev);
+	if (unlikely(!ctx->touch_dev))
+		dev_warn(ctx->dev, "%s can't get touch dev\n", __func__);
+	if (unlikely(!bridge))
+		dev_warn(ctx->dev, "%s can't find bridge\n", __func__);
 	if (!bridge || bridge->dev)
 		return;
 
@@ -290,11 +292,37 @@ static int gs_panel_connector_late_register(struct gs_drm_connector *gs_connecto
 	return 0;
 }
 
+static int gs_panel_register_op_hz_notifier(struct gs_drm_connector *gs_connector,
+					    struct notifier_block *nb)
+{
+	int retval;
+	struct gs_panel *ctx = gs_connector_to_panel(gs_connector);
+
+	retval = blocking_notifier_chain_register(&ctx->op_hz_notifier_head, nb);
+	if (retval != 0)
+		dev_warn(ctx->dev, "register notifier failed(%d)\n", retval);
+	else
+		blocking_notifier_call_chain(&ctx->op_hz_notifier_head, GS_PANEL_NOTIFIER_SET_OP_HZ,
+					     &ctx->op_hz);
+
+	return retval;
+}
+
+static int gs_panel_unregister_op_hz_notifier(struct gs_drm_connector *gs_connector,
+					      struct notifier_block *nb)
+{
+	struct gs_panel *ctx = gs_connector_to_panel(gs_connector);
+
+	return blocking_notifier_chain_unregister(&ctx->op_hz_notifier_head, nb);
+}
+
 static const struct gs_drm_connector_funcs gs_drm_connector_funcs = {
 	.atomic_print_state = gs_panel_connector_print_state,
 	.atomic_get_property = gs_panel_connector_get_property,
 	.atomic_set_property = gs_panel_connector_set_property,
 	.late_register = gs_panel_connector_late_register,
+	.register_op_hz_notifier = gs_panel_register_op_hz_notifier,
+	.unregister_op_hz_notifier = gs_panel_unregister_op_hz_notifier,
 };
 
 /* gs_drm_connector_helper_funcs */
@@ -312,7 +340,7 @@ int gs_panel_set_op_hz(struct gs_panel *ctx, unsigned int hz)
 	if (!gs_panel_has_func(ctx, set_op_hz))
 		return -ENOTSUPP;
 
-	DPU_ATRACE_BEGIN("set_op_hz");
+	/*TODO(tknelms) DPU_ATRACE_BEGIN("set_op_hz");*/
 	dev_dbg(dev, "%s: set op_hz to %d\n", __func__, hz);
 
 	/*TODO(b/267170999): MODE*/
@@ -338,12 +366,12 @@ int gs_panel_set_op_hz(struct gs_panel *ctx, unsigned int hz)
 		sysfs_notify(&dev->kobj, NULL, "op_hz");
 	}
 
-	DPU_ATRACE_END("set_op_hz");
+	/*TODO(tknelms) DPU_ATRACE_END("set_op_hz");*/
 
 	return ret;
 }
 
-static void gs_panel_pre_commit_properties(struct gs_panel *ctx,
+static void gs_panel_commit_properties(struct gs_panel *ctx,
 					   struct gs_drm_connector_state *conn_state)
 {
 	struct mipi_dsi_device *dsi = to_mipi_dsi_device(ctx->dev);
@@ -356,7 +384,7 @@ static void gs_panel_pre_commit_properties(struct gs_panel *ctx,
 
 	dev_dbg(ctx->dev, "%s: mipi_sync(0x%lx) pending_update_flags(0x%x)\n", __func__,
 		conn_state->mipi_sync, conn_state->pending_update_flags);
-	DPU_ATRACE_BEGIN(__func__);
+	/*TODO(tknelms) DPU_ATRACE_BEGIN(__func__);*/
 	mipi_sync = conn_state->mipi_sync &
 		    (GS_MIPI_CMD_SYNC_LHBM | GS_MIPI_CMD_SYNC_GHBM | GS_MIPI_CMD_SYNC_BL);
 
@@ -368,10 +396,8 @@ static void gs_panel_pre_commit_properties(struct gs_panel *ctx,
 	}
 
 	if (mipi_sync) {
-		/*TODO(tknelms)
-		gs_panel_check_mipi_sync_timing(conn_state->base.crtc,
-		    ctx->current_mode, ctx);
-		*/
+		gs_panel_wait_for_cmd_tx_window(conn_state->base.crtc, ctx->current_mode,
+						ctx->current_mode, ctx);
 		dev_info(ctx->dev, "%s missing mipi_sync\n", __func__);
 		gs_dsi_dcs_write_buffer_force_batch_begin(dsi);
 	}
@@ -379,23 +405,23 @@ static void gs_panel_pre_commit_properties(struct gs_panel *ctx,
 	if ((conn_state->pending_update_flags & GS_HBM_FLAG_GHBM_UPDATE) &&
 	    gs_panel_has_func(ctx, set_hbm_mode) &&
 	    (ctx->hbm_mode != conn_state->global_hbm_mode)) {
-		DPU_ATRACE_BEGIN("set_hbm");
+		PANEL_ATRACE_BEGIN("set_hbm");
 		/*TODO(b/267170999): MODE*/
 		mutex_lock(&ctx->mode_lock);
 		gs_panel_func->set_hbm_mode(ctx, conn_state->global_hbm_mode);
 		notify_panel_mode_changed(ctx);
 		/*TODO(b/267170999): MODE*/
 		mutex_unlock(&ctx->mode_lock);
-		DPU_ATRACE_END("set_hbm");
+		PANEL_ATRACE_END("set_hbm");
 		ghbm_updated = true;
 	}
 
 	if ((conn_state->pending_update_flags & GS_HBM_FLAG_BL_UPDATE) &&
 	    (ctx->bl->props.brightness != conn_state->brightness_level)) {
-		DPU_ATRACE_BEGIN("set_bl");
+		PANEL_ATRACE_BEGIN("set_bl");
 		ctx->bl->props.brightness = conn_state->brightness_level;
 		backlight_update_status(ctx->bl);
-		DPU_ATRACE_END("set_bl");
+		PANEL_ATRACE_END("set_bl");
 	}
 
 	if ((conn_state->pending_update_flags & GS_HBM_FLAG_LHBM_UPDATE) &&
@@ -431,20 +457,20 @@ static void gs_panel_pre_commit_properties(struct gs_panel *ctx,
 		* panel needs one extra VSYNC period to apply GHBM/dbv. The frame
 		* update should be delayed.
 		*/
-		DPU_ATRACE_BEGIN("dbv_wait");
+		/*TODO(tknelms) DPU_ATRACE_BEGIN("dbv_wait");*/
 		if (!drm_crtc_vblank_get(conn_state->base.crtc)) {
 			drm_crtc_wait_one_vblank(conn_state->base.crtc);
 			drm_crtc_vblank_put(conn_state->base.crtc);
 		} else {
 			pr_warn("%s failed to get vblank for dbv wait\n", __func__);
 		}
-		DPU_ATRACE_END("dbv_wait");
+		/*TODO(tknelms) DPU_ATRACE_END("dbv_wait");*/
 	}
 
 	if (ghbm_updated)
 		sysfs_notify(&ctx->bl->dev.kobj, NULL, "hbm_mode");
 
-	DPU_ATRACE_END(__func__);
+	/*TODO(tknelms) DPU_ATRACE_END(__func__);*/
 }
 
 static void gs_panel_connector_atomic_pre_commit(struct gs_drm_connector *gs_connector,
@@ -453,8 +479,6 @@ static void gs_panel_connector_atomic_pre_commit(struct gs_drm_connector *gs_con
 {
 	struct gs_panel *ctx = gs_connector_to_panel(gs_connector);
 	struct gs_panel_idle_data *idle_data = &ctx->idle_data;
-
-	gs_panel_pre_commit_properties(ctx, gs_new_state);
 
 	mutex_lock(&ctx->mode_lock); /*TODO(b/267170999): MODE*/
 	if (idle_data->panel_update_idle_mode_pending)
@@ -467,6 +491,9 @@ static void gs_panel_connector_atomic_commit(struct gs_drm_connector *gs_connect
 					     struct gs_drm_connector_state *gs_new_state)
 {
 	struct gs_panel *ctx = gs_connector_to_panel(gs_connector);
+
+	/* send mipi_sync commands at the time close to the expected present time */
+	gs_panel_commit_properties(ctx, gs_new_state);
 
 	/*TODO(b/267170999): MODE*/
 	mutex_lock(&ctx->mode_lock);

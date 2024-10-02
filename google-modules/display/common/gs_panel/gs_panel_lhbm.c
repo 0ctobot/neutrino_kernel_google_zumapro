@@ -15,6 +15,7 @@
 
 #include "gs_panel/gs_panel.h"
 #include "gs_panel_internal.h"
+#include "trace/panel_trace.h"
 
 /**
  * panel_update_lhbm_notimeout - Updates lhbm state to match requested state
@@ -81,10 +82,10 @@ static bool panel_update_lhbm_notimeout(struct gs_panel *ctx)
 			GLOCAL_HBM_ENABLING :
 			lhbm->requested_state;
 
-	/* TODO(b/261073288) PANEL_ATRACE_BEGIN(__func__); */
+	PANEL_ATRACE_BEGIN(__func__);
 	ctx->desc->gs_panel_func->set_local_hbm_mode(ctx, lhbm->effective_state);
 	sysfs_notify(&ctx->bl->dev.kobj, NULL, "local_hbm_mode");
-	/* TODO(b/261073288) PANEL_ATRACE_END(__func__); */
+	PANEL_ATRACE_END(__func__);
 
 	return true;
 }
@@ -242,7 +243,7 @@ static void local_hbm_post_work(struct kthread_work *work)
 	const struct gs_panel_desc *desc = ctx->desc;
 	struct drm_crtc *crtc = get_gs_panel_connector_crtc(ctx);
 
-	/* TODO(b/261073288) PANEL_ATRACE_BEGIN(__func__); */
+	PANEL_ATRACE_BEGIN(__func__);
 	if (crtc && drm_crtc_vblank_get(crtc))
 		crtc = NULL;
 	ctx->lhbm.timestamps.next_vblank_ts = 0;
@@ -257,7 +258,7 @@ static void local_hbm_post_work(struct kthread_work *work)
 	}
 	if (crtc)
 		drm_crtc_vblank_put(crtc);
-	/* TODO(b/261073288) PANEL_ATRACE_END(__func__); */
+	PANEL_ATRACE_END(__func__);
 }
 
 void gs_panel_init_lhbm(struct gs_panel *ctx)

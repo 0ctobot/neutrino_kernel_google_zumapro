@@ -67,6 +67,18 @@ struct gs_display_partial {
 };
 
 /**
+ * struct gs_drm_connector_lhbm_hist_data - state of lhbm histogram data
+ * @enabled: Whether this feature is enabled
+ * @d: depth of lhbm circle center below center of phone, in pixels
+ * @r: radius of lhbm circle, in pixels
+ */
+struct gs_drm_connector_lhbm_hist_data {
+	bool enabled;
+	int d;
+	int r;
+};
+
+/**
  * struct gs_drm_connector_state - mutable connector state
  */
 struct gs_drm_connector_state {
@@ -156,6 +168,14 @@ struct gs_drm_connector_state {
 	 * so that the specific settings can be updated accordingly.
 	 */
 	bool dsi_hs_clk_changed;
+	/**
+	 * @lhbm_hist_data: data about the lhbm circle location for histogram
+	 * In cases where DPU needs information about the location of a panel's
+	 * LHBM circle, this struct contains that data
+	 * Note that this is an optional feature, and that enabling this struct
+	 * will enable DPU histogram with ROI set to the provided location.
+	 */
+	struct gs_drm_connector_lhbm_hist_data lhbm_hist_data;
 };
 
 #define to_gs_connector_state(connector_state) \
@@ -171,6 +191,18 @@ struct gs_drm_connector_funcs {
 				   const struct gs_drm_connector_state *gs_state,
 				   struct drm_property *property, uint64_t *val);
 	int (*late_register)(struct gs_drm_connector *gs_connector);
+	/**
+	 * @register_op_hz_notifier: Registers a notifier of op_hz changing for
+	 * touch interface
+	 */
+	int (*register_op_hz_notifier)(struct gs_drm_connector *gs_connector,
+				       struct notifier_block *nb);
+	/**
+	 * @unregister_op_hz_notifier: Unregisters a notifier of op_hz changing
+	 * for touch interface
+	 */
+	int (*unregister_op_hz_notifier)(struct gs_drm_connector *gs_connector,
+					 struct notifier_block *nb);
 };
 
 struct gs_drm_connector_helper_funcs {
@@ -237,6 +269,10 @@ struct gs_drm_connector {
 	 * BTS behavior in the DPU driver
 	 */
 	bool ignore_op_rate;
+	/**
+	 * @lhbm_gray_level: gray level for use with lhbm histogram
+	 */
+	u32 lhbm_gray_level;
 };
 
 #define to_gs_connector(connector) container_of((connector), struct gs_drm_connector, base)
@@ -279,6 +315,25 @@ static inline int gs_drm_mode_te_freq(const struct drm_display_mode *mode)
 	return freq;
 }
 
+/**
+ * gs_drm_connector_hist_data_needs_configure() - checks whether DPU should
+ * update lhbm histogram configuration
+ * @old_gs_connector_state: gs_drm_connector_state previously
+ * @new_gs_connector_state: gs_drm_connector_state to check against
+ * Return: true if DPU should configure, false otherwise
+ */
+static inline bool gs_drm_connector_hist_data_needs_configure(
+	const struct gs_drm_connector_state *old_gs_connector_state,
+	const struct gs_drm_connector_state *new_gs_connector_state)
+{
+	if (!old_gs_connector_state->lhbm_hist_data.enabled &&
+	    !new_gs_connector_state->lhbm_hist_data.enabled)
+		return false;
+	return (memcmp(&old_gs_connector_state->lhbm_hist_data,
+		       &new_gs_connector_state->lhbm_hist_data,
+		       sizeof(struct gs_drm_connector_lhbm_hist_data)) != 0);
+}
+
 int gs_connector_bind(struct device *dev, struct device *master, void *data);
 
 /**
@@ -299,5 +354,56 @@ void gs_connector_set_panel_name(const char *new_name, size_t len, int idx);
 
 int gs_drm_mode_bts_fps(const struct drm_display_mode *mode);
 int gs_bts_fps_to_drm_mode_clock(const struct drm_display_mode *mode, int bts_fps);
+
+/**
+ * gs_drm_connector_update_gray_level_callback() - for updating lhbm gray level
+ * Callback for use in updating lhbm_gray_level from DPU code
+ * @connector: handle for drm_connector
+ * @gray_level: lhbm_gray_level to store
+ */
+void gs_drm_connector_update_gray_level_callback(struct drm_connector *connector, int gray_level);
+
+/* Op Hz Notifier */
+
+enum gs_panel_notifier_action {
+	GS_PANEL_NOTIFIER_SET_OP_HZ = 0,
+};
+
+/**
+ * gs_connector_register_op_hz_notifier() - passthrough to register op_hz notifier
+ * @connector: drm_connector associated with gs_drm_connector
+ * @nb: notifier_block to register
+ *
+ * Return: result of blocking_notifier_call_chain_register(), or negative result on error
+ */
+static inline int gs_connector_register_op_hz_notifier(struct drm_connector *connector,
+						       struct notifier_block *nb)
+{
+	if (is_gs_drm_connector(connector)) {
+		struct gs_drm_connector *gs_connector = to_gs_connector(connector);
+
+		return gs_connector->funcs->register_op_hz_notifier(gs_connector, nb);
+	}
+	dev_warn(connector->kdev, "register notifier failed(unexpected type of connector)\n");
+	return -EINVAL;
+}
+/**
+ * gs_connector_unregister_op_hz_notifier() - passthrough to unregister op_hz notifier
+ * @connector: drm_connector associated with gs_drm_connector
+ * @nb: notifier_block to unregister
+ *
+ * Return: result of blocking_notifier_chain_unregister(), or negative result on error
+ */
+static inline int gs_connector_unregister_op_hz_notifier(struct drm_connector *connector,
+							 struct notifier_block *nb)
+{
+	if (is_gs_drm_connector(connector)) {
+		struct gs_drm_connector *gs_connector = to_gs_connector(connector);
+
+		return gs_connector->funcs->unregister_op_hz_notifier(gs_connector, nb);
+	}
+	dev_warn(connector->kdev, "unregister notifier failed(unexpected type of connector)\n");
+	return -EINVAL;
+}
 
 #endif /* _GS_DRM_CONNECTOR_H_ */

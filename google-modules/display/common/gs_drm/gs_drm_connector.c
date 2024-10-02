@@ -386,6 +386,17 @@ int gs_drm_connector_create_properties(struct drm_connector *connector)
 }
 EXPORT_SYMBOL_GPL(gs_drm_connector_create_properties);
 
+/* LHBM Histogram and Gray Level */
+
+void gs_drm_connector_update_gray_level_callback(struct drm_connector *connector, int gray_level)
+{
+	struct gs_drm_connector *gs_connector = to_gs_connector(connector);
+
+	gs_connector->lhbm_gray_level = gray_level;
+	dev_dbg(gs_connector->kdev, "gs_drm_connector set gray_level to %d\n", gray_level);
+}
+EXPORT_SYMBOL_GPL(gs_drm_connector_update_gray_level_callback);
+
 /* Component Model Functions */
 
 int gs_connector_bind(struct device *dev, struct device *master, void *data)

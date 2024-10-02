@@ -101,12 +101,10 @@ const struct brightness_capability panel_gs_simple_brightness_capability = {
 	},
 };
 
-#ifdef PANEL_FACTORY_BUILD
 static const struct drm_dsc_config wqhd_pps_config = {
 	.slice_count = 2,
 	.slice_height = 40,
 };
-#endif
 
 #define EMU_WQHD_DSC {\
 	.enabled = true,\
@@ -115,13 +113,8 @@ static const struct drm_dsc_config wqhd_pps_config = {
 }
 
 static struct gs_panel_mode_array panel_gs_simple_normal_modes = {
-#ifdef PANEL_FACTORY_BUILD
 	.num_modes = 2,
-#else
-	.num_modes = 1,
-#endif
 	.modes = {
-#ifdef PANEL_FACTORY_BUILD
 		{
 			.mode = {
 				.name = "1440x2960@60",
@@ -151,24 +144,6 @@ static struct gs_panel_mode_array panel_gs_simple_normal_modes = {
 				.dsc = EMU_WQHD_DSC,
 			},
 		},
-#else
-		{
-			.mode = {
-				.name = "640x480@60",
-				DRM_MODE_TIMING(60, 640, 32, 12, 36, 480, 12, 4, 24),
-				.flags = 0,
-				.width_mm = 64,
-				.height_mm = 48,
-			},
-			.gs_mode = {
-				.mode_flags = MIPI_DSI_MODE_VIDEO,
-				.bpc = 8,
-				.dsc = {
-					.enabled = false,
-				},
-			},
-		},
-#endif
 	},
 };
 
@@ -181,16 +156,15 @@ static int update_panel_timings_from_device_tree(struct device_node *np)
 	 */
 	struct drm_display_mode *mode =
 		(struct drm_display_mode *)&panel_gs_simple_normal_modes.modes[0].mode;
-	int ret = 0;
+	int ret = of_get_drm_panel_display_mode(np, mode, NULL);
 
-	/*
-	 * TODO (b/197774385): re-enable
-	ret = of_get_drm_panel_display_mode(np, mode, NULL);
-	if (ret) {
-		pr_warn("%p of_get_drm_panel_display_mode returned %d\n", np, ret);
+	if (ret && ret != -ENOENT) {
+		pr_warn("of_get_drm_panel_display_mode returned %d\n", ret);
+	} else if (ret == -ENOENT) {
+		pr_info("Unable to find panel timings in device tree, using defaults instead.\n");
+		ret = 0;
 	}
-	 */
-	(void)mode;
+
 	return ret;
 };
 

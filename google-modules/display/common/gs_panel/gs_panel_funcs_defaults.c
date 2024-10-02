@@ -15,6 +15,7 @@
 #include "gs_panel/gs_panel_funcs_defaults.h"
 #include "gs_panel/gs_panel.h"
 #include "gs_panel_internal.h"
+#include "trace/panel_trace.h"
 
 #define PANEL_ID_REG_DEFAULT 0xA1
 #define PANEL_ID_LEN 7
@@ -227,6 +228,7 @@ void gs_panel_set_binned_lp_helper(struct gs_panel *ctx, const u16 brightness)
 		return;
 	}
 
+	PANEL_ATRACE_BEGIN(__func__);
 	gs_panel_send_cmdset(ctx, &binned_lp->cmdset);
 
 	ctx->current_binned_lp = binned_lp;
@@ -242,6 +244,7 @@ void gs_panel_set_binned_lp_helper(struct gs_panel *ctx, const u16 brightness)
 
 	if (panel_state == GPANEL_STATE_LP)
 		gs_panel_update_te2(ctx);
+	PANEL_ATRACE_END(__func__);
 }
 EXPORT_SYMBOL_GPL(gs_panel_set_binned_lp_helper);
 

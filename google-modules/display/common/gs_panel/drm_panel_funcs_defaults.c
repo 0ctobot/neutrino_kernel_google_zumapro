@@ -17,7 +17,6 @@ int gs_panel_disable(struct drm_panel *panel)
 	struct gs_panel *ctx = drm_to_gs_panel(panel);
 
 	dev_dbg(ctx->dev, "%s+\n", __func__);
-	ctx->panel_state = GPANEL_STATE_OFF;
 	ctx->hbm_mode = GS_HBM_OFF;
 	ctx->dimming_on = false;
 	ctx->idle_data.self_refresh_active = false;

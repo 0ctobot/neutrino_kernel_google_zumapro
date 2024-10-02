@@ -6,8 +6,8 @@ kernel_module(
     name = "gs_drm",
     srcs = glob([
         "*.c",
-        "Kbuild",
     ]) + [
+        "Kbuild",
         "//private/google-modules/display/common:headers",
     ],
     outs = [

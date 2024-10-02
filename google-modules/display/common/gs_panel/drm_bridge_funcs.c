@@ -9,6 +9,7 @@
 
 #include "gs_panel_internal.h"
 
+#include <linux/delay.h>
 #include <linux/of_gpio.h>
 #include <linux/sysfs.h>
 #include <drm/drm_atomic_state_helper.h>
@@ -190,9 +191,9 @@ static void gs_panel_bridge_enable(struct drm_bridge *bridge,
 
 	mutex_lock(&ctx->mode_lock); /*TODO(b/267170999): MODE*/
 	if (ctx->panel_state == GPANEL_STATE_HANDOFF) {
-		is_active = !gs_panel_first_enable(ctx);
+		is_active = !gs_panel_first_enable_helper(ctx);
 	} else if (ctx->panel_state == GPANEL_STATE_HANDOFF_MODESET) {
-		if (!gs_panel_first_enable(ctx)) {
+		if (!gs_panel_first_enable_helper(ctx)) {
 			ctx->panel_state = GPANEL_STATE_MODESET;
 			mutex_unlock(&ctx->mode_lock); /*TODO(b/267170999): MODE*/
 			drm_panel_disable(&ctx->base);
@@ -241,11 +242,289 @@ static void gs_panel_bridge_enable(struct drm_bridge *bridge,
 	}
 }
 
-static void gs_panel_check_mipi_sync_timing(struct drm_crtc *crtc,
-					    const struct gs_panel_mode *current_mode,
-					    struct gs_panel *ctx)
+/**
+ * gs_panel_vsync_start_time_us() - Get vsync start time within TE period
+ */
+static u64 gs_panel_vsync_start_time_us(u32 te_us, u32 te_period_us)
 {
-	/*TODO(b/279519827): implement mipi sync timing*/
+	/* Approximate the VSYNC start time with TE falling edge. */
+	if (te_us > 0 && te_us < te_period_us)
+		return te_us * 105 / 100; /* add 5% for variation */
+
+	/* Approximate the TE falling edge with 55% TE width */
+	return te_period_us * 55 / 100;
+}
+
+static u32 get_rr_switch_applied_te_count(const struct gs_panel_timestamps *timestamps)
+{
+	/* New refresh rate should take effect immediately after exiting AOD mode */
+	if (timestamps->last_rr_switch_ts == timestamps->last_lp_exit_ts)
+		return 1;
+
+	/* New rr will take effect at the first vsync after sending rr command, but
+	 * we only know te rising ts. The worse case, new rr take effect at 2nd TE.
+	 */
+	return 2;
+}
+
+static bool is_last_rr_applied(struct gs_panel *ctx, ktime_t last_te)
+{
+	s64 rr_switch_delta_us;
+	u32 te_period_before_rr_switch_us;
+	u32 rr_switch_applied_te_count;
+
+	if (last_te == 0)
+		return false;
+
+	rr_switch_delta_us = ktime_us_delta(last_te, ctx->timestamps.last_rr_switch_ts);
+	te_period_before_rr_switch_us = ctx->te2.last_rr != 0 ? USEC_PER_SEC / ctx->te2.last_rr : 0;
+	rr_switch_applied_te_count = get_rr_switch_applied_te_count(&ctx->timestamps);
+
+	if (rr_switch_delta_us > ((rr_switch_applied_te_count - 1) * te_period_before_rr_switch_us))
+		return true;
+
+	return false;
+}
+
+/* avoid accumulate te varaince cause predicted value is not precision enough */
+#define ACCEPTABLE_TE_PERIOD_DETLA_NS (3 * NSEC_PER_SEC)
+#define ACCEPTABLE_TE_RR_SWITCH_DELTA_US (500)
+static ktime_t gs_panel_te_ts_prediction(struct gs_panel *ctx, ktime_t last_te, u32 te_period_us)
+{
+	s64 rr_switch_delta_us, te_last_rr_switch_delta_us;
+	u32 te_period_before_rr_switch_us;
+	u32 rr_switch_applied_te_count;
+	s64 te_period_delta_ns;
+
+	if (last_te == 0)
+		return 0;
+
+	rr_switch_delta_us = ktime_us_delta(last_te, ctx->timestamps.last_rr_switch_ts);
+	te_period_before_rr_switch_us = ctx->te2.last_rr != 0 ? USEC_PER_SEC / ctx->te2.last_rr : 0;
+	rr_switch_applied_te_count = get_rr_switch_applied_te_count(&ctx->timestamps);
+
+	if (rr_switch_delta_us < 0 && te_period_before_rr_switch_us != 0) {
+		/* last know TE ts is before sending last rr switch */
+		ktime_t last_te_before_rr_switch, now;
+		s64 since_last_te_us;
+		s64 accumlated_te_period_delta_ns;
+
+		/* donʼt predict if last rr switch ts too close to te */
+		te_last_rr_switch_delta_us = (-rr_switch_delta_us % te_period_before_rr_switch_us);
+		if (te_last_rr_switch_delta_us >
+			    (te_period_before_rr_switch_us - ACCEPTABLE_TE_RR_SWITCH_DELTA_US) ||
+		    te_last_rr_switch_delta_us < ACCEPTABLE_TE_RR_SWITCH_DELTA_US) {
+			return 0;
+		}
+
+		te_period_delta_ns = (-rr_switch_delta_us / te_period_before_rr_switch_us) *
+				     te_period_before_rr_switch_us * NSEC_PER_USEC;
+		if (te_period_delta_ns < ACCEPTABLE_TE_PERIOD_DETLA_NS) {
+			/* try to get last TE ts before sending last rr switch command */
+			ktime_t first_te_after_rr_switch;
+
+			last_te_before_rr_switch = last_te + te_period_delta_ns;
+			now = ktime_get();
+			since_last_te_us = ktime_us_delta(now, last_te_before_rr_switch);
+			if (since_last_te_us < te_period_before_rr_switch_us) {
+				/* now and last predict te is in the same te */
+				return last_te_before_rr_switch;
+			}
+
+			first_te_after_rr_switch =
+				last_te_before_rr_switch + te_period_before_rr_switch_us;
+
+			if (rr_switch_applied_te_count == 1) {
+				since_last_te_us = ktime_us_delta(now, first_te_after_rr_switch);
+				accumlated_te_period_delta_ns = te_period_delta_ns;
+				te_period_delta_ns = (since_last_te_us / te_period_us) *
+						     te_period_us * NSEC_PER_USEC;
+				accumlated_te_period_delta_ns += te_period_delta_ns;
+				if (accumlated_te_period_delta_ns < ACCEPTABLE_TE_PERIOD_DETLA_NS)
+					return (first_te_after_rr_switch + te_period_delta_ns);
+			} else {
+				return first_te_after_rr_switch;
+			}
+		}
+	} else if (is_last_rr_applied(ctx, last_te)) {
+		/* new rr has already taken effect at last know TE ts */
+		ktime_t now;
+		s64 since_last_te_us;
+
+		now = ktime_get();
+		since_last_te_us = ktime_us_delta(now, last_te);
+		te_period_delta_ns =
+			(since_last_te_us / te_period_us) * te_period_us * NSEC_PER_USEC;
+
+		if (te_period_delta_ns < ACCEPTABLE_TE_PERIOD_DETLA_NS)
+			return (last_te + te_period_delta_ns);
+	}
+
+	return 0;
+}
+
+void gs_panel_wait_for_cmd_tx_window(struct drm_crtc *crtc,
+				     const struct gs_panel_mode *current_mode,
+				     const struct gs_panel_mode *target_mode, struct gs_panel *ctx)
+{
+	struct device *dev = ctx->dev;
+	u32 te_period_us;
+	u32 te_usec;
+	int retry;
+	u64 left, right;
+	bool vblank_taken = false;
+	bool is_rr_sent_at_te_high = false;
+
+	if (WARN_ON(!current_mode))
+		return;
+
+	PANEL_ATRACE_BEGIN("mipi_time_window");
+	te_period_us = USEC_PER_SEC / gs_drm_mode_te_freq(&current_mode->mode);
+
+	if (gs_panel_has_func(ctx, get_te_usec))
+		te_usec = ctx->desc->gs_panel_func->get_te_usec(ctx, current_mode);
+	else
+		te_usec = current_mode->gs_mode.te_usec;
+	dev_dbg(dev, "%s: check mode_set timing enter. te_period_us %u, te_usec %u\n", __func__,
+		te_period_us, te_usec);
+
+	if (gs_panel_has_func(ctx, rr_need_te_high))
+		is_rr_sent_at_te_high = ctx->desc->gs_panel_func->rr_need_te_high(ctx, target_mode);
+
+	/*
+	 * Safe time window to send RR (refresh rate) command illustrated below.
+	 *
+	 * When is_rr_sent_at_te_high is false, it sends RR command in TE low
+	 * to make RR switch and scanout happen in the same VSYNC period because the frame
+	 * content might be adjusted specific to this refresh rate.
+	 *
+	 * An estimation is [55% * TE_duration, TE_duration - 1ms] before driver has the
+	 * accurate TE pulse width (VSYNC rising is a bit ahead of TE falling edge).
+	 *
+	 *         -->|     |<-- safe time window to send RR
+	 *
+	 *        +----+     +----+     +-+
+	 *        |    |     |    |     | |
+	 * TE   --+    +-----+    +-----+ +---
+	 *               RR  SCANOUT
+	 *
+	 *            |          |       |
+	 *            |          |       |
+	 * VSYNC------+----------+-------+----
+	 *            RR1        RR2
+	 *
+	 * When is_rr_sent_at_te_high is true, it makes RR switch commands are sent in TE
+	 * high(skip frame) to makes RR switch happens prior to scanout. This is requested
+	 * from specific DDIC to avoid transition flicker. This should not be used for TE
+	 * pulse width is very short case.
+	 *
+	 * An estimation is [0.5ms, 55% * TE_duration - 1ms] before driver has the accurate
+	 * TE pulse width (VSYNC rising is a bit ahead of TE falling edge).
+	 *
+	 *                -->|    |<-- safe time window to send RR
+	 *
+	 *        +----+     +----+     +-+
+	 *        |    |     |    |     | |
+	 * TE   --+    +-----+    +-----+ +---
+	 *                     RR       SCANOUT
+	 *
+	 *            |          |       |
+	 *            |          |       |
+	 * VSYNC------+----------+-------+----
+	 *            RR1        RR2
+	 *
+	 */
+	retry = te_period_us / USEC_PER_MSEC + 1;
+
+	do {
+		u32 cur_te_period_us = te_period_us;
+		u32 cur_te_usec = te_usec;
+		ktime_t last_te = 0, now;
+		s64 since_last_te_us;
+		u64 vblank_counter;
+		bool last_rr_applied;
+
+		vblank_counter = drm_crtc_vblank_count_and_time(crtc, &last_te);
+		now = ktime_get();
+		since_last_te_us = ktime_us_delta(now, last_te);
+		if (!vblank_taken) {
+			ktime_t predicted_te = gs_panel_te_ts_prediction(
+				ctx, last_te,
+				USEC_PER_SEC / gs_drm_mode_te_freq(&current_mode->mode));
+			if (predicted_te) {
+				PANEL_ATRACE_BEGIN("predicted_te");
+				last_te = predicted_te;
+				since_last_te_us = ktime_us_delta(now, last_te);
+				PANEL_ATRACE_INT("predicted_te_delta_us", (int)since_last_te_us);
+				PANEL_ATRACE_END("predicted_te");
+			}
+		}
+		/**
+		 * If a refresh rate switch happens right before last_te. last TE width could be for
+		 * new rr or for old rr depending on if last rr is sent at TE high or low.
+		 * If the refresh rate switch happens after last_te, last TE width won't change.
+		 */
+		last_rr_applied = is_last_rr_applied(ctx, last_te);
+		if (ctx->te2.last_rr != 0 &&
+		    ((vblank_counter - ctx->te2.last_rr_te_counter <= 1 &&
+		      ctx->te2.last_rr_te_gpio_value == 0 && !last_rr_applied) ||
+		     ktime_after(ctx->timestamps.last_rr_switch_ts, last_te))) {
+			cur_te_period_us = USEC_PER_SEC / ctx->te2.last_rr;
+			cur_te_usec = ctx->te2.last_rr_te_usec;
+		}
+
+		if (!is_rr_sent_at_te_high) {
+			left = gs_panel_vsync_start_time_us(cur_te_usec, cur_te_period_us);
+			right = cur_te_period_us - USEC_PER_MSEC;
+		} else {
+			/* TODO(tknelms): if frame_transfer_pending, continue */
+			left = USEC_PER_MSEC * 0.5;
+			right = gs_panel_vsync_start_time_us(cur_te_usec, cur_te_period_us) -
+				USEC_PER_MSEC;
+		}
+
+		dev_dbg(dev,
+			"%s: rr-te: %lld, te-now: %lld, time window [%llu, %llu] te/pulse: %u/%u\n",
+			__func__, ktime_us_delta(last_te, ctx->timestamps.last_rr_switch_ts),
+			ktime_us_delta(now, last_te), left, right, cur_te_period_us, cur_te_usec);
+
+		/* Only use the most recent TE as a reference point if it's not obsolete */
+		if (since_last_te_us > cur_te_period_us) {
+			PANEL_ATRACE_BEGIN("time_window_wait_crtc");
+			if (vblank_taken || !drm_crtc_vblank_get(crtc)) {
+				drm_crtc_wait_one_vblank(crtc);
+				vblank_taken = true;
+			} else {
+				pr_warn("%s failed to get vblank for ref point.\n", __func__);
+			}
+			PANEL_ATRACE_END("time_window_wait_crtc");
+			continue;
+		}
+
+		if (since_last_te_us <= right) {
+			if (since_last_te_us < left) {
+				u32 delay_us = left - since_last_te_us;
+
+				PANEL_ATRACE_BEGIN("time_window_wait_te_state");
+				usleep_range(delay_us, delay_us + 100);
+				PANEL_ATRACE_END("time_window_wait_te_state");
+				/*
+				 * if a mode switch happens, a TE signal might
+				 * happen during the sleep. need to re-sync
+				 */
+				continue;
+			}
+			break;
+		}
+
+		/* retry in 1ms */
+		usleep_range(USEC_PER_MSEC, USEC_PER_MSEC + 100);
+	} while (--retry > 0);
+
+	if (vblank_taken)
+		drm_crtc_vblank_put(crtc);
+
+	PANEL_ATRACE_END("mipi_time_window");
 }
 
 static void bridge_mode_set_enter_lp_mode(struct gs_panel *ctx, const struct gs_panel_mode *pmode,
@@ -300,7 +579,7 @@ static void bridge_mode_set_normal(struct gs_panel *ctx, const struct gs_panel_m
 	const bool was_lp_mode = old_mode && old_mode->gs_mode.is_lp_mode;
 
 	if ((GS_MIPI_CMD_SYNC_REFRESH_RATE & gs_connector_state->mipi_sync) && old_mode)
-		gs_panel_check_mipi_sync_timing(crtc, old_mode, ctx);
+		gs_panel_wait_for_cmd_tx_window(crtc, old_mode, pmode, ctx);
 	if (!gs_is_local_hbm_disabled(ctx) && ctx->desc->lhbm_desc &&
 	    !ctx->desc->lhbm_desc->no_lhbm_rr_constraints)
 		dev_warn(ctx->dev, "do mode change (`%s`) unexpectedly when LHBM is ON\n",
@@ -330,19 +609,16 @@ static void bridge_mode_set_update_timestamps(struct gs_panel *ctx,
 		return;
 
 	/* save the context in order to predict TE width in
-	 * gs_panel_check_mipi_sync_timing
+	 * gs_panel_wait_for_cmd_tx_window
 	 */
 	ctx->timestamps.last_rr_switch_ts = ktime_get();
 	ctx->te2.last_rr = gs_drm_mode_te_freq(&old_mode->mode);
 	ctx->te2.last_rr_te_gpio_value = gpio_get_value(gs_connector_state->te_gpio);
 	ctx->te2.last_rr_te_counter = drm_crtc_vblank_count(crtc);
-	/* TODO(tknelms)
-	if (funcs && funcs->base && funcs->base->get_te_usec)
-		ctx->te2.last_rr_te_usec =
-			funcs->base->get_te_usec(ctx, old_mode);
+	if (gs_panel_has_func(ctx, get_te_usec))
+		ctx->te2.last_rr_te_usec = ctx->desc->gs_panel_func->get_te_usec(ctx, old_mode);
 	else
 		ctx->te2.last_rr_te_usec = old_mode->gs_mode.te_usec;
-	*/
 	if (come_out_lp_mode)
 		ctx->timestamps.last_lp_exit_ts = ctx->timestamps.last_rr_switch_ts;
 	sysfs_notify(&ctx->dev->kobj, NULL, "refresh_rate");
