@@ -165,7 +165,7 @@ config EXYNOS_CPUPM
 	help
 	Support CPU Power Control for GS SoC.
 
-source "$(KCONFIG_EXT_PREFIX)drivers/soc/google/acpm/Kconfig"
+source "$(KCONFIG_SOC_GS_PREFIX)drivers/soc/google/acpm/Kconfig"
 
 config ACPM_DVFS
 	tristate "ACPM DVFS manager"
@@ -247,25 +247,25 @@ config PERF_TRACE_CTRS
 	help
 	Support perf_trace_counters
 
-source "$(KCONFIG_EXT_PREFIX)drivers/soc/google/gsa/Kconfig"
+source "$(KCONFIG_SOC_GS_PREFIX)drivers/soc/google/gsa/Kconfig"
 
-source "$(KCONFIG_EXT_PREFIX)drivers/soc/google/debug/Kconfig"
+source "$(KCONFIG_SOC_GS_PREFIX)drivers/soc/google/debug/Kconfig"
 
-source "$(KCONFIG_EXT_PREFIX)drivers/soc/google/gnssif_spi/Kconfig"
+source "$(KCONFIG_SOC_GS_PREFIX)drivers/soc/google/gnssif_spi/Kconfig"
 
-source "$(KCONFIG_EXT_PREFIX)drivers/soc/google/debug/Kconfig"
+source "$(KCONFIG_SOC_GS_PREFIX)drivers/soc/google/debug/Kconfig"
 
-source "$(KCONFIG_EXT_PREFIX)drivers/soc/google/eh/Kconfig"
+source "$(KCONFIG_SOC_GS_PREFIX)drivers/soc/google/eh/Kconfig"
 
-source "$(KCONFIG_EXT_PREFIX)drivers/soc/google/gcma/Kconfig"
+source "$(KCONFIG_SOC_GS_PREFIX)drivers/soc/google/gcma/Kconfig"
 
-source "$(KCONFIG_EXT_PREFIX)drivers/soc/google/pa_kill/Kconfig"
+source "$(KCONFIG_SOC_GS_PREFIX)drivers/soc/google/pa_kill/Kconfig"
 
-source "$(KCONFIG_EXT_PREFIX)drivers/soc/google/s2mpu/Kconfig"
+source "$(KCONFIG_SOC_GS_PREFIX)drivers/soc/google/s2mpu/Kconfig"
 
-source "$(KCONFIG_EXT_PREFIX)drivers/soc/google/vh/kernel/Kconfig"
+source "$(KCONFIG_SOC_GS_PREFIX)drivers/soc/google/vh/kernel/Kconfig"
 
-source "$(KCONFIG_EXT_PREFIX)drivers/soc/google/boot_control/Kconfig"
+source "$(KCONFIG_SOC_GS_PREFIX)drivers/soc/google/boot_control/Kconfig"
 
 config HARDLOCKUP_DEBUG
 	tristate "Hardlockup Debugging"
@@ -310,5 +310,12 @@ config RADIO_S5300
 config RADIO_S5400
 	bool "Samsung S5400 Radio"
 	default n
+
+config KERNEL_TOP
+	tristate "Display processes statistic"
+	default n
+	help
+	  This module exposes kernel function for modules to debugging
+	  processes statistic.
 
 endmenu

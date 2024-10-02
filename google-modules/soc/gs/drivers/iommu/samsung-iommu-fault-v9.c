@@ -550,7 +550,7 @@ static void sysmmu_show_secure_fault_information(struct sysmmu_drvdata *drvdata,
 	char err_msg[128];
 
 	pgtable = read_sec_info(MMU_VM_ADDR(sfrbase + REG_MMU_CONTEXT0_CFG_FLPT_BASE_VM, vmid));
-	pgtable <<= PAGE_SHIFT;
+	pgtable <<= PT_BASE_SHIFT;
 
 	info0 = read_sec_info(MMU_VM_ADDR(sfrbase + REG_MMU_FAULT_INFO0_VM, vmid));
 	info1 = read_sec_info(MMU_VM_ADDR(sfrbase + REG_MMU_FAULT_INFO1_VM, vmid));
@@ -579,7 +579,7 @@ static void sysmmu_show_secure_fault_information(struct sysmmu_drvdata *drvdata,
 		MMU_FAULT_INFO1_AXID(info1), MMU_FAULT_INFO2_PMMU_ID(info2),
 		MMU_FAULT_INFO2_STREAM_ID(info2));
 
-	if (!pfn_valid(pgtable >> PAGE_SHIFT)) {
+	if (!pfn_valid(PFN_DOWN(pgtable))) {
 		pr_crit("Page table base is not in a valid memory region\n");
 		pgtable = 0;
 	}
@@ -599,6 +599,10 @@ static void sysmmu_show_secure_fault_information(struct sysmmu_drvdata *drvdata,
 		MMU_VERSION_MAJOR(info0), MMU_VERSION_MINOR(info0), MMU_VERSION_REVISION(info0),
 		read_sec_info(sfrbase + REG_MMU_STATUS));
 
+	pr_crit("MMU_CTRL_VM: %#010x, MMU_CFG_VM: %#010x\n",
+		read_sec_info(MMU_VM_ADDR(sfrbase + REG_MMU_CTRL_VM, vmid)),
+		read_sec_info(MMU_VM_ADDR(sfrbase + REG_MMU_CONTEXT0_CFG_ATTRIBUTE_VM, vmid)));
+
 finish:
 	pr_crit("----------------------------------------------------------\n");
 }
@@ -611,7 +615,7 @@ static void sysmmu_show_fault_info_simple(struct sysmmu_drvdata *drvdata, int in
 
 	pgtable = readl_relaxed(MMU_VM_ADDR(drvdata->sfrbase + REG_MMU_CONTEXT0_CFG_FLPT_BASE_VM,
 					    vmid));
-	pgtable <<= PAGE_SHIFT;
+	pgtable <<= PT_BASE_SHIFT;
 
 	sysmmu_get_fault_msg(drvdata, intr_type, vmid, fault_addr,
 			     false, err_msg, sizeof(err_msg));
@@ -630,7 +634,7 @@ static void sysmmu_show_fault_information(struct sysmmu_drvdata *drvdata, int in
 	for (i = 0; i < MAX_VIDS; i++) {
 		pgtable[i] = readl_relaxed(MMU_VM_ADDR(drvdata->sfrbase +
 						       REG_MMU_CONTEXT0_CFG_FLPT_BASE_VM, i));
-		pgtable[i] <<= PAGE_SHIFT;
+		pgtable[i] <<= PT_BASE_SHIFT;
 	}
 
 	pr_crit("----------------------------------------------------------\n");
@@ -657,7 +661,7 @@ static void sysmmu_show_fault_information(struct sysmmu_drvdata *drvdata, int in
 	if (pgtable[vmid] != drvdata->pgtable[vmid])
 		pr_crit("Page table base of driver: %p\n", &drvdata->pgtable[vmid]);
 
-	if (!pfn_valid(pgtable[vmid] >> PAGE_SHIFT)) {
+	if (!pfn_valid(PFN_DOWN(pgtable[vmid]))) {
 		pr_crit("Page table base is not in a valid memory region\n");
 		pgtable[vmid] = 0;
 	} else {
@@ -807,8 +811,7 @@ irqreturn_t samsung_sysmmu_irq_thread(int irq, void *dev_id)
 	if (vmid)
 		fi.event.fault.event.flags |= IOMMU_FAULT_UNRECOV_PASID_VALID;
 	fi.event.fault.event.reason = reason;
-	if (reason == IOMMU_FAULT_REASON_PTE_FETCH ||
-	    reason == IOMMU_FAULT_REASON_PERMISSION)
+	if (reason == IOMMU_FAULT_REASON_PTE_FETCH)
 		fi.event.fault.type = IOMMU_FAULT_PAGE_REQ;
 
 	ret = iommu_group_for_each_dev(group, &fi,

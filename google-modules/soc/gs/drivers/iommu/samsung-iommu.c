@@ -203,7 +203,7 @@ static inline void __sysmmu_enable_vid(struct sysmmu_drvdata *data, unsigned int
 {
 	u32 ctrl_val;
 
-	writel_relaxed(data->pgtable[vid] / SPAGE_SIZE, MMU_VM_REG(data, IDX_FLPT_BASE, vid));
+	writel_relaxed(data->pgtable[vid] >> PT_BASE_SHIFT, MMU_VM_REG(data, IDX_FLPT_BASE, vid));
 
 	__sysmmu_tlb_invalidate_all(data, vid);
 

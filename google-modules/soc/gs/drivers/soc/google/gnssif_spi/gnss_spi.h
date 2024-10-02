@@ -11,7 +11,7 @@
 #include <linux/mutex.h>
 
 #define DEFAULT_SPI_RX_SIZE	64
-#define MAX_SPI_RX_SIZE		SZ_2K
+#define MAX_SPI_RX_SIZE	SZ_2K
 #define DEFAULT_SPI_TX_SIZE	SZ_4K
 #define SPI_BITS_PER_WORD	32
 

@@ -3,4 +3,4 @@
 # PHY
 #
 
-source "$(KCONFIG_EXT_PREFIX)drivers/phy/samsung/Kconfig"
+source "$(KCONFIG_SOC_GS_PREFIX)drivers/phy/samsung/Kconfig"

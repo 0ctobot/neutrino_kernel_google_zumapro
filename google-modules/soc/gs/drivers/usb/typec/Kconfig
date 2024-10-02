@@ -2,6 +2,6 @@
 
 if TYPEC
 
-source "$(KCONFIG_EXT_PREFIX)drivers/usb/typec/tcpm/Kconfig"
+source "$(KCONFIG_SOC_GS_PREFIX)drivers/usb/typec/tcpm/Kconfig"
 
 endif # TYPEC

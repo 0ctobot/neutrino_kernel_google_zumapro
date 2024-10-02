@@ -14,7 +14,7 @@
 
 #include "include/gnss.h"
 
-#define GNSS_RDY_TIMEOUT	msecs_to_jiffies(1000)
+#define GNSS_RDY_TIMEOUT	msecs_to_jiffies(5000)
 #define ALIGNMENT_4BYTE		4
 
 struct io_device {
@@ -67,7 +67,6 @@ struct gnss_ctl {
 	atomic_t wait_rdy;
 	atomic_t tx_in_progress;
 	atomic_t rx_in_progress;
-	struct notifier_block pm_notifier;
 };
 
 struct gnss_ctl *create_ctl_device(struct platform_device *pdev);

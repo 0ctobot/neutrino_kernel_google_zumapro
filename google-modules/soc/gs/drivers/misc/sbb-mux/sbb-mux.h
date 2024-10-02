@@ -199,7 +199,8 @@ static int sbb_signal_find(const char *name);
  * Setter for signal values. Input values can be 0, 1, or SBB_REFRESH_VALUE.
  * On SBB_REFRESH_VALUE, any GPIOs tracking the signal will have their value
  * refreshed. This is only useful for initialization purposes.
- * Returns 0 on success, -EINVAL on error.
+ * Always returns 0 to indicate successful operation (this function is not
+ * designed to fail).
  * Note: this is an internal function, which does not check that the target
  * signal is within bounds or that it is indeed KERNEL_DRIVEN.
  */
@@ -237,7 +238,7 @@ static ssize_t sbb_signal_value_show(struct kobject *kobj,
  * Callback for writes to a signal's "value" file.
  * Note that only USERLAND_DRIVEN files may be written to. Expected inputs are
  * "0" and "1". Will return -EINVAL if the signal could not be written to (e.g.
- * due to trying to write the signal's current value).
+ * due to trying to write a value other than 0 or 1).
  */
 static ssize_t sbb_signal_value_store(struct kobject *kobj,
 				      struct kobj_attribute *attr,

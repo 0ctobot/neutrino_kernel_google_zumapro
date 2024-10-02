@@ -300,6 +300,14 @@ void exynos_pcie_rc_pcie_phy_config(struct exynos_pcie *exynos_pcie, int ch_num)
 		}
 		 */
 
+		/* set de-emphasis level, 1b'1 = -3.5 dB, 1b'0 = -6 dB */
+		val = readl(exynos_pcie->rc_dbi_base + PCIE_GEN2_CTRL_OFF);
+		if (exynos_pcie->de_emphasis_level)
+			val |= BIT(20);
+		else
+			val &= ~BIT(20);
+		writel(val, exynos_pcie->rc_dbi_base + PCIE_GEN2_CTRL_OFF);
+
 		writel(0x3, phy_base_regs + 0x032C);    //PHY input clock un-gating
 
 		val = readl(udbg_base_regs + 0xC700) | (0x1 << 0);

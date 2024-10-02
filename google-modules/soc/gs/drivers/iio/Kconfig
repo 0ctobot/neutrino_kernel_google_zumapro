@@ -5,6 +5,6 @@
 
 if IIO
 
-source "$(KCONFIG_EXT_PREFIX)drivers/iio/power/Kconfig"
+source "$(KCONFIG_SOC_GS_PREFIX)drivers/iio/power/Kconfig"
 
 endif # IIO

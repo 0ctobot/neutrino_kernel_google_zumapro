@@ -7,14 +7,14 @@ if USB_SUPPORT
 
 if USB
 
-source "$(KCONFIG_EXT_PREFIX)drivers/usb/host/Kconfig"
+source "$(KCONFIG_SOC_GS_PREFIX)drivers/usb/host/Kconfig"
 
 endif
 
-source "$(KCONFIG_EXT_PREFIX)drivers/usb/dwc3/Kconfig"
+source "$(KCONFIG_SOC_GS_PREFIX)drivers/usb/dwc3/Kconfig"
 
-source "$(KCONFIG_EXT_PREFIX)drivers/usb/gadget/Kconfig"
+source "$(KCONFIG_SOC_GS_PREFIX)drivers/usb/gadget/Kconfig"
 
-source "$(KCONFIG_EXT_PREFIX)drivers/usb/typec/Kconfig"
+source "$(KCONFIG_SOC_GS_PREFIX)drivers/usb/typec/Kconfig"
 
 endif # USB_SUPPORT

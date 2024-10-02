@@ -501,7 +501,7 @@ static int mfc_open(struct file *file)
 	ret = mfc_rm_instance_init(dev, ctx);
 	if (ret) {
 		mfc_ctx_err("rm_instance_init failed\n");
-		goto err_drm_start;
+		goto err_inst_init;
 	}
 
 #if IS_ENABLED(CONFIG_VIDEO_EXYNOS_REPEATER)
@@ -524,6 +524,10 @@ static int mfc_open(struct file *file)
 	return ret;
 
 	/* Deinit when failure occured */
+err_inst_init:
+	if (ctx->is_drm)
+		dev->num_drm_inst--;
+
 err_drm_start:
 	call_cop(ctx, cleanup_ctx_ctrls, ctx);
 
@@ -1372,6 +1376,7 @@ static struct platform_driver mfc_driver = {
 };
 
 module_platform_driver(mfc_driver);
+MODULE_SOFTDEP("pre: samsung_iommu");
 MODULE_SOFTDEP("pre: samsung_dma_heap");
 
 MODULE_LICENSE("GPL");

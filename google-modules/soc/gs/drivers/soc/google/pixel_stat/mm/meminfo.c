@@ -32,6 +32,7 @@ void rvh_meminfo_proc_show(void *data, struct seq_file *m)
 	unsigned long sreclaimable, sunreclaim;
 	unsigned long known_pages = 0;
 	unsigned long others_kb = 0;
+	char name[16];
 
 	si_meminfo(&i);
 
@@ -45,7 +46,8 @@ void rvh_meminfo_proc_show(void *data, struct seq_file *m)
 	list_for_each_entry(meminfo, &meminfo_list, list) {
 		unsigned long size = meminfo->size_kb(meminfo->private);
 		others_kb += size;
-		seq_printf(m, "%s: %8lu kB\n", meminfo->name, size);
+		snprintf(name, sizeof(name), "%s:", meminfo->name);
+		seq_printf(m, "%-16s%8lu kB\n", name, size);
 	}
 	mutex_unlock(&meminfo_lock);
 
@@ -59,7 +61,7 @@ void rvh_meminfo_proc_show(void *data, struct seq_file *m)
 			        global_node_page_state(NR_KERNEL_STACK_KB) +
 			        others_kb);
 
-	seq_printf(m, "Misc: %8lu kB\n", misc_kb);
+	seq_printf(m, "Misc:           %8lu kB\n", misc_kb);
 }
 
 void register_meminfo(struct meminfo *info)

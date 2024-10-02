@@ -81,6 +81,7 @@
 #define PARSE_CPU_ID_DATA(x)		(((x) & (0x0F << 20)) >> 20)
 #define PARSE_CPU_SRCATTR_TYPE(x)	(((x) & (0x3 << 27)) >> 27)
 #define PARSE_CPU_SRCATTR_ACCS(x)	(((x) & (0x1 << 29)) >> 29)
+#define PARSE_CPU_WRITE_EVIC(x)		(((x) & (0x1 << 26)) >> 26)
 
 #define AXID(x)				(((x) & (0xFFFFFFFF)))
 #define AXUSER(x, y)			((u64)((x) & (0xFFFFFFFF)) | (((y) & (0xFFFFFFFF)) << 32ULL))
@@ -239,7 +240,7 @@ struct itmon_traceinfo {
 	bool path_dirty;
 	bool dirty;
 	u32 path_type;
-	char buf[SZ_32];
+	char buf[SZ_64];
 	u32 axsize;
 	u32 axlen;
 	u32 axburst;
@@ -942,17 +943,18 @@ static const char *itmon_node_string[4] = {
 };
 
 static const char *itmon_cpu_node_string[5] = {
-	"CLUSTER0_P",
-	"M_CPU",
-	"SCI_IRPM",
-	"SCI_CCM",
 	"BOOKER",
+	"CPU0",
+	"CPU1",
+	"CPU2",
+	"CPU3",
 };
 
-static const char *itmon_cpu_attr_type[3] = {
+static const char *itmon_cpu_attr_type[4] = {
 	"Inst",	/* Instruction */
 	"Data",	/* Data */
 	"PTW",	/* Page table walk */
+	NO_NAME,
 };
 
 static const char *itmon_cpu_attr_accs[2] = {
@@ -1179,7 +1181,7 @@ static int itmon_parse_cpuinfo_by_name(struct itmon_dev *itmon,
 					  "CPU%d%s%s", core_num, el2 == 1 ? "EL2" : "",
 					  strong == 1 ? "Strng" : "");
 			} else {
-				scnprintf(cpu_name, CPU_NAME_LENGTH - 1, "CPU");
+				strscpy(cpu_name, "CPU", CPU_NAME_LENGTH);
 			}
 			return 1;
 		}
@@ -1900,7 +1902,7 @@ static void itmon_post_handler(struct itmon_dev *itmon, bool err)
 
 		pdata->last_errcnt++;
 		if (pdata->last_errcnt > ERR_THRESHOLD) {
-			scnprintf(buf, sizeof(buf), "itmon triggering s2d start");
+			strscpy(buf, "itmon triggering s2d start", sizeof(buf));
 			dbg_snapshot_do_dpm_policy(GO_S2D_ID, buf);
 		}
 	} else {
@@ -2012,6 +2014,41 @@ static void itmon_report_pathinfo(struct itmon_dev *itmon,
 		    det_node->name, itmon_node_string[det_node->type], det_node->err_id);
 }
 
+static void itmon_parse_cpuinfo_data(struct itmon_dev *itmon,
+				     struct itmon_traceinfo *info,
+				     unsigned int userbit)
+{
+	char core_str[SZ_16];
+	const char *cache_str = NO_NAME;
+	int cache_dirty = -1;
+	int write_evict, core_num;
+
+	core_num = PARSE_CPU_ID_DATA(userbit);
+	write_evict = PARSE_CPU_WRITE_EVIC(userbit);
+
+	if (core_num == 0xE) {
+		strscpy(core_str, "ACP request", sizeof(core_str));
+	} else if (core_num == 0xF) {
+		cache_dirty = (!write_evict) ? 1 : 0;
+		strscpy(core_str, "Cache copy back", sizeof(core_str));
+	} else {
+		scnprintf(core_str, sizeof(core_str), "CPU%d", core_num);
+	}
+
+	if (cache_dirty == 1)
+		cache_str = "YES";
+	else if (cache_dirty == 0)
+		cache_str = "NO";
+
+	scnprintf(info->buf, sizeof(info->buf),
+		  "%s, ATTR:[%s][%s], WRITE_EVICT[%d], Cache dirty[%s]",
+		  core_str,
+		  itmon_cpu_attr_type[PARSE_CPU_SRCATTR_TYPE(userbit)],
+		  itmon_cpu_attr_accs[PARSE_CPU_SRCATTR_ACCS(userbit)],
+		  write_evict,
+		  cache_str);
+}
+
 static void itmon_parse_cpuinfo(struct itmon_dev *itmon,
 				struct itmon_tracedata *data,
 				struct itmon_traceinfo *info,
@@ -2019,25 +2056,19 @@ static void itmon_parse_cpuinfo(struct itmon_dev *itmon,
 {
 	struct itmon_platdata *pdata = itmon->pdata;
 	struct itmon_nodeinfo *m_node = data->m_node;
-	int core_num = 0, cpu_attr_type = 0, cpu_attr_accs = 0, i;
+	int core_num = 0, i;
 
 	for (i = 0; i < (int)ARRAY_SIZE(itmon_cpu_node_string); i++) {
 		if (!strncmp(m_node->name, itmon_cpu_node_string[i], strlen(itmon_cpu_node_string[i]))) {
 			if (!pdata->cpu_parsing) {
-				scnprintf(info->buf, sizeof(info->buf), "CPU");
+				strscpy(info->buf, "CPU", sizeof(info->buf));
 				info->client = info->buf;
 			} else if (info->path_type == CONFIG) {
 				core_num = PARSE_CPU_ID_CONFIG(userbit);
 				scnprintf(info->buf, sizeof(info->buf), "CPU%d ", core_num);
 				info->client = info->buf;
 			} else if (info->path_type == DATA && (userbit & BIT(25))) {
-				core_num = PARSE_CPU_ID_DATA(userbit);
-				cpu_attr_type = PARSE_CPU_SRCATTR_TYPE(userbit);
-				cpu_attr_accs = PARSE_CPU_SRCATTR_ACCS(userbit);
-				scnprintf(info->buf, sizeof(info->buf),
-					  "CPU%d, ATTR:[%s][%s]", core_num,
-					  itmon_cpu_attr_type[cpu_attr_type],
-					  itmon_cpu_attr_accs[cpu_attr_accs]);
+				itmon_parse_cpuinfo_data(itmon, info, userbit);
 				info->client = info->buf;
 			}
 			return;

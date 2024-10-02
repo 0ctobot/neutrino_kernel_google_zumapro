@@ -15,7 +15,7 @@
 #include <linux/module.h>
 #include <asm/unaligned.h>
 #include <scsi/scsi_proto.h>
-#include "ufs-pixel.h"
+#include "ufs-exynos-gs.h"
 #include "ufs-pixel-fips.h"
 #include "ufs-pixel-fips_sha256.h"
 
@@ -30,7 +30,7 @@
  * values will be logged to kernel log upon loading.
  */
 #define UFS_PIXEL_FIPS140_MODULE_NAME "UFS Pixel FIPS CMVP Module"
-#define UFS_PIXEL_FIPS140_MODULE_VERSION "1.2.0"
+#define UFS_PIXEL_FIPS140_MODULE_VERSION "1.2.1"
 
 /*
  * As the verification logic will run before GPT data is available, module
@@ -63,6 +63,10 @@ MODULE_PARM_DESC(fips_lu, "FIPS partition LUN");
 #define IO_RETRY_COUNT			(25)
 #define SG_ENTRY_ENCKEY_NUM_WORDS	(8)
 #define SG_ENTRY_TWKEY_NUM_WORDS	(8)
+#define ISE_VERSION_REG_OFFSET		(0x1C)
+#define ISE_VERSION_MAJOR(x)		(((x) >> 16) & 0xFF)
+#define ISE_VERSION_MINOR(x)		(((x) >> 8) & 0xFF)
+#define ISE_VERSION_REVISION(x)		((x) & 0xFF)
 
 struct fips_buffer_info {
 	void *io_buffer;
@@ -486,14 +490,45 @@ static const u8 pixel_fips_encryption_iv[] = {
 	0x63, 0x72, 0x79, 0x70, 0x74, 0x20, 0x49, 0x56, /* "crypt IV" */
 };
 
+static u32 ufs_pixel_fips_get_ise_version(struct ufs_hba *hba)
+{
+	struct exynos_ufs *ufs = to_exynos_ufs(hba);
+	struct ufs_vs_handle *handle = &ufs->handle;
+
+	return readl(handle->ufsp + ISE_VERSION_REG_OFFSET);
+}
+
+static struct ufs_pixel_fips_info fips_info = {
+	.key_delivery_mode = KEY_DELIVERY_HW
+};
+const struct ufs_pixel_fips_info *ufs_pixel_fips_get_info(struct ufs_hba *hba)
+{
+	u32 ise_version = ufs_pixel_fips_get_ise_version(hba);
+
+	fips_info.ise_version_major = ISE_VERSION_MAJOR(ise_version);
+	fips_info.ise_version_minor = ISE_VERSION_MINOR(ise_version);
+	fips_info.ise_version_revision = ISE_VERSION_REVISION(ise_version);
+
+	return &fips_info;
+}
+EXPORT_SYMBOL_GPL(ufs_pixel_fips_get_info);
+
 int ufs_pixel_fips_verify(struct ufs_hba *hba)
 {
 	int ret;
 	u32 interrupts;
 	struct fips_buffer_info bi;
 	const u32 mki = UFS_PIXEL_MASTER_KEY_INDEX;
+	static bool print_ise_version = true;
 
-	ufs_report_ise_version_once(hba);
+	if (print_ise_version) {
+		u32 ise_version = ufs_pixel_fips_get_ise_version(hba);
+		pr_info("ISE HW version  %u.%u.%u\n",
+			 ISE_VERSION_MAJOR(ise_version),
+			 ISE_VERSION_MINOR(ise_version),
+			 ISE_VERSION_REVISION(ise_version));
+		print_ise_version = false;
+	}
 
 	ise_available = 0;
 
@@ -540,6 +575,7 @@ int ufs_pixel_fips_verify(struct ufs_hba *hba)
 	 * Write plaintext with specified crypto parameters, then read raw.
 	 * Compare vs expected ciphertext.
 	 */
+	fips_info.encryption_test_attempted++;
 	memset(bi.io_buffer, 0, UFS_PIXEL_BUFFER_SIZE);
 	memcpy(bi.io_buffer, pixel_fips_encryption_pt,
 	       sizeof(pixel_fips_encryption_pt));
@@ -560,6 +596,8 @@ int ufs_pixel_fips_verify(struct ufs_hba *hba)
 		ret = -EINVAL;
 		goto out;
 	}
+
+	fips_info.encryption_test_passed++;
 	pr_info("Encryption verification passed\n");
 
 	/*
@@ -568,6 +606,7 @@ int ufs_pixel_fips_verify(struct ufs_hba *hba)
 	 * specified crypto parameters.
 	 * Compare vs expected plaintext.
 	 */
+	fips_info.decryption_test_attempted++;
 	memset(bi.io_buffer, 0, UFS_PIXEL_BUFFER_SIZE);
 
 	ret = ufs_pixel_fips_read(hba, &bi, mki, pixel_fips_encryption_iv);
@@ -580,6 +619,8 @@ int ufs_pixel_fips_verify(struct ufs_hba *hba)
 		ret = -EINVAL;
 		goto out;
 	}
+
+	fips_info.decryption_test_passed++;
 	pr_info("Decryption verification passed\n");
 
 out:
@@ -645,6 +686,33 @@ static int __init unapply_text_relocations(void *section, int section_size,
 	return 0;
 }
 
+enum {
+       PACIASP         = 0xd503233f,
+       AUTIASP         = 0xd50323bf,
+       SCS_PUSH        = 0xf800865e,
+       SCS_POP         = 0xf85f8e5e,
+};
+
+/*
+ * To make the integrity check work with dynamic Shadow Call Stack (SCS),
+ * replace all instructions that push or pop from the SCS with the Pointer
+ * Authentication Code (PAC) instructions that were present originally.
+ */
+static void __init unapply_scs_patch(void *section, int section_size)
+{
+#if defined(CONFIG_ARM64) && defined(CONFIG_UNWIND_PATCH_PAC_INTO_SCS)
+       u32 *insns = section;
+       int i;
+
+       for (i = 0; i < section_size / sizeof(insns[0]); i++) {
+               if (insns[i] == SCS_PUSH)
+                       insns[i] = PACIASP;
+               else if (insns[i] == SCS_POP)
+                       insns[i] = AUTIASP;
+       }
+#endif
+}
+
 static const u8 ufs_pixel_fips_hmac_message[] = {
 	0x54, 0x68, 0x69, 0x73, 0x20, 0x69, 0x73, 0x20, /* "This is " */
 	0x61, 0x20, 0x35, 0x38, 0x42, 0x20, 0x6D, 0x65, /* "a 58B me" */
@@ -695,6 +763,7 @@ static int __init ufs_pixel_hmac_self_test(void)
 	u8 hmac_digest[UFS_PIXEL_FIPS_SHA256_DIGEST_SIZE];
 	int ret;
 
+	fips_info.hmac_self_test_attempted++;
 	ufs_pixel_fips_hmac_sha256(ufs_pixel_fips_hmac_message,
 				   sizeof(ufs_pixel_fips_hmac_message),
 				   ufs_pixel_fips_hmac_key,
@@ -704,6 +773,8 @@ static int __init ufs_pixel_hmac_self_test(void)
 	ret = memcmp(hmac_digest, ufs_pixel_fips_hmac_expected,
 		      UFS_PIXEL_FIPS_SHA256_DIGEST_SIZE);
 	memzero_explicit(hmac_digest, sizeof(hmac_digest));
+	if (!ret)
+		fips_info.hmac_self_test_passed++;
 
 	return ret;
 }
@@ -720,6 +791,7 @@ static int __init ufs_pixel_self_integrity_test(void)
 	void *hmac_buffer;
 	int ret;
 
+	fips_info.self_integrity_test_attempted++;
 	text_len = &__fips140_text_end - &__fips140_text_start;
 	rodata_len = &__fips140_rodata_end - &__fips140_rodata_start;
 	hmac_buffer = kmalloc(text_len + rodata_len, GFP_KERNEL);
@@ -737,6 +809,8 @@ static int __init ufs_pixel_self_integrity_test(void)
 		return ret;
 	}
 
+	unapply_scs_patch(hmac_buffer, text_len);
+
 	ufs_pixel_fips_hmac_sha256(hmac_buffer, text_len + rodata_len,
 				   fips140_integ_hmac_key,
 				   strlen(fips140_integ_hmac_key), hmac_digest);
@@ -746,6 +820,8 @@ static int __init ufs_pixel_self_integrity_test(void)
 	ret = memcmp(hmac_digest, fips140_integ_hmac_digest,
 		      UFS_PIXEL_FIPS_SHA256_DIGEST_SIZE);
 	memzero_explicit(hmac_digest, sizeof(hmac_digest));
+	if (!ret)
+		fips_info.self_integrity_test_passed++;
 
 	return ret;
 }

@@ -730,7 +730,10 @@ void s3c2410wdt_print_schedstat(const char *loglvl)
 	if (s3c_wdt[BIG_CLUSTER])
 		print_wd_owner(s3c_wdt[BIG_CLUSTER], loglvl);
 
-	if (!wdt || !wdt->schedstat) {
+	if (!wdt)
+		return;
+
+	if (!wdt->schedstat) {
 		dev_err(wdt->dev, "schedstat is invalid: %s not found",
 				wdt ? "little-wdt.schedstat" : "little-wdt");
 		return;
@@ -1617,7 +1620,6 @@ static int s3c2410wdt_probe(struct platform_device *pdev)
 		dev_err(dev, "Watchdog index property too large.\n");
 		return -EINVAL;
 	}
-	s3c_wdt[cluster_index] = wdt;
 	wdt->cluster = cluster_index;
 
 	wdt->drv_data = s3c2410_get_wdt_drv_data(pdev);
@@ -1865,6 +1867,7 @@ static int s3c2410wdt_probe(struct platform_device *pdev)
 	pr_info("Multistage watchdog %sabled",
 		wdt->use_multistage_wdt ? "en" : "dis");
 
+	s3c_wdt[cluster_index] = wdt;
 	return 0;
 
  err_unregister:

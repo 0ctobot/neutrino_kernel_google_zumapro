@@ -1674,11 +1674,14 @@ static int sugov_kthread_create(struct sugov_policy *sg_policy)
 		return ret;
 	}
 
+	thread->dl.flags = SCHED_FLAG_SUGOV;
 	sg_policy->thread = thread;
-	if (cpumask_weight(policy->related_cpus) == 1)
-		kthread_bind_mask(thread, cpu_possible_mask);
-	else
+
+	if (cpumask_first(policy->related_cpus) < pixel_cluster_start_cpu[1])
 		kthread_bind_mask(thread, policy->related_cpus);
+	else
+		kthread_bind_mask(thread, cpu_possible_mask);
+
 	init_irq_work(&sg_policy->irq_work, sugov_irq_work);
 	mutex_init(&sg_policy->work_lock);
 

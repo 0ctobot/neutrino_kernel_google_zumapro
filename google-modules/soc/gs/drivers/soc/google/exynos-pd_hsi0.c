@@ -164,31 +164,34 @@ static int exynos_pd_hsi0_probe(struct platform_device *pdev)
 	}
 #endif
 
-	hsi0_data->vdd_high = devm_regulator_get_optional(dev, "vdd30");
+#if IS_ENABLED(CONFIG_SOC_GS101) || IS_ENABLED(CONFIG_SOC_GS201)
+	hsi0_data->vdd_high = devm_regulator_get(dev, "vdd30");
+#else
+	hsi0_data->vdd_high = devm_regulator_get(dev, "vdd33");
+#endif
 	if (IS_ERR(hsi0_data->vdd_high)) {
-		hsi0_data->vdd_high = devm_regulator_get(dev, "vdd33");
-		if (IS_ERR(hsi0_data->vdd_high)) {
-			dev_err(dev, "get vdd_high regulator failed: %ld\n", PTR_ERR(hsi0_data->vdd_high));
-			return PTR_ERR(hsi0_data->vdd_high);
-		}
+		dev_err(dev, "get vdd_high regulator failed: %ld\n", PTR_ERR(hsi0_data->vdd_high));
+		return PTR_ERR(hsi0_data->vdd_high);
 	}
 
-	hsi0_data->vdd_medium = devm_regulator_get_optional(dev, "vdd18");
+#if IS_ENABLED(CONFIG_SOC_GS101) || IS_ENABLED(CONFIG_SOC_GS201)
+	hsi0_data->vdd_medium = devm_regulator_get(dev, "vdd18");
+#else
+	hsi0_data->vdd_medium = devm_regulator_get(dev, "vdd12");
+#endif
 	if (IS_ERR(hsi0_data->vdd_medium)) {
-		hsi0_data->vdd_medium = devm_regulator_get(dev, "vdd12");
-		if (IS_ERR(hsi0_data->vdd_medium)) {
-			dev_err(dev, "get vdd_medium regulator failed: %ld\n", PTR_ERR(hsi0_data->vdd_medium));
-			return PTR_ERR(hsi0_data->vdd_medium);
-		}
+		dev_err(dev, "get vdd_medium regulator failed: %ld\n", PTR_ERR(hsi0_data->vdd_medium));
+		return PTR_ERR(hsi0_data->vdd_medium);
 	}
 
-	hsi0_data->vdd_low = devm_regulator_get_optional(dev, "vdd085");
+#if IS_ENABLED(CONFIG_SOC_GS101) || IS_ENABLED(CONFIG_SOC_GS201)
+	hsi0_data->vdd_low = devm_regulator_get(dev, "vdd085");
+#else
+	hsi0_data->vdd_low = devm_regulator_get(dev, "vdd075");
+#endif
 	if (IS_ERR(hsi0_data->vdd_low)) {
-		hsi0_data->vdd_low = devm_regulator_get(dev, "vdd075");
-		if (IS_ERR(hsi0_data->vdd_low)) {
-			dev_err(dev, "get vdd_low regulator failed: %ld\n", PTR_ERR(hsi0_data->vdd_low));
-			return PTR_ERR(hsi0_data->vdd_low);
-		}
+		dev_err(dev, "get vdd_low regulator failed: %ld\n", PTR_ERR(hsi0_data->vdd_low));
+		return PTR_ERR(hsi0_data->vdd_low);
 	}
 
 	/* vote on due to the regulators already turned on */

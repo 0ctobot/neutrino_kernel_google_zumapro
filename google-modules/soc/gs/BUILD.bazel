@@ -27,10 +27,7 @@ filegroup(
     name = "gs_soc.kconfig",
     srcs = glob([
         "**/Kconfig",
-    ]) + [
-        "Kconfig.ext",
-        "Kconfig.ext_modules",
-    ],
+    ]),
     visibility = [
         "//private/devices/google:__subpackages__",
     ],
@@ -44,7 +41,6 @@ filegroup(
     ]),
     visibility = [
         "//private/devices/google:__subpackages__",
-        "//private/google-modules/soc/gs/arch/arm64/boot/dts:__pkg__",
     ],
 )
 

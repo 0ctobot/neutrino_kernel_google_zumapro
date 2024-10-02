@@ -35,13 +35,14 @@ enum gs_perf_cpu_idle_state {
 };
 
 /**
- * gs_counter_type - AMU or PMU
+ * gs_counter_type - AMU or PMU or UNUSED
  *
- * Different CPUs may choose between AMU or PMU
- * for the same event. So, for each event, we store
- * the source monitoring unit.
+ * Different CPUs and platforms may choose between AMU or PMU
+ * for a performance event (or UNUSED). So, for each event,
+ * we store the source monitoring unit.
 */
 enum gs_counter_type {
+	UNUSED, /* Unused Performance Counter. */
 	PMU,	/* Performance Monitoring Unit. */
 	AMU	/* Activity Monitoring Unit. */
 };

@@ -19,6 +19,7 @@
 #include <trace/events/power.h>
 
 #include "gs_governor_utils.h"
+#include "gs_lat_governors_trace.h"
 
 /**
  * struct frequency_vote - Contains configs and voting data.
@@ -165,12 +166,15 @@ static unsigned long gs_governor_memlat_compute_freq(struct gs_cpu_perf_data *cp
 			if (ratio <= ratio_ceil && mem_stall_pct >= mem_stall_floor)
 				mif_freq = gs_governor_core_to_dev_freq(cluster->latency_freq_table,
 									effective_cpu_freq_khz);
-			else
+			else if (cluster->base_freq_table)
 				mif_freq = gs_governor_core_to_dev_freq(cluster->base_freq_table,
 									effective_cpu_freq_khz);
 			/* Keep a running max of the MIF frequency. */
 			if (mif_freq > max_freq)
 				max_freq = mif_freq;
+
+			trace_gs_lat_governor("memlat", cpu, ratio, mem_stall_pct,
+				mif_freq, effective_cpu_freq_khz);
 		early_exit:
 			/* Leave a trace for the cluster desired MIF frequency. */
 			trace_clock_set_rate(trace_name, mif_freq, cpu);

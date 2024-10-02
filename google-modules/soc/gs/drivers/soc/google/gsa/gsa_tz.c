@@ -144,7 +144,7 @@ reconnect:
 	}
 
 	/* copy in request */
-	memcpy(mb_put_data(txbuf, req_len), req, sizeof(req_len));
+	memcpy(mb_put_data(txbuf, req_len), req, req_len);
 
 	/* attach buffer to store response */
 	mutex_lock(&ctx->rsp_lock);
@@ -211,6 +211,7 @@ err_connect:
 	mutex_unlock(&ctx->req_lock);
 	return rc;
 }
+EXPORT_SYMBOL_GPL(gsa_tz_chan_msg_xchg);
 
 void gsa_tz_chan_close(struct gsa_tz_chan_ctx *ctx)
 {
@@ -218,6 +219,7 @@ void gsa_tz_chan_close(struct gsa_tz_chan_ctx *ctx)
 	gsa_tz_chan_close_locked(ctx);
 	mutex_unlock(&ctx->req_lock);
 }
+EXPORT_SYMBOL_GPL(gsa_tz_chan_close);
 
 void gsa_tz_chan_ctx_init(struct gsa_tz_chan_ctx *ctx, const char *port,
 			  struct device *dev)
@@ -231,3 +233,4 @@ void gsa_tz_chan_ctx_init(struct gsa_tz_chan_ctx *ctx, const char *port,
 	ctx->rsp_buf_size = 0;
 	ctx->rsp_res = 0;
 }
+EXPORT_SYMBOL_GPL(gsa_tz_chan_ctx_init);

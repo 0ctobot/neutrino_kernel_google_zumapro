@@ -119,6 +119,7 @@ static ssize_t misc_write(struct file *filp, const char __user *data,
 	buff = kzalloc(roundup(count, ALIGNMENT_4BYTE), GFP_KERNEL);
 	if (!buff)
 		return -ENOMEM;
+
 	if (copy_from_user(buff, data, count)) {
 		gif_err("%s->%s: ERR! copy_from_user fail (count %ld)\n",
 			iod->name, ld->name, count);

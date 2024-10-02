@@ -252,7 +252,7 @@ static enum hrtimer_restart ehld_value_raw_hrtimer_fn(struct hrtimer *hrtimer)
 	}
 
 	if (!ehld_main.dbgc.enabled) {
-		ehld_err(1, "@%s: cpu%u, dbgc is not enabled, re-start\n",
+		ehld_debug(1, "@%s: cpu%u, dbgc is not enabled, re-start\n",
 								__func__, cpu);
 		hrtimer_forward_now(hrtimer, ns_to_ktime(NSEC_PER_SEC / 2));
 		return HRTIMER_RESTART;

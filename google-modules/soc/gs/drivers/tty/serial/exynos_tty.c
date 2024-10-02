@@ -527,6 +527,22 @@ uart_dbg_store(struct device *dev, struct device_attribute *attr,
 				ourport->port.line);
 			ourport->dbg_mode = 0;
 			break;
+		case 6:
+			if (!ourport->uart_logging) {
+				dev_info(dev, "enable uart logging ...\n");
+				ourport->uart_logging = 1;
+			} else {
+				dev_warn(dev, "not effect, uart logging already enabled\n");
+			}
+			break;
+		case 7:
+			if (ourport->uart_logging) {
+				dev_info(dev, "disable uart logging ...\n");
+				ourport->uart_logging = 0;
+			} else {
+				dev_warn(dev, "not effect, uart logging already disabled\n");
+			}
+			break;
 		case 8:
 			if (ourport->ioctl_support) {
 				dev_err(dev, "skip exynos_serial suspend/resume\n");

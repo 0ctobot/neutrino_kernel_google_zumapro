@@ -51,6 +51,7 @@ struct gs101_spmic_thermal_chip {
 	struct kobject *kobjs[GTHERM_CHAN_NUM];
 	struct kthread_worker *wq;
 	struct kthread_delayed_work wait_sensor_work;
+	bool sensors_ready;
 };
 
 /**
@@ -175,6 +176,9 @@ static int gs101_spmic_thermal_get_temp(struct thermal_zone_device *tz,
 	int raw, ret = 0;
 	u8 mask = 0x1;
 
+	if (!gs101_spmic_thermal->sensors_ready)
+		return -EAGAIN;
+
 	emul_temp = s->emul_temperature;
 	if (emul_temp) {
 		*temp = emul_temp;
@@ -211,6 +215,9 @@ static int gs101_spmic_thermal_set_trips(struct thermal_zone_device *tz,
 	int emul_temp, low_volt, ret = 0;
 	u8 raw;
 
+	if (!gs101_spmic_thermal->sensors_ready)
+		return -EAGAIN;
+
 	/* Set threshold to extreme value when emul_temp set */
 	emul_temp = s->emul_temperature;
 	if (emul_temp) {
@@ -242,6 +249,9 @@ static int gs101_spmic_thermal_set_hot_trip(struct gs101_spmic_thermal_sensor *s
 	u8 raw = gs101_map_temp_volt(temp) >> 4 & 0xFF;
 	struct device *dev = gs101_spmic_thermal->dev;
 
+	if (!gs101_spmic_thermal->sensors_ready)
+		return -EAGAIN;
+
 	if (temp == THERMAL_TEMP_INVALID)
 		return -EINVAL;
 	ret = s2mpg11_write_reg(gs101_spmic_thermal->i2c, S2MPG11_METER_NTC_H_WARN0 + s->adc_chan,
@@ -261,6 +271,9 @@ static int gs101_spmic_thermal_set_trip_temp(struct thermal_zone_device *tz,
 	struct gs101_spmic_thermal_sensor *s = tz->devdata;
 	const struct thermal_trip *trip_points;
 	int ret = 0;
+
+	if (!s->chip->sensors_ready)
+		return -EAGAIN;
 
 	trip_points = of_thermal_get_trip_points(s->tzd);
 	if (!trip_points)
@@ -284,6 +297,9 @@ static int gs101_spmic_thermal_set_emul_temp(struct thermal_zone_device *tz,
 	struct gs101_spmic_thermal_sensor *sensor = tz->devdata;
 	int ret;
 	u8 value, mask = 0x1;
+
+	if (!sensor->chip->sensors_ready)
+		return -EAGAIN;
 
 	if (sensor->chip->adc_chan_en & (mask << sensor->adc_chan)) {
 		ret = s2mpg11_read_reg(sensor->chip->i2c, S2MPG11_METER_CTRL3, &value);
@@ -379,12 +395,13 @@ static void gs101_spmic_thermal_wait_sensor(struct kthread_work *work)
 			dev_info(dev, "Sensor %d not ready, retry...\n", i);
 			msleep(SENSOR_WAIT_SLEEP_MS);
 		}
+
 		if (j < 0)
 			dev_warn(dev, "Sensor %d timeout, give up...\n", i);
 
-		thermal_zone_device_update(gs101_spmic_thermal->sensor[i].tzd,
-					   THERMAL_EVENT_UNSPECIFIED);
+		thermal_zone_device_enable(gs101_spmic_thermal->sensor[i].tzd);
 	}
+	gs101_spmic_thermal->sensors_ready = true;
 }
 
 /*
@@ -395,11 +412,10 @@ static int gs101_spmic_thermal_register_tzd(struct gs101_spmic_thermal_chip *gs1
 	unsigned int i;
 	struct thermal_zone_device *tzd;
 	struct device *dev = gs101_spmic_thermal->dev;
-	u8 mask = 0x1;
 	int temp;
 	int ret = 0;
 
-	for (i = 0; i < GTHERM_CHAN_NUM; i++, mask <<= 1) {
+	for (i = 0; i < GTHERM_CHAN_NUM; i++) {
 		dev_info(dev, "Registering channel %u\n", i);
 		tzd = devm_thermal_of_zone_register(gs101_spmic_thermal->dev,
 						    i,
@@ -413,10 +429,11 @@ static int gs101_spmic_thermal_register_tzd(struct gs101_spmic_thermal_chip *gs1
 			continue;
 		}
 		gs101_spmic_thermal->sensor[i].tzd = tzd;
-		if (gs101_spmic_thermal->adc_chan_en & mask)
-			thermal_zone_device_enable(tzd);
-		else
-			thermal_zone_device_disable(tzd);
+		/*
+		 * Disable thermal zone until we have other resources ready like
+		 * interrupt, stats, etc.
+		 */
+		thermal_zone_device_disable(tzd);
 		gs101_spmic_thermal->kobjs[i] =
 			kobject_create_and_add("adc_channel", &tzd->device.kobj);
 		ret = sysfs_create_file(gs101_spmic_thermal->kobjs[i], &channel_temp_attr.attr);
@@ -566,6 +583,9 @@ adc_chan_en_show(struct device *dev, struct device_attribute *devattr,
 	int ret;
 	u8 value;
 
+	if (!chip->sensors_ready)
+		return -EAGAIN;
+
 	ret = s2mpg11_read_reg(chip->i2c, S2MPG11_METER_CTRL3, &value);
 
 	return ret ? ret : scnprintf(buf, PAGE_SIZE, "0x%02X\n", value);
@@ -579,6 +599,9 @@ adc_chan_en_store(struct device *dev, struct device_attribute *devattr,
 	struct platform_device *pdev = to_platform_device(dev);
 	struct gs101_spmic_thermal_chip *chip = platform_get_drvdata(pdev);
 	u8 value, mask = 0x1;
+
+	if (!chip->sensors_ready)
+		return -EAGAIN;
 
 	ret = sscanf(buf, "%hhx", &value);
 	if (ret != 1)

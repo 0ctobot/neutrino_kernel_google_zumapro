@@ -1330,6 +1330,24 @@ static int dwc3_exynos_runtime_resume(struct device *dev)
 	pm_runtime_mark_last_busy(dev);
 	return 0;
 }
+
+static int dwc3_exynos_runtime_idle(struct device *dev)
+{
+#if IS_ENABLED(CONFIG_EXYNOS_PD_HSI0)
+	struct dwc3_exynos *exynos = dev_get_drvdata(dev);
+	u32 reg;
+
+	if (exynos->dwc && exynos_pd_hsi0_get_ldo_status()) {
+		reg = dwc3_exynos_readl(exynos->dwc->regs, DWC3_DALEPENA);
+		if (reg)
+			return -EBUSY;
+	}
+#endif
+
+	pm_runtime_mark_last_busy(dev);
+
+	return 0;
+}
 #endif
 
 #ifdef CONFIG_PM_SLEEP
@@ -1366,7 +1384,7 @@ static int dwc3_exynos_resume(struct device *dev)
 static const struct dev_pm_ops dwc3_exynos_dev_pm_ops = {
 	SET_SYSTEM_SLEEP_PM_OPS(dwc3_exynos_suspend, dwc3_exynos_resume)
 	SET_RUNTIME_PM_OPS(dwc3_exynos_runtime_suspend,
-			   dwc3_exynos_runtime_resume, NULL)
+			   dwc3_exynos_runtime_resume, dwc3_exynos_runtime_idle)
 };
 
 #define DEV_PM_OPS	(&dwc3_exynos_dev_pm_ops)

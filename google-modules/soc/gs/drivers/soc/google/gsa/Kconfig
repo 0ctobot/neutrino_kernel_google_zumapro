@@ -14,3 +14,8 @@ config GSA_GSC
 	tristate "GSC Proxy"
 	depends on GSA
 	default n
+
+config TZ_PROT
+	tristate "TZ Prot"
+	depends on GSA
+	default n

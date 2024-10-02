@@ -5,7 +5,7 @@
 
 if INPUT_MISC
 
-source "$(KCONFIG_EXT_PREFIX)drivers/input/misc/vl53l1/Kconfig"
+source "$(KCONFIG_SOC_GS_PREFIX)drivers/input/misc/vl53l1/Kconfig"
 
 endif
 

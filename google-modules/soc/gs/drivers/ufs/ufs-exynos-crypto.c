@@ -156,8 +156,6 @@ void pixel_ufs_crypto_resume(struct ufs_hba *hba)
 			ret);
 }
 
-
-#if !IS_ENABLED(CONFIG_SCSI_UFS_PIXEL_FIPS140)
 /* Configure inline encryption (or decryption) on requests that require it. */
 static void pixel_ufs_crypto_fill_prdt(void *unused, struct ufs_hba *hba,
 				       struct ufshcd_lrb *lrbp,
@@ -210,18 +208,11 @@ static void pixel_ufs_crypto_fill_prdt(void *unused, struct ufs_hba *hba,
 	lrbp->crypto_key_slot = -1;
 }
 
-static int pixel_ufs_register_fips_self_test(void)
-{
-	return 0;
-}
-
 static int pixel_ufs_register_fill_prdt(void)
 {
 	return register_trace_android_vh_ufs_fill_prdt(
 				pixel_ufs_crypto_fill_prdt, NULL);
 }
-
-#else
 
 static void pixel_ufs_ise_self_test(void *data, struct ufs_hba *hba)
 {
@@ -250,16 +241,10 @@ static int pixel_ufs_register_fips_self_test(void)
 		pixel_ufs_ise_self_test, NULL);
 }
 
-static int pixel_ufs_register_fill_prdt(void)
-{
-	return 0;
-}
-
-#endif
-
 static int exynos_crypto_init(struct ufs_hba *hba)
 {
 	int err;
+	bool register_fips_module;
 
 	/* Override the PRDT entry size to include the extra crypto fields. */
 	hba->sg_entry_size = sizeof(struct pixel_ufs_prdt_entry);
@@ -268,15 +253,24 @@ static int exynos_crypto_init(struct ufs_hba *hba)
 	if (err)
 		return err;
 
-	err = pixel_ufs_register_fill_prdt();
-	if (err)
-		return err;
+	/*
+	 * GS101 FIPS 140 module does not support HW delivered keys. Do not
+	 * register the module on GS101.
+	 */
+#if IS_ENABLED(CONFIG_SCSI_UFS_PIXEL_FIPS140) && !IS_ENABLED(CONFIG_SOC_GS101)
+	register_fips_module = true;
+#else
+	register_fips_module = false;
+#endif
 
-	err = pixel_ufs_register_fips_self_test();
-	if (err)
-		return err;
+	/* The FIPS 140 module will register internal fill prdt function. */
+	if (register_fips_module) {
+		err = pixel_ufs_register_fips_self_test();
+	} else {
+		err = pixel_ufs_register_fill_prdt();
+	}
 
-	return 0;
+	return err;
 }
 
 const struct pixel_crypto_ops exynos_crypto_ops = {

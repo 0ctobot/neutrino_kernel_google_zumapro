@@ -7,7 +7,7 @@ if INPUT
 
 config INPUT_KEYDEBUG
 	tristate "Long Press Key Debugging"
-	depends on INPUT
+	depends on INPUT && KERNEL_TOP
 	select INPUT_KEYCOMBO
 	help
 	  Say Y here if you want to hook debug function to dump information
@@ -20,11 +20,11 @@ config INPUT_KEYCOMBO
 	  Say Y here if you want to take action when some keys are pressed;
 
 
-source "$(KCONFIG_EXT_PREFIX)drivers/input/misc/Kconfig"
+source "$(KCONFIG_SOC_GS_PREFIX)drivers/input/misc/Kconfig"
 
-source "$(KCONFIG_EXT_PREFIX)drivers/input/fingerprint/Kconfig"
+source "$(KCONFIG_SOC_GS_PREFIX)drivers/input/fingerprint/Kconfig"
 
-source "$(KCONFIG_EXT_PREFIX)drivers/input/keyboard/Kconfig"
+source "$(KCONFIG_SOC_GS_PREFIX)drivers/input/keyboard/Kconfig"
 
 endif
 

@@ -5,7 +5,7 @@ if V4L_PLATFORM_DRIVERS
 #
 # Platform multimedia device configuration
 #
-source "$(KCONFIG_EXT_PREFIX)drivers/media/platform/exynos/Kconfig"
+source "$(KCONFIG_SOC_GS_PREFIX)drivers/media/platform/exynos/Kconfig"
 
 endif # V4L_PLATFORM_DRIVERS
 

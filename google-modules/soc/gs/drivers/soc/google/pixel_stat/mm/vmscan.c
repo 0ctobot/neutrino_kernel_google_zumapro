@@ -12,6 +12,7 @@
 #include <linux/slab.h>
 #include <linux/sched.h>
 #include <linux/jiffies.h>
+#include <linux/pagemap.h>
 #include "../../vh/include/sched.h"
 
 #define OOM_SCORE_ADJ_NATIVE -1
@@ -98,6 +99,49 @@ void vh_direct_reclaim_end(void *data, unsigned long nr_reclaimed)
 	stat->total_count++;
 	stat->total_time += delta;
 	spin_unlock(&stat->lock);
+}
+
+struct vendor_madvise_walk_private {
+	struct list_head ret_list;
+};
+
+void rvh_madvise_pageout_begin(void *data, void **private)
+{
+	struct vendor_madvise_walk_private *vendor_private;
+
+	vendor_private = kmalloc(sizeof(struct vendor_madvise_walk_private), GFP_KERNEL);
+	if (vendor_private)
+		INIT_LIST_HEAD(&vendor_private->ret_list);
+	*private = vendor_private;
+}
+
+void rvh_madvise_pageout_end(void *data, void *private, struct list_head *folio_list)
+{
+	struct vendor_madvise_walk_private *vendor_private = (struct vendor_madvise_walk_private *)private;
+
+	if (!vendor_private)
+		return;
+
+	while (!list_empty(&vendor_private->ret_list)) {
+		struct page *page;
+
+		page = lru_to_page(&vendor_private->ret_list);
+		wait_on_page_writeback(page);
+		list_move(&page->lru, folio_list);
+	}
+
+	kfree(vendor_private);
+}
+
+void rvh_reclaim_folio_list(void *data, struct list_head *folio_list, void *private)
+{
+	struct vendor_madvise_walk_private *vendor_private;
+
+	if (!private)
+		return;
+
+	 vendor_private = private;
+	 list_splice(folio_list, &vendor_private->ret_list);
 }
 
 #define DIRECT_RECLAIM_ATTR_RO(_name) \

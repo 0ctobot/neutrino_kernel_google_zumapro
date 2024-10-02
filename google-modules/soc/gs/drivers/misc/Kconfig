@@ -24,6 +24,6 @@ config ACCESS_RAMOOPS
 	  To compile this driver as a module, choose M here: the module will be
 	  called access_ramoops.
 
-source "$(KCONFIG_EXT_PREFIX)drivers/misc/s5910/Kconfig"
-source "$(KCONFIG_EXT_PREFIX)drivers/misc/sscoredump/Kconfig"
-source "$(KCONFIG_EXT_PREFIX)drivers/misc/sbb-mux/Kconfig"
+source "$(KCONFIG_SOC_GS_PREFIX)drivers/misc/s5910/Kconfig"
+source "$(KCONFIG_SOC_GS_PREFIX)drivers/misc/sscoredump/Kconfig"
+source "$(KCONFIG_SOC_GS_PREFIX)drivers/misc/sbb-mux/Kconfig"

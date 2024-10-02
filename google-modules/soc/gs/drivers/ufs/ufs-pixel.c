@@ -12,6 +12,9 @@
 #include <misc/sbbm.h>
 #include "ufs-pixel.h"
 #include "ufs-pixel-crypto.h"
+#if IS_ENABLED(CONFIG_SCSI_UFS_PIXEL_FIPS140)
+#include "ufs-pixel-fips.h"
+#endif
 
 #define CREATE_TRACE_POINTS
 #include <trace/events/ufs_pixel.h>
@@ -1228,6 +1231,84 @@ SLOWIO_ATTR_RW(write, PIXEL_SLOWIO_WRITE);
 SLOWIO_ATTR_RW(unmap, PIXEL_SLOWIO_UNMAP);
 SLOWIO_ATTR_RW(sync, PIXEL_SLOWIO_SYNC);
 
+#if IS_ENABLED(CONFIG_SCSI_UFS_PIXEL_FIPS140)
+#define PIXEL_FIPS_STATS_ATTR(_name)	\
+static ssize_t _name##_show(struct device *dev,				\
+	struct device_attribute *attr, char *buf)			\
+{									\
+	struct ufs_hba *hba = dev_get_drvdata(dev);			\
+	const struct ufs_pixel_fips_info *fips_info;			\
+									\
+	pm_runtime_get_sync(hba->dev);					\
+	fips_info = ufs_pixel_fips_get_info(hba);			\
+	pm_runtime_put_sync(hba->dev);					\
+									\
+	return sprintf(buf, "%u\n", fips_info->_name);			\
+}									\
+static DEVICE_ATTR_RO(_name)
+
+PIXEL_FIPS_STATS_ATTR(hmac_self_test_attempted);
+PIXEL_FIPS_STATS_ATTR(hmac_self_test_passed);
+PIXEL_FIPS_STATS_ATTR(self_integrity_test_attempted);
+PIXEL_FIPS_STATS_ATTR(self_integrity_test_passed);
+PIXEL_FIPS_STATS_ATTR(encryption_test_attempted);
+PIXEL_FIPS_STATS_ATTR(encryption_test_passed);
+PIXEL_FIPS_STATS_ATTR(decryption_test_attempted);
+PIXEL_FIPS_STATS_ATTR(decryption_test_passed);
+
+static ssize_t ise_version_show(struct device *dev,
+				struct device_attribute *attr, char *buf)
+{
+	struct ufs_hba *hba = dev_get_drvdata(dev);
+	const struct ufs_pixel_fips_info *fips_info;
+
+	pm_runtime_get_sync(hba->dev);
+	fips_info = ufs_pixel_fips_get_info(hba);
+	pm_runtime_put_sync(hba->dev);
+
+	return sprintf(buf, "%u.%u.%u\n",
+		       fips_info->ise_version_major,
+		       fips_info->ise_version_minor,
+		       fips_info->ise_version_revision);
+}
+static DEVICE_ATTR_RO(ise_version);
+
+static ssize_t key_delivery_mode_show(struct device *dev,
+				struct device_attribute *attr, char *buf)
+{
+	struct ufs_hba *hba = dev_get_drvdata(dev);
+	const struct ufs_pixel_fips_info *fips_info;
+
+	pm_runtime_get_sync(hba->dev);
+	fips_info = ufs_pixel_fips_get_info(hba);
+	pm_runtime_put_sync(hba->dev);
+
+	return sprintf(buf, "%s\n",
+		       fips_info->key_delivery_mode == KEY_DELIVERY_SW ?
+		       "software" : "hardware");
+}
+static DEVICE_ATTR_RO(key_delivery_mode);
+
+static struct attribute *pixel_sysfs_fips[] = {
+	&dev_attr_hmac_self_test_attempted.attr,
+	&dev_attr_hmac_self_test_passed.attr,
+	&dev_attr_self_integrity_test_attempted.attr,
+	&dev_attr_self_integrity_test_passed.attr,
+	&dev_attr_encryption_test_attempted.attr,
+	&dev_attr_encryption_test_passed.attr,
+	&dev_attr_decryption_test_attempted.attr,
+	&dev_attr_decryption_test_passed.attr,
+	&dev_attr_ise_version.attr,
+	&dev_attr_key_delivery_mode.attr,
+	NULL,
+};
+
+static const struct attribute_group pixel_sysfs_fips_group = {
+	.name = "fips",
+	.attrs = pixel_sysfs_fips,
+};
+#endif
+
 static struct attribute *pixel_sysfs_ufshcd_attrs[] = {
 	&dev_attr_vendor.attr,
 	&dev_attr_model.attr,
@@ -1882,6 +1963,9 @@ static const struct attribute_group *pixel_ufs_sysfs_groups[] = {
 	&pixel_sysfs_hc_register_ifc_group,
 	&pixel_sysfs_power_info_group,
 	&pixel_sysfs_power_stats_group,
+#if IS_ENABLED(CONFIG_SCSI_UFS_PIXEL_FIPS140)
+	&pixel_sysfs_fips_group,
+#endif
 	NULL,
 };
 

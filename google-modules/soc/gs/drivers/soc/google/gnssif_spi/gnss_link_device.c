@@ -77,7 +77,7 @@ static void rx_work(struct work_struct *ws)
 	struct gnss_ctl *gc = ld->gc;
 	struct io_device *iod = ld->iod;
 	struct sk_buff *skb = NULL;
-	char *buff;
+	char *buff = NULL;
 	unsigned int len = ld->spi_rx_size;
 	unsigned int max_len = ld->max_spi_rx_size;
 	unsigned int iter = 0;
@@ -100,6 +100,7 @@ static void rx_work(struct work_struct *ws)
 				goto exit;
 			}
 		}
+
 		buff = skb_put(skb, len);
 		ret = gnss_spi_recv(buff, len);
 		if (ret) {
@@ -117,9 +118,12 @@ static void rx_work(struct work_struct *ws)
 			iod->recv_betp(iod, ld, skb);
 			skb = NULL;	/* skb to be freed by gnss iod*/
 			iter = 0;
+
 			if (atomic_read(&gc->wait_rdy) == 1) {
 				atomic_set(&gc->wait_rdy, 0);
 				complete_all(&gc->gnss_rdy_cmpl);
+				gif_debug("TX request while Rx is in-progress\n");
+
 				while (atomic_read(&gc->tx_in_progress) == 1)
 					udelay(10);
 			}
@@ -130,6 +134,7 @@ static void rx_work(struct work_struct *ws)
 		pr_buffer("RX", skb->data, skb->len, skb->len);
 		gif_debug("Received %d(%d * %d) bytes data from kepler.\n",
 				skb->len, len, iter);
+
 		iod->recv_betp(iod, ld, skb);
 	}
 exit:
@@ -224,10 +229,11 @@ struct link_device *create_link_device(struct platform_device *pdev)
 	ld->name = "GNSS_LINK_DEVICE";
 	ld->send = send_betp;
 	ld->spi_rx_size = DEFAULT_SPI_RX_SIZE;
+	ld->max_spi_rx_size = MAX_SPI_RX_SIZE;
 	ld->spi_tx_size = DEFAULT_SPI_TX_SIZE;
 
 	ld->rx_wq = alloc_workqueue("gnss_spi_wq",
-					__WQ_LEGACY | WQ_MEM_RECLAIM | WQ_UNBOUND | WQ_HIGHPRI, 1);
+					__WQ_LEGACY | WQ_MEM_RECLAIM | WQ_UNBOUND, 1);
 	if (!ld->rx_wq) {
 		gif_err("alloc_workqueue() error\n");
 		goto exit;

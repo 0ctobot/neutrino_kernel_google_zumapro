@@ -252,12 +252,12 @@ static inline void __sysmmu_enable_vid(struct sysmmu_drvdata *data, unsigned int
 {
 	u32 ctrl_val;
 
-	writel_relaxed(data->pgtable[vid] / SPAGE_SIZE,
+	writel_relaxed(data->pgtable[vid] >> PT_BASE_SHIFT,
 		       MMU_VM_ADDR(data->sfrbase + REG_MMU_CONTEXT0_CFG_FLPT_BASE_VM, vid));
+	__sysmmu_init_config_attribute(data, vid);
 	ctrl_val = readl_relaxed(MMU_VM_ADDR(data->sfrbase + REG_MMU_CTRL_VM, vid));
 	ctrl_val |= MMU_CTRL_ENABLE;
 	writel_relaxed(ctrl_val, MMU_VM_ADDR(data->sfrbase + REG_MMU_CTRL_VM, vid));
-	__sysmmu_init_config_attribute(data, vid);
 	__sysmmu_invalidate_all_vid(data, vid);
 }
 
@@ -265,11 +265,11 @@ static inline void __sysmmu_enable(struct sysmmu_drvdata *data)
 {
 	unsigned int vid;
 
-	__sysmmu_modify_bits_all_vm(data, MMU_CTRL_ENABLE, MMU_CTRL_ENABLE,
-				    data->sfrbase + REG_MMU_CTRL_VM);
-	__sysmmu_write_all_vm(data, data->pgtable[0] / SPAGE_SIZE,
+	__sysmmu_write_all_vm(data, data->pgtable[0] >> PT_BASE_SHIFT,
 			      data->sfrbase + REG_MMU_CONTEXT0_CFG_FLPT_BASE_VM);
 	__sysmmu_init_config(data);
+	__sysmmu_modify_bits_all_vm(data, MMU_CTRL_ENABLE, MMU_CTRL_ENABLE,
+				    data->sfrbase + REG_MMU_CTRL_VM);
 	__sysmmu_invalidate_all(data);
 
 	for (vid = 1; vid < MAX_VIDS; vid++) {
@@ -551,7 +551,8 @@ static sysmmu_pte_t *alloc_lv2entry(struct samsung_sysmmu_domain *domain,
 				    atomic_t *pgcounter)
 {
 	if (lv1ent_section(sent)) {
-		WARN(1, "trying mapping on %#011llx mapped with 1MiB page", iova);
+		WARN(1, "trying to map on %#011llx mapped with 1MiB page. FLPD: %#010lx", iova,
+		     (unsigned long)*sent);
 		return ERR_PTR(-EADDRINUSE);
 	}
 
@@ -594,13 +595,17 @@ static int lv1set_section(struct samsung_sysmmu_domain *domain,
 	sysmmu_pte_t *pent_to_free = NULL;
 
 	if (lv1ent_section(sent)) {
-		WARN(1, "Trying mapping 1MB@%#011llx on valid FLPD", iova);
+		WARN(1, "Trying to map 1MB@%#011llx on valid FLPD %#010lx", iova,
+		     (unsigned long)*sent);
 		return -EADDRINUSE;
 	}
 
 	if (lv1ent_page(sent)) {
-		if (WARN_ON(atomic_read(pgcnt) != 0)) {
-			WARN(1, "Trying mapping 1MB@%#011llx on valid SLPD", iova);
+		int cnt = atomic_read(pgcnt);
+
+		if (unlikely(cnt != 0)) {
+			WARN(1, "Trying to map 1MB@%#011llx on valid SLPT %#010lx. pgcnt: %d", iova,
+			     (unsigned long)*sent, cnt);
 			return -EADDRINUSE;
 		}
 
@@ -632,8 +637,8 @@ static int lv1set_section(struct samsung_sysmmu_domain *domain,
 	return 0;
 }
 
-static int lv2set_page(struct samsung_sysmmu_domain *domain, sysmmu_pte_t *pent, phys_addr_t paddr,
-		       size_t size, int prot, atomic_t *pgcnt)
+static int lv2set_page(struct samsung_sysmmu_domain *domain, sysmmu_iova_t iova, sysmmu_pte_t *pent,
+		       phys_addr_t paddr, size_t size, int prot, atomic_t *pgcnt)
 {
 	int attr = !!(prot & IOMMU_CACHE) ? SLPD_SHAREABLE_FLAG : 0;
 
@@ -646,8 +651,14 @@ static int lv2set_page(struct samsung_sysmmu_domain *domain, sysmmu_pte_t *pent,
 		attr |= SLPD_AP_WRITE;
 
 	if (size == SPAGE_SIZE) {
-		if (WARN_ON(!lv2ent_unmapped(pent)))
+		if (unlikely(!lv2ent_unmapped(pent))) {
+			int cnt = atomic_read(pgcnt);
+
+			WARN(1,
+			     "Trying to map 4KB@%#011llx on valid SLPD %#010lx. Requested pa: %pap. pgcnt: %d",
+			     iova, (unsigned long)*pent, &paddr, cnt);
 			return -EADDRINUSE;
+		}
 
 		*pent = make_sysmmu_pte(paddr, SPAGE_FLAG, attr);
 		atomic_inc(pgcnt);
@@ -655,7 +666,12 @@ static int lv2set_page(struct samsung_sysmmu_domain *domain, sysmmu_pte_t *pent,
 		unsigned long i;
 
 		for (i = 0; i < SPAGES_PER_LPAGE; i++, pent++) {
-			if (WARN_ON(!lv2ent_unmapped(pent))) {
+			if (unlikely(!lv2ent_unmapped(pent))) {
+				int cnt = atomic_read(pgcnt);
+
+				WARN(1,
+				     "Trying to map 64KB@%#011llx on valid SLPD %#010lx. Requested pa: %pap. pgcnt: %d. i: %ld",
+				     iova + i * SPAGE_SIZE, (unsigned long)*pent, &paddr, cnt, i);
 				clear_page_table(pent - i, i);
 				return -EADDRINUSE;
 			}
@@ -693,7 +709,7 @@ static int samsung_sysmmu_map(struct iommu_domain *dom, unsigned long l_iova, ph
 		if (IS_ERR(pent))
 			ret = PTR_ERR(pent);
 		else
-			ret = lv2set_page(domain, pent, paddr, size, prot, lv2entcnt);
+			ret = lv2set_page(domain, iova, pent, paddr, size, prot, lv2entcnt);
 	}
 
 	if (ret)

@@ -22,9 +22,6 @@ config USB_F_DM
 config USB_F_ETR_MIU
 	tristate
 
-config USB_F_RNDIS_GS
-	tristate
-
 config USB_CONFIGFS_F_DM
 	tristate "DM gadget"
 	depends on USB_CONFIGFS
@@ -42,20 +39,4 @@ config USB_CONFIGFS_F_ETR_MIU
 	  via ETR_MIU. The function has an interface with two alternate settings.
 	  Alt0 setting is idle mode. Alt1 setting is data transfer mode. USB host
 	  must set Alt1 before attempting to download trace data.
-
-config USB_CONFIGFS_RNDIS_GS
-	tristate "RNDIS"
-	depends on USB_CONFIGFS
-	depends on NET
-	select USB_F_RNDIS_GS
-	help
-	  Microsoft Windows XP bundles the "Remote NDIS" (RNDIS) protocol,
-	  and Microsoft provides redistributable binary RNDIS drivers for
-	  older versions of Windows.
-
-	  To make MS-Windows work with this, use Documentation/usb/linux.inf
-	  as the "driver info file".  For versions of MS-Windows older than
-	  XP, you'll need to download drivers from Microsoft's website; a URL
-	  is given in comments found in that info file.
-
 endif # USB_GADGET

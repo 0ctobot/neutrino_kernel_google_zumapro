@@ -34,6 +34,9 @@
 #include <performance/gs_perf_mon/gs_perf_mon.h>
 #include "gs_perf_mon_priv.h"
 
+#define CREATE_TRACE_POINTS
+#include "gs_perf_mon_trace.h"
+
 static struct gs_perf_mon_config perf_mon_config;
 static struct gs_perf_mon_state perf_mon_metadata;
 
@@ -100,7 +103,7 @@ static inline int read_perf_event(struct gs_event_data *event, u64 *event_total)
 			*event_total = 0;
 			return ret;
 		}
-	} else {
+	} else if (event->counter_type == AMU) {
 		/* Read this event from AMU. */
 		switch (event->element_idx) {
 		case PERF_CYCLE_IDX:
@@ -120,6 +123,7 @@ static inline int read_perf_event(struct gs_event_data *event, u64 *event_total)
 			return -EINVAL;
 		}
 	}
+	/* UNUSED events fallthrough. */
 
 	return 0;
 }
@@ -424,6 +428,7 @@ void gs_perf_mon_update_clients(void)
 			ret = gs_perf_mon_get_data(cpu, &perf_mon_metadata.client_shared_data[cpu]);
 			if (ret)
 				perf_mon_metadata.client_shared_data[cpu].cpu_mon_on = false;
+			trace_gs_perf_mon(cpu, &perf_mon_metadata.client_shared_data[cpu]);
 		}
 
 		/* Update all clients supplying a callback pointer to monitor data. */
@@ -647,7 +652,7 @@ static int initialize_cpu_data_info(struct device *dev, struct device_node *cpu_
 
 	/* Default events to uninitialized. */
 	for (event_idx = 0; event_idx < PERF_NUM_COMMON_EVS; event_idx++)
-		cpu_event_data[event_idx].raw_event_id = UINT_MAX;
+		cpu_event_data[event_idx].counter_type = UNUSED;
 
 	/* Find and populate the pmu data. */
 	pmu_node = of_get_child_by_name(cpu_node, "pmu_events");
@@ -663,16 +668,6 @@ static int initialize_cpu_data_info(struct device *dev, struct device_node *cpu_
 	if (ret) {
 		dev_err(dev, "Couldn't parse amu_node, skipping performance monitoring.\n");
 		return ret;
-	}
-
-	/* Check that every event is supported from at least one of PMU or AMU. */
-	for (event_idx = 0; event_idx < PERF_NUM_COMMON_EVS; event_idx++) {
-		if (cpu_event_data[event_idx].raw_event_id == UINT_MAX) {
-			dev_err(dev, "Event at index %u is unsupported. Stopping probe.\n",
-				event_idx);
-			ret = -EINVAL;
-			break;
-		}
 	}
 
 	return ret;

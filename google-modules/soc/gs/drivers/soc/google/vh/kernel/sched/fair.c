@@ -1555,7 +1555,7 @@ int find_energy_efficient_cpu(struct task_struct *p, int prev_cpu,
 		  unimportant_fit = { CPU_BITS_NONE }, unimportant_unfit = { CPU_BITS_NONE },
 		  max_spare_cap = { CPU_BITS_NONE }, packing = { CPU_BITS_NONE },
 		  idle_unpreferred = { CPU_BITS_NONE }, max_spare_cap_running_rt = { CPU_BITS_NONE },
-		  candidates = { CPU_BITS_NONE };
+		  candidates = { CPU_BITS_NONE }, candidates_temp = { CPU_BITS_NONE };
 	int i, weight, best_energy_cpu = -1, this_cpu = smp_processor_id();
 	long cur_energy, best_energy = LONG_MAX;
 	unsigned long p_util_min = uclamp_is_used() ? uclamp_eff_value_pixel_mod(p, UCLAMP_MIN) : 0;
@@ -1610,9 +1610,6 @@ int find_energy_efficient_cpu(struct task_struct *p, int prev_cpu,
 				break;
 
 			if (!cpu_active(i))
-				continue;
-
-			if (cpumask_test_cpu(i, get_group_cfs_skip_mask(p)))
 				continue;
 
 			capacity = capacity_of(i);
@@ -1957,6 +1954,10 @@ int find_energy_efficient_cpu(struct task_struct *p, int prev_cpu,
 			cpumask_copy(&candidates, &max_spare_cap);
 		}
 	}
+
+	cpumask_andnot(&candidates_temp, &candidates, get_group_cfs_skip_mask(p));
+	if (cpumask_weight(&candidates_temp))
+		cpumask_copy(&candidates, &candidates_temp);
 
 	weight = cpumask_weight(&candidates);
 	best_energy_cpu = most_spare_cap_cpu != -1 ? most_spare_cap_cpu: least_loaded_cpu;

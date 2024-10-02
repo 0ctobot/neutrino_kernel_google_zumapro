@@ -33,6 +33,10 @@
 #define BUS_ACTIVITY_CHECK	(0x3F << 16)
 #define READ_TRANS_OFFSET	10
 
+#define SSPHY_RESTART_EL	"SSPHY_RESTART"
+#define SSPHY_USB		0
+#define SSPHY_DP		1
+
 /* -------------------------------------------------------------------------- */
 static int dwc3_otg_reboot_notify(struct notifier_block *nb, unsigned long event, void *buf);
 static struct notifier_block dwc3_otg_reboot_notifier = {
@@ -172,6 +176,46 @@ static void dwc3_otg_set_peripheral_mode(struct dwc3_otg *dotg)
 	dwc3_otg_set_mode(dwc, DWC3_GCTL_PRTCAP_DEVICE);
 }
 
+/*
+ * owner 0 - USB
+ * owner 1 - DP
+ */
+static void usb3_phy_control(struct dwc3_otg *dotg, int owner, int on)
+{
+	struct dwc3 *dwc = dotg->dwc;
+	struct device *dev = dwc->dev;
+
+	dev_dbg(dev, "USB3.0 PHY %s\n", on ? "on" : "off");
+
+	if (on) {
+		dwc3_core_susphy_set(dwc, 0);
+		exynos_usbdrd_pipe3_enable(dwc->usb3_generic_phy);
+		dwc3_core_susphy_set(dwc, 1);
+	} else {
+		dwc3_core_susphy_set(dwc, 0);
+		exynos_usbdrd_pipe3_disable(dwc->usb3_generic_phy);
+		dwc3_core_susphy_set(dwc, 1);
+	}
+}
+
+static void dwc3_usb3_phy_restart(struct dwc3_otg *dotg)
+{
+	struct dwc3 *dwc = dotg->dwc;
+
+	mutex_lock(&dotg->role_lock);
+	if (dotg->current_role != USB_ROLE_HOST) {
+		mutex_unlock(&dotg->role_lock);
+		return;
+	}
+
+	dev_info(dotg->exynos->dev, "ssphy restart");
+	usb3_phy_control(dotg, SSPHY_USB, 0);
+	exynos_usbdrd_phy_tune(dwc->usb3_generic_phy, OTG_STATE_A_IDLE);
+	usb3_phy_control(dotg, SSPHY_USB, 1);
+
+	mutex_unlock(&dotg->role_lock);
+}
+
 void dwc3_otg_phy_tune(struct dwc3 *dwc, bool is_host)
 {
 	int phy_state;
@@ -205,11 +249,11 @@ int dwc3_otg_start_host(struct dwc3_otg *dotg, int on)
 	__pm_stay_awake(dotg->wakelock);
 
 	if (on) {
-		/* hold gadget lock to prevent gadget driver bind and undesirable resume */
-		device_lock(&dwc->gadget->dev);
-
 		if (!dwc3_otg_check_usb_suspend(exynos))
 			dev_err(dev, "too long to wait for dwc3 suspended\n");
+
+		/* hold gadget lock to prevent gadget driver bind and undesirable resume */
+		device_lock(&dwc->gadget->dev);
 
 		dotg->otg_connection = 1;
 		while (dwc->gadget_driver == NULL) {
@@ -249,7 +293,7 @@ int dwc3_otg_start_host(struct dwc3_otg *dotg, int on)
 				 */
 				dev_err(dev, "DWC3 device already active, skipping core "
 					"initialization.");
-			pm_runtime_set_suspended(dev);
+			pm_runtime_put_sync_suspend(dev);
 			exynos->need_dr_role = 0;
 			mutex_unlock(&dotg->lock);
 			device_unlock(&dwc->gadget->dev);
@@ -314,15 +358,15 @@ int dwc3_otg_start_gadget(struct dwc3_otg *dotg, int on)
 	struct device	*dev = dotg->dwc->dev;
 	int ret = 0;
 	int wait_counter = 0;
-	u32 evt_count, evt_buf_cnt;
 
 	if (on) {
 		__pm_stay_awake(dotg->wakelock);
-		/* hold gadget lock to prevent gadget driver bind and undesirable resume */
-		device_lock(&dwc->gadget->dev);
 
 		if (!dwc3_otg_check_usb_suspend(exynos))
 			dev_err(dev, "too long to wait for dwc3 suspended\n");
+
+		/* hold gadget lock to prevent gadget driver bind and undesirable resume */
+		device_lock(&dwc->gadget->dev);
 
 		while (dwc->gadget_driver == NULL) {
 			wait_counter++;
@@ -349,7 +393,7 @@ int dwc3_otg_start_gadget(struct dwc3_otg *dotg, int on)
 				 */
 				dev_err(dev, "DWC3 device already active, skipping core "
 					"initialization.");
-			pm_runtime_set_suspended(dev);
+			pm_runtime_put_sync_suspend(dev);
 			dwc->connected = false;
 			exynos->need_dr_role = 0;
 			mutex_unlock(&dotg->lock);
@@ -371,27 +415,6 @@ int dwc3_otg_start_gadget(struct dwc3_otg *dotg, int on)
 		exynos->gadget_state = true;
 		dwc3_otg_set_peripheral_mode(dotg);
 	} else {
-		evt_buf_cnt = dwc->ev_buf->count;
-
-		/* Wait until gadget stop */
-		wait_counter = 0;
-		evt_count = dwc3_readl(dwc->regs, DWC3_GEVNTCOUNT(0));
-		evt_count &= DWC3_GEVNTCOUNT_MASK;
-		while (evt_count || evt_buf_cnt) {
-			wait_counter++;
-			mdelay(20);
-
-			if (wait_counter > 20) {
-				dev_err(dev, "Can't wait event buffer empty!\n");
-				break;
-			}
-			evt_count = dwc3_readl(dwc->regs, DWC3_GEVNTCOUNT(0));
-			evt_count &= DWC3_GEVNTCOUNT_MASK;
-			evt_buf_cnt = dwc->ev_buf->count;
-		}
-		dev_dbg(dev, "%s, evt compl wait cnt = %d\n",
-			 __func__, wait_counter);
-
 		/* hold gadget lock to prevent gadget driver bind during disconnect*/
 		device_lock(&dwc->gadget->dev);
 
@@ -408,7 +431,7 @@ int dwc3_otg_start_gadget(struct dwc3_otg *dotg, int on)
 		device_unlock(&dwc->gadget->dev);
 
 		mutex_lock(&dotg->lock);
-		pm_runtime_put_sync_suspend(dev);
+		pm_runtime_put_sync(dev);
 		mutex_unlock(&dotg->lock);
 
 		exynos->gadget_state = false;
@@ -556,6 +579,17 @@ int dwc3_otg_get_idle_ip_index(void)
 }
 EXPORT_SYMBOL_GPL(dwc3_otg_get_idle_ip_index);
 
+static int dwc3_otg_ssphy_restart_cb(struct gvotable_election *el, const char *reason, void *value)
+{
+	struct dwc3_otg *dotg = gvotable_get_data(el);
+	bool restart_phy = !!(long)value;
+
+	if (restart_phy)
+		dwc3_usb3_phy_restart(dotg);
+
+	return 0;
+}
+
 static int dwc3_otg_pm_notifier(struct notifier_block *nb,
 		unsigned long action, void *nb_data)
 {
@@ -671,6 +705,16 @@ int dwc3_exynos_otg_init(struct dwc3 *dwc, struct dwc3_exynos *exynos)
 	/* Make dwc3_otg accessible after member variable initialization completes */
 	exynos->dotg = dotg;
 
+	dotg->ssphy_restart_votable = gvotable_create_bool_election(SSPHY_RESTART_EL,
+								    dwc3_otg_ssphy_restart_cb,
+								    dotg);
+	if (IS_ERR_OR_NULL(dotg->ssphy_restart_votable)) {
+		ret = PTR_ERR(dotg->ssphy_restart_votable);
+		dev_err(dwc->dev, "failed to create ssphy_restart votable (%d)\n", ret);
+		return ret;
+	}
+	gvotable_set_vote2str(dotg->ssphy_restart_votable, gvotable_v2s_int);
+
 	dev_dbg(dwc->dev, "otg_init done\n");
 
 	return 0;
@@ -681,6 +725,7 @@ void dwc3_exynos_otg_exit(struct dwc3 *dwc, struct dwc3_exynos *exynos)
 	struct dwc3_otg *dotg = exynos->dotg;
 
 	power_supply_unreg_notifier(&dotg->psy_notifier);
+	gvotable_destroy_election(dotg->ssphy_restart_votable);
 	sysfs_put(dotg->desired_role_kn);
 	unregister_pm_notifier(&dotg->pm_nb);
 	cancel_work_sync(&dotg->work);

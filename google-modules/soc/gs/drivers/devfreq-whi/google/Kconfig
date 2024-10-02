@@ -18,6 +18,12 @@ config DEVFREQ_GOV_MEMLAT
 	  this uses target specific counters it can conflict with existing profiling
 	  tools.
 
+config MEMLAT_DEVFREQ
+	tristate "HW monitor based DEVFREQ driver for device BW"
+	depends on ARM_MEMLAT_MON
+	help
+	  This adds the DEVFREQ driver for memory latency goverors.
+
 config ARM_EXYNOS_DEVFREQ
 	tristate "ARM EXYNOS DEVFREQ Common driver"
 	select PM_OPP

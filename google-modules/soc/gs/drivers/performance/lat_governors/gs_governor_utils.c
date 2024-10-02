@@ -18,6 +18,11 @@
 
 #define NUM_FREQ_TABLE_COLS 2
 
+/* Initialize the tracepoints from this file. */
+#define CREATE_TRACE_POINTS
+#include "gs_lat_governors_trace.h"
+EXPORT_TRACEPOINT_SYMBOL_GPL(gs_lat_governor);
+
 long gs_governor_core_to_dev_freq(struct gs_governor_core_dev_map *map, unsigned long input_freq)
 {
 	unsigned long freq = 0;
@@ -170,8 +175,7 @@ int populate_cluster_config(struct device *dev, struct device_node *cluster_node
 		gs_governor_init_core_dev_map(dev, cluster_node, "core-dev-table-base");
 	if (!cluster->base_freq_table) {
 		dev_err(dev,
-			"Couldn't find the core-dev-table-base! Defaulting to latency-table.\n");
-		cluster->base_freq_table = cluster->latency_freq_table;
+			"Couldn't find the core-dev-table-base! Disabling Base Vote!\n");
 	}
 	return ret;
 }

@@ -15,6 +15,8 @@
 
 #include <soc/google/debug-snapshot.h>
 
+#define PT_BASE_SHIFT 12
+
 #define MAX_VIDS			8U
 
 struct tlb_config {

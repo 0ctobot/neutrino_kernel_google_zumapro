@@ -80,6 +80,9 @@ static struct pci_dev *exynos_pcie_get_pci_dev(struct dw_pcie_rp *pp);
 struct exynos_pm_qos_request exynos_pcie_int_qos[MAX_RC_NUM];
 #endif
 
+/* Set this value slightly larger than PCIe CPL timeout, which is 44 ms by default */
+#define EP_CONFIG_ACCESS_TIMEOUT_MS	(50)
+
 /*
  * PCIe channel0 is in the HSI1 block.
  * PCIe channel1 is in the HSI2 block.
@@ -1753,6 +1756,14 @@ static int exynos_pcie_rc_link_up(struct dw_pcie *pci)
 	return 0;
 }
 
+static int exynos_pcie_get_next_online_cpu(void)
+{
+	int cpu = cpumask_next(smp_processor_id(), cpu_online_mask);
+	if (cpu >= nr_cpu_ids)
+		cpu = cpumask_first(cpu_online_mask);
+	return cpu;
+}
+
 static int exynos_pcie_rc_rd_other_conf(struct dw_pcie_rp *pp, struct pci_bus *bus, u32 devfn,
 					int where, int size, u32 *val)
 {
@@ -1776,7 +1787,16 @@ static int exynos_pcie_rc_rd_other_conf(struct dw_pcie_rp *pp, struct pci_bus *b
 	/* setup ATU for cfg/mem outbound */
 	exynos_pcie_rc_prog_viewport_cfg0(pp, busdev);
 
-	ret = dw_pcie_read(va_cfg_base + where, size, val);
+	if ((exynos_pcie->ch_num == 0) && (where == 0x44)) {
+		/* Failure case for b/328825657 */
+		queue_delayed_work_on(exynos_pcie_get_next_online_cpu(), exynos_pcie->pcie_wq,
+				      &exynos_pcie->cfg_access_work,
+				      msecs_to_jiffies(EP_CONFIG_ACCESS_TIMEOUT_MS));
+		ret = dw_pcie_read(va_cfg_base + where, size, val);
+		cancel_delayed_work_sync(&exynos_pcie->cfg_access_work);
+	}
+	else
+		ret = dw_pcie_read(va_cfg_base + where, size, val);
 
 	exynos_elbi_write(exynos_pcie, 0x0, PCIE_APP_XFER_PENDING);
 	// Fake code for Samsung Modem.
@@ -2277,6 +2297,13 @@ static int exynos_pcie_rc_parse_dt(struct device *dev, struct exynos_pcie *exyno
 			exynos_pcie->ch_num);
 	} else {
 		gpio_direction_output(exynos_pcie->ssd_gpio, 0);
+	}
+
+	if (of_property_read_u32(np, "de-emphasis-level", &exynos_pcie->de_emphasis_level)) {
+		dev_info(dev, "failed to parse the de-emphasis level, default 0\n");
+		exynos_pcie->de_emphasis_level = 0;
+	} else {
+		dev_dbg(dev, "parse de-emphasis level: %d\n", exynos_pcie->de_emphasis_level);
 	}
 
 	return 0;
@@ -3276,6 +3303,7 @@ static irqreturn_t exynos_pcie_rc_irq_handler(int irq, void *arg)
 					      "in cpl recovery");
 			else {
 				logbuffer_log(exynos_pcie->log, "start cpl recovery");
+				cancel_delayed_work_sync(&exynos_pcie->cfg_access_work);
 				exynos_pcie->cpl_timeout_recovery = 1;
 				exynos_pcie->state = STATE_LINK_DOWN_TRY;
 				queue_work(exynos_pcie->pcie_wq,
@@ -5467,6 +5495,22 @@ static void exynos_d3_sleep_hook(void *unused, struct pci_dev *dev,
 }
 #endif
 
+static void exynos_pcie_wait_cfg_access_work(struct work_struct *work)
+{
+	struct exynos_pcie *exynos_pcie =
+		container_of(work, struct exynos_pcie, cfg_access_work.work);
+
+	logbuffer_logk(exynos_pcie->log, LOGLEVEL_ERR, "[ERR] config access timeout");
+
+	if (exynos_pcie->cpl_timeout_recovery) {
+		logbuffer_logk(exynos_pcie->log, LOGLEVEL_ERR, "in cpl timeout recovery");
+		return;
+	}
+
+	exynos_pcie_rc_dump_all_status(exynos_pcie->ch_num);
+	BUG_ON(1);
+}
+
 static int exynos_pcie_rc_probe(struct platform_device *pdev)
 {
 	struct exynos_pcie *exynos_pcie;
@@ -5672,6 +5716,7 @@ static int exynos_pcie_rc_probe(struct platform_device *pdev)
 
 	INIT_DELAYED_WORK(&exynos_pcie->dislink_work, exynos_pcie_rc_dislink_work);
 	INIT_DELAYED_WORK(&exynos_pcie->cpl_timeout_work, exynos_pcie_rc_cpl_timeout_work);
+	INIT_DELAYED_WORK(&exynos_pcie->cfg_access_work, exynos_pcie_wait_cfg_access_work);
 
 #if IS_ENABLED(CONFIG_EXYNOS_ITMON)
 	exynos_pcie->itmon_nb.notifier_call = exynos_pcie_rc_itmon_notifier;
@@ -5707,6 +5752,8 @@ static int __exit exynos_pcie_rc_remove(struct platform_device *pdev)
 	struct exynos_pcie *exynos_pcie = to_exynos_pcie(pci);
 
 	dev_info(&pdev->dev, "%s\n", __func__);
+
+	cancel_delayed_work_sync(&exynos_pcie->cfg_access_work);
 
 	mutex_destroy(&exynos_pcie->power_onoff_lock);
 

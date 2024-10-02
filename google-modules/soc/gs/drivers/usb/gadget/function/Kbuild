@@ -12,5 +12,3 @@ usb_f_dm1-y			:= f_dm1.o
 obj-$(CONFIG_USB_F_DM)		+= usb_f_dm1.o
 usb_f_etr_miu-y                 := f_etr_miu.o
 obj-$(CONFIG_USB_F_ETR_MIU)     += usb_f_etr_miu.o
-usb_f_rndis-y			:= f_rndis.o rndis.o
-obj-$(CONFIG_USB_F_RNDIS_GS)	+= usb_f_rndis.o

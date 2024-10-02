@@ -13,6 +13,8 @@
 
 #include <soc/google/debug-snapshot.h>
 
+#define PT_BASE_SHIFT 12
+
 #define MAX_VIDS				8U
 
 #define SYSMMU_VM_OFFSET	0x1000

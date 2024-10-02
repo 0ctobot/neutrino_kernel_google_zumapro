@@ -14,6 +14,7 @@
 #include <linux/power_supply.h>
 #include <linux/usb/role.h>
 
+#include <misc/gvotable.h>
 #include <soc/google/exynos_pm_qos.h>
 
 /**
@@ -52,6 +53,8 @@ struct dwc3_otg {
 
 	struct mutex lock;
 	struct mutex		role_lock;
+
+	struct gvotable_election *ssphy_restart_votable;
 };
 
 int dwc3_exynos_otg_init(struct dwc3 *dwc, struct dwc3_exynos *exynos);

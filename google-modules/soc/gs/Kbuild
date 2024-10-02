@@ -81,3 +81,5 @@ obj-y += drivers/bts/
 obj-y += drivers/block/zram/
 
 obj-y += drivers/pwm/
+
+obj-y += drivers/video/backlight/

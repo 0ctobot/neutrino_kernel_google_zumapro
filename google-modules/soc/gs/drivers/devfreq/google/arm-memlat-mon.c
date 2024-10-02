@@ -206,10 +206,10 @@ static void read_pmu_counters(struct memlat_cpu_grp *cpu_grp)
 		for (i = 0; i < NUM_COMMON_EVS; i++)
 			read_event(&pmu_evs[i]);
 
-		if (cpu_grp->pmu_ev_ids[INST_IDX] != UINT_MAX)
-			cpu_data->cyc = pmu_evs[INST_IDX].last_delta;
 		if (cpu_grp->pmu_ev_ids[CYCLE_IDX] != UINT_MAX)
-			cpu_data->inst = pmu_evs[CYCLE_IDX].last_delta;
+			cpu_data->cyc = pmu_evs[CYCLE_IDX].last_delta;
+		if (cpu_grp->pmu_ev_ids[INST_IDX] != UINT_MAX)
+			cpu_data->inst = pmu_evs[INST_IDX].last_delta;
 		if (cpu_grp->pmu_ev_ids[STALL_BACKEND_MEM_IDX] != UINT_MAX)
 			cpu_data->mem_stall = pmu_evs[STALL_BACKEND_MEM_IDX].last_delta;
 		if (cpu_grp->pmu_ev_ids[STALL_IDX] != UINT_MAX)
