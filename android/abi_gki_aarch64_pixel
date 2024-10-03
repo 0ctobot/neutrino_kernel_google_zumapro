@@ -82,6 +82,7 @@
   __bitmap_or
   bitmap_parse
   bitmap_parselist
+  bitmap_parse_user
   bitmap_print_to_pagebuf
   __bitmap_set
   __bitmap_subset
@@ -424,6 +425,8 @@
   devm_clk_get
   devm_clk_get_optional
   devm_clk_put
+  devm_devfreq_add_device
+  devm_devfreq_remove_device
   devm_device_add_group
   devm_device_add_groups
   devm_device_remove_group
@@ -477,6 +480,7 @@
   devm_pinctrl_register_and_init
   devm_platform_ioremap_resource
   devm_platform_ioremap_resource_byname
+  devm_pm_runtime_enable
   devm_power_supply_register
   devm_pwm_get
   devm_regmap_add_irq_chip
@@ -516,6 +520,7 @@
   dev_pm_opp_of_register_em
   dev_pm_opp_of_remove_table
   dev_pm_opp_put
+  dev_pm_opp_remove_all_dynamic
   dev_pm_opp_set_config
   dev_pm_qos_add_notifier
   dev_pm_qos_add_request
@@ -1427,6 +1432,7 @@
   __netdev_alloc_skb
   netdev_err
   netdev_info
+  netdev_refcnt_read
   netdev_set_default_ethtool_ops
   netdev_state_change
   netdev_update_features
@@ -1987,6 +1993,7 @@
   seq_putc
   seq_put_decimal_ll
   seq_put_decimal_ull
+  seq_put_decimal_ull_width
   seq_puts
   seq_read
   seq_release
@@ -1997,6 +2004,7 @@
   set_capacity_and_notify
   set_cpus_allowed_ptr
   set_freezable
+  set_normalized_timespec64
   set_page_dirty
   set_page_dirty_lock
   __SetPageMovable
@@ -2328,6 +2336,7 @@
   __traceiter_android_rvh_dequeue_task
   __traceiter_android_rvh_dequeue_task_fair
   __traceiter_android_rvh_detach_entity_load_avg
+  __traceiter_android_rvh_do_read_fault
   __traceiter_android_rvh_enqueue_task
   __traceiter_android_rvh_enqueue_task_fair
   __traceiter_android_rvh_find_lowest_rq
@@ -2336,11 +2345,14 @@
   __traceiter_android_rvh_iommu_limit_align_shift
   __traceiter_android_rvh_irqs_disable
   __traceiter_android_rvh_irqs_enable
+  __traceiter_android_rvh_madvise_pageout_begin
+  __traceiter_android_rvh_madvise_pageout_end
   __traceiter_android_rvh_meminfo_proc_show
   __traceiter_android_rvh_post_init_entity_util_avg
   __traceiter_android_rvh_preempt_disable
   __traceiter_android_rvh_preempt_enable
   __traceiter_android_rvh_prepare_prio_fork
+  __traceiter_android_rvh_reclaim_folio_list
   __traceiter_android_rvh_remove_entity_load_avg
   __traceiter_android_rvh_rtmutex_prepare_setprio
   __traceiter_android_rvh_sched_newidle_balance
@@ -2452,6 +2464,7 @@
   __tracepoint_android_rvh_dequeue_task
   __tracepoint_android_rvh_dequeue_task_fair
   __tracepoint_android_rvh_detach_entity_load_avg
+  __tracepoint_android_rvh_do_read_fault
   __tracepoint_android_rvh_enqueue_task
   __tracepoint_android_rvh_enqueue_task_fair
   __tracepoint_android_rvh_find_lowest_rq
@@ -2460,11 +2473,14 @@
   __tracepoint_android_rvh_iommu_limit_align_shift
   __tracepoint_android_rvh_irqs_disable
   __tracepoint_android_rvh_irqs_enable
+  __tracepoint_android_rvh_madvise_pageout_begin
+  __tracepoint_android_rvh_madvise_pageout_end
   __tracepoint_android_rvh_meminfo_proc_show
   __tracepoint_android_rvh_post_init_entity_util_avg
   __tracepoint_android_rvh_preempt_disable
   __tracepoint_android_rvh_preempt_enable
   __tracepoint_android_rvh_prepare_prio_fork
+  __tracepoint_android_rvh_reclaim_folio_list
   __tracepoint_android_rvh_remove_entity_load_avg
   __tracepoint_android_rvh_rtmutex_prepare_setprio
   __tracepoint_android_rvh_sched_newidle_balance
@@ -2793,6 +2809,7 @@
   wait_for_completion_interruptible_timeout
   wait_for_completion_killable
   wait_for_completion_timeout
+  wait_on_page_writeback
   wait_woken
   __wake_up
   __wake_up_locked

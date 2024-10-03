@@ -633,7 +633,6 @@ config GPIO_TB10X
 
 config GPIO_TEGRA
 	tristate "NVIDIA Tegra GPIO support"
-	default ARCH_TEGRA
 	depends on ARCH_TEGRA || COMPILE_TEST
 	depends on OF_GPIO
 	select GPIOLIB_IRQCHIP
@@ -679,7 +678,8 @@ config GPIO_UNIPHIER
 	  Say yes here to support UniPhier GPIOs.
 
 config GPIO_VF610
-	def_bool y
+	bool "VF610 GPIO support"
+	default y if SOC_VF610
 	depends on ARCH_MXC
 	select GPIOLIB_IRQCHIP
 	help
