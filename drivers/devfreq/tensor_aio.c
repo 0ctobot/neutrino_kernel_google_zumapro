@@ -22,6 +22,10 @@
 #include <pelt.h>
 #include "governor.h"
 
+#ifdef CONFIG_ARM_PMUV3
+#include <linux/perf/arm_pmuv3.h>
+#endif
+
 /* SoC-specific ACPM constant definitions */
 #ifdef CONFIG_SOC_GS101
 #include <dt-bindings/clock/gs101.h>
