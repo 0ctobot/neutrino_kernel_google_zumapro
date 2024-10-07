@@ -16,7 +16,9 @@
 #include <linux/module.h>
 #include <asm/cacheflush.h>
 #include <linux/dma-mapping.h>
+#include <drm/drm_mode.h>
 
+#include "dpcd.h"
 #include "teeif.h"
 #include "hdcp-log.h"
 
@@ -24,6 +26,10 @@
 #define TZ_BUF_TIMEOUT 10000
 #define TZ_MSG_TIMEOUT 10000
 #define HDCP_TA_PORT "com.android.trusty.hdcp.auth"
+
+#define HDCP_V2_3 (5)
+#define HDCP_V1   (1)
+#define HDCP_NONE (0)
 
 struct hdcp_auth_req {
 	uint32_t cmd;
@@ -244,9 +250,29 @@ int hdcp_tee_send_cmd(uint32_t cmd) {
 	return hdcp_tee_comm_xchg(cmd, 0, NULL, NULL);
 }
 
-int hdcp_tee_set_protection(uint32_t hdcp_lvl) {
-	return hdcp_tee_comm_xchg(HDCP_CMD_ENCRYPTION_SET, hdcp_lvl, NULL,
-		NULL);
+int hdcp_tee_enable_enc_22(void) {
+	int ret = hdcp_tee_comm_xchg(HDCP_CMD_ENCRYPTION_SET, HDCP_V2_3, NULL,
+			NULL);
+	if (ret)
+		return ret;
+
+	hdcp_dplink_update_cp(DRM_MODE_CONTENT_PROTECTION_ENABLED);
+	return 0;
+}
+
+int hdcp_tee_enable_enc_13(void) {
+	int ret = hdcp_tee_comm_xchg(HDCP_CMD_ENCRYPTION_SET, HDCP_V1, NULL,
+			NULL);
+	if (ret)
+		return ret;
+
+	hdcp_dplink_update_cp(DRM_MODE_CONTENT_PROTECTION_ENABLED);
+	return 0;
+}
+
+int hdcp_tee_disable_enc(void) {
+	hdcp_dplink_update_cp(DRM_MODE_CONTENT_PROTECTION_DESIRED);
+	return hdcp_tee_comm_xchg(HDCP_CMD_ENCRYPTION_SET, HDCP_NONE, NULL, NULL);
 }
 
 int hdcp_tee_check_protection(int* version) {

@@ -16,7 +16,6 @@
 #include "exynos-hdcp-interface.h"
 
 #include "auth-control.h"
-#include "auth-state.h"
 #include "auth13.h"
 #include "auth22.h"
 #include "hdcp.h"
@@ -24,6 +23,8 @@
 #include "teeif.h"
 
 static struct hdcp_device *hdcp_dev;
+
+static enum auth_state state;
 
 static unsigned long max_ver = 2;
 module_param(max_ver, ulong, 0664);
@@ -37,51 +38,31 @@ MODULE_PARM_DESC(max_retry_count,
 
 static uint32_t hdcp_auth_try_count = 0;
 
+int hdcp_get_auth_state(void) {
+	return state;
+}
+
 static int run_hdcp2_auth(void) {
 	int ret;
 	int i;
 
-	if (hdcp_set_auth_state(HDCP2_AUTH_PROGRESS))
-		return -EBUSY;
-
+	state = HDCP2_AUTH_PROGRESS;
 	for (i = 0; i < 5; ++i) {
 		ret = hdcp22_dplink_authenticate();
 		if (ret == 0) {
-			return (hdcp_set_auth_state(HDCP2_AUTH_DONE)) ?
-				-EBUSY : ret;
+			state = HDCP2_AUTH_DONE;
+			/* HDCP2.2 spec defined 200ms */
+			msleep(200);
+			hdcp_tee_enable_enc_22();
+			return 0;
 		} else if (ret != -EAGAIN) {
-			return (hdcp_set_auth_state(HDCP_AUTH_IDLE)) ?
-				-EBUSY : ret;
+			return ret;
 		}
 		hdcp_info("HDCP22 Retry(%d)...\n", i);
 	}
 
-	return (hdcp_set_auth_state(HDCP_AUTH_IDLE)) ? -EBUSY : -EIO;
+	return -EIO;
 }
-
-static int run_hdcp1_auth(void) {
-	int ret;
-	bool second_stage_required;
-
-	if (hdcp_set_auth_state(HDCP1_AUTH_PROGRESS))
-		return -EBUSY;
-
-	ret = hdcp13_dplink_authenticate(&second_stage_required);
-	if (ret)
-		return (hdcp_set_auth_state(HDCP_AUTH_IDLE)) ? -EBUSY : ret;
-
-	if (hdcp_set_auth_state(HDCP1_AUTH_DONE))
-		return -EBUSY;
-
-	if (!second_stage_required)
-		return 0;
-
-	ret = hdcp13_dplink_repeater_auth();
-	if (ret)
-		return (hdcp_set_auth_state(HDCP_AUTH_IDLE)) ? -EBUSY : ret;
-	return 0;
-}
-
 
 static void hdcp_worker(struct work_struct *work) {
 	int err;
@@ -94,10 +75,8 @@ static void hdcp_worker(struct work_struct *work) {
 	struct hdcp_device *hdcp_dev =
 		container_of(work, struct hdcp_device, hdcp_work.work);
 
-	enum auth_state state = hdcp_get_auth_state();
-	if (!(state & (HDCP_AUTH_RESET | HDCP_AUTH_IDLE | HDCP2_AUTH_RP))) {
-		hdcp_info("HDCP auth is skipped during %s state\n",
-			get_auth_state_str(state));
+	if (state != HDCP_AUTH_IDLE) {
+		hdcp_info("HDCP auth already in progress\n");
 		return;
 	}
 
@@ -129,13 +108,17 @@ static void hdcp_worker(struct work_struct *work) {
 
 	if (max_ver >= 1) {
 		hdcp_info("Trying HDCP13...\n");
-		ret = run_hdcp1_auth();
+		state = HDCP1_AUTH_PROGRESS;
+		ret = hdcp13_dplink_authenticate();
 		if (ret == 0) {
 			hdcp_info("HDCP13 Authentication Success\n");
+			state = HDCP1_AUTH_DONE;
 			hdcp_dev->hdcp2_fallback_count += hdcp2_capable;
 			hdcp_dev->hdcp1_success_count += !hdcp2_capable;
 			return;
 		}
+
+		state = HDCP_AUTH_IDLE;
 		hdcp1_capable = (ret != -EOPNOTSUPP);
 		hdcp_info("HDCP13 Authentication Failed.\n");
 	} else {
@@ -150,7 +133,6 @@ static void hdcp_worker(struct work_struct *work) {
 void hdcp_dplink_handle_irq(void) {
 	int ret = 0;
 
-	enum auth_state state = hdcp_get_auth_state();
 	switch (state) {
 	case HDCP2_AUTH_PROGRESS:
 		hdcp22_dplink_handle_irq();
@@ -162,12 +144,13 @@ void hdcp_dplink_handle_irq(void) {
 		ret = hdcp13_dplink_handle_irq();
 		break;
 	default:
-		hdcp_info("HDCP irq ignored during %s state\n",
-			get_auth_state_str(state));
+		hdcp_info("HDCP irq ignored during state(%d)\n", state);
 	}
 
+	if (ret == -EAGAIN || ret == -EFAULT)
+		state = HDCP_AUTH_IDLE;
+
 	if (ret == -EFAULT) {
-		hdcp_set_auth_state(HDCP_AUTH_IDLE);
 		if (hdcp_auth_try_count >= max_retry_count) {
 			hdcp_err("HDCP disabled until next physical re-connect"\
 				 "tried %lu times\n", max_retry_count);
@@ -182,9 +165,6 @@ void hdcp_dplink_handle_irq(void) {
 EXPORT_SYMBOL_GPL(hdcp_dplink_handle_irq);
 
 void hdcp_dplink_connect_state(enum dp_state dp_hdcp_state) {
-	int tee_connect_info = dp_hdcp_state == DP_SHUTDOWN ?
-			       DP_DISCONNECT : dp_hdcp_state;
-
 	hdcp_info("Displayport connect info (%d)\n", dp_hdcp_state);
 
 	if (dp_hdcp_state == DP_PHYSICAL_DISCONNECT) {
@@ -193,10 +173,12 @@ void hdcp_dplink_connect_state(enum dp_state dp_hdcp_state) {
 		return;
 	}
 
-	hdcp_tee_connect_info(tee_connect_info);
-	if (dp_hdcp_state == DP_DISCONNECT || dp_hdcp_state == DP_SHUTDOWN) {
-		hdcp_set_auth_state(dp_hdcp_state == DP_SHUTDOWN ?
-			HDCP_AUTH_SHUTDOWN : HDCP_AUTH_ABORT);
+	hdcp_tee_connect_info(dp_hdcp_state);
+	if (dp_hdcp_state == DP_DISCONNECT) {
+		hdcp13_dplink_abort();
+		hdcp22_dplink_abort();
+		hdcp_tee_disable_enc();
+		state = HDCP_AUTH_IDLE;
 		cancel_delayed_work_sync(&hdcp_dev->hdcp_work);
 		return;
 	}
@@ -210,7 +192,6 @@ void hdcp_dplink_connect_state(enum dp_state dp_hdcp_state) {
 	}
 
 	hdcp_auth_try_count++;
-	hdcp_set_auth_state(HDCP_AUTH_RESET);
 	hdcp_auth_worker_schedule(hdcp_dev);
 	return;
 }

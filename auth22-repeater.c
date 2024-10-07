@@ -13,7 +13,6 @@
 #include <linux/kernel.h>
 
 #include "auth22-internal.h"
-#include "auth-state.h"
 #include "dpcd.h"
 #include "teeif.h"
 #include "hdcp-log.h"
@@ -43,7 +42,7 @@ int auth22_wait_for_receiver_id_list(struct hdcp_link_data *lk)
 		/* check abort state firstly,
 		 * if session is abored by Rx, Tx stops Authentication process
 		 */
-		if (is_hdcp_auth_aborted())
+		if (lk->is_aborted)
 			return -ECANCELED;
 
 		/* received from CP_IRQ */
@@ -81,7 +80,7 @@ int auth22_verify_receiver_id_list(struct hdcp_link_data *lk) {
 	uint8_t v[HDCP_RP_HMAC_V_LEN / 2];
 	uint8_t valid;
 
-	if (is_hdcp_auth_aborted())
+	if (lk->is_aborted)
 		return -ECANCELED;
 
 	ret = hdcp_dplink_recv(DP_HDCP_2_2_REG_RXINFO_OFFSET, rx_info,

@@ -12,7 +12,6 @@
 #include <linux/kernel.h>
 
 #include "auth22-internal.h"
-#include "auth-state.h"
 #include "dpcd.h"
 #include "teeif.h"
 #include "hdcp-log.h"
@@ -28,7 +27,7 @@ static int do_send_rp_stream_manage(struct hdcp_link_data *lk)
 	uint8_t k[HDCP_RP_K_LEN];
 	uint8_t streamid_type[HDCP_RP_MAX_STREAMID_TYPE_LEN];
 
-	if (is_hdcp_auth_aborted())
+	if (lk->is_aborted)
 		return -ECANCELED;
 
 	/* set receiver id list */
@@ -67,7 +66,7 @@ static int do_recv_rp_stream_ready(struct hdcp_link_data *lk)
 	int ret;
 	uint8_t m_prime[HDCP_RP_HMAC_M_LEN];
 
-	if (is_hdcp_auth_aborted())
+	if (lk->is_aborted)
 		return -ECANCELED;
 
 	ret = hdcp_dplink_recv(DP_HDCP_2_2_REG_MPRIME_OFFSET, m_prime,

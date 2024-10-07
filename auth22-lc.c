@@ -12,7 +12,6 @@
 #include <linux/kernel.h>
 
 #include "auth22-internal.h"
-#include "auth-state.h"
 #include "dpcd.h"
 #include "teeif.h"
 #include "hdcp-log.h"
@@ -24,7 +23,7 @@ static int do_send_lc_init(struct hdcp_link_data *lk)
 	int ret;
 	uint8_t rn[HDCP_RTX_BYTE_LEN];
 
-	if (is_hdcp_auth_aborted())
+	if (lk->is_aborted)
 		return -ECANCELED;
 
 	ret = teei_gen_rn(rn, sizeof(rn));
@@ -47,7 +46,7 @@ static int do_recv_lc_send_l_prime(struct hdcp_link_data *lk)
 	int ret;
 	uint8_t lprime[HDCP_HMAC_SHA256_LEN];
 
-	if (is_hdcp_auth_aborted())
+	if (lk->is_aborted)
 		return -ECANCELED;
 
 	ret = hdcp_dplink_recv(DP_HDCP_2_2_REG_LPRIME_OFFSET, lprime,

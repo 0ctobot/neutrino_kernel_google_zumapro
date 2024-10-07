@@ -293,7 +293,9 @@ enum hdcp_auth_cmd {
 void hdcp_tee_init(void);
 int hdcp_tee_open(void);
 int hdcp_tee_close(void);
-int hdcp_tee_set_protection(uint32_t hdcp_lvl);
+int hdcp_tee_enable_enc_22(void);
+int hdcp_tee_enable_enc_13(void);
+int hdcp_tee_disable_enc(void);
 int hdcp_tee_send_cmd(uint32_t cmd);
 int hdcp_tee_check_protection(int* version);
 int hdcp_tee_set_test_mode(bool enable);

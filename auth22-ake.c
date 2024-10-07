@@ -13,7 +13,6 @@
 #include <linux/kernel.h>
 
 #include "auth22-internal.h"
-#include "auth-state.h"
 #include "dpcd.h"
 #include "teeif.h"
 #include "hdcp-log.h"
@@ -24,7 +23,7 @@ static int do_send_ake_init(struct hdcp_link_data *lk)
 	uint8_t rtx[HDCP_AKE_RTX_BYTE_LEN];
 	uint8_t txcaps[HDCP_CAPS_BYTE_LEN];
 
-	if (is_hdcp_auth_aborted())
+	if (lk->is_aborted)
 		return -ECANCELED;
 
 	/* Generate rtx */
@@ -56,7 +55,7 @@ static int do_recv_ake_send_cert(struct hdcp_link_data *lk)
 	int ret;
 	uint8_t cert[HDCP_RX_CERT_LEN + HDCP_RRX_BYTE_LEN + HDCP_CAPS_BYTE_LEN];
 
-	if (is_hdcp_auth_aborted())
+	if (lk->is_aborted)
 		return -ECANCELED;
 
 	ret = hdcp_dplink_recv(DP_HDCP_2_2_REG_CERT_RX_OFFSET, cert,
@@ -82,7 +81,7 @@ static int do_send_ake_nostored_km(struct hdcp_link_data *lk)
 	int ret;
 	uint8_t ekpub_km[HDCP_AKE_ENCKEY_BYTE_LEN];
 
-	if (is_hdcp_auth_aborted())
+	if (lk->is_aborted)
 		return -ECANCELED;
 
 	ret = teei_generate_master_key(HDCP_LINK_TYPE_DP, ekpub_km, sizeof(ekpub_km));
@@ -109,7 +108,7 @@ static int do_send_ake_restore_km(struct hdcp_link_data *lk)
 	uint8_t m[HDCP_AKE_M_BYTE_LEN];
 	int found_km;
 
-	if (is_hdcp_auth_aborted())
+	if (lk->is_aborted)
 		return -ECANCELED;
 
 	ret = teei_get_pairing_info(ekh_mkey, HDCP_AKE_EKH_MKEY_BYTE_LEN,
@@ -147,7 +146,7 @@ static int check_h_prime_ready(struct hdcp_link_data *lk)
 	int ret;
 	uint8_t status = 0;
 
-	if (is_hdcp_auth_aborted())
+	if (lk->is_aborted)
 		return -ECANCELED;
 
 	msleep(110);
@@ -157,7 +156,7 @@ static int check_h_prime_ready(struct hdcp_link_data *lk)
 		/* check abort state firstly,
 		 * if session is abored by Rx, Tx stops Authentication process
 		 */
-		if (is_hdcp_auth_aborted())
+		if (lk->is_aborted)
 			return -ECANCELED;
 
 		/* received from CP_IRQ */
@@ -191,7 +190,7 @@ static int do_recv_ake_send_h_prime(struct hdcp_link_data *lk)
 	int ret;
 	uint8_t hprime[HDCP_HMAC_SHA256_LEN];
 
-	if (is_hdcp_auth_aborted())
+	if (lk->is_aborted)
 		return -ECANCELED;
 
 	ret = hdcp_dplink_recv(DP_HDCP_2_2_REG_HPRIME_OFFSET, hprime,
@@ -216,7 +215,7 @@ static int check_pairing_ready(struct hdcp_link_data *lk)
 	int ret;
 	uint8_t status = 0;
 
-	if (is_hdcp_auth_aborted())
+	if (lk->is_aborted)
 		return -ECANCELED;
 
 	msleep(220);
@@ -225,7 +224,7 @@ static int check_pairing_ready(struct hdcp_link_data *lk)
 		/* check abort state firstly,
 		 * if session is abored by Rx, Tx stops Authentication process
 		 */
-		if (is_hdcp_auth_aborted())
+		if (lk->is_aborted)
 			return -ECANCELED;
 
 		/* received from CP_IRQ */
@@ -259,7 +258,7 @@ static int do_recv_ake_send_pairing_info(struct hdcp_link_data *lk)
 	int ret;
 	uint8_t ekh_km[HDCP_AKE_EKH_MKEY_BYTE_LEN];
 
-	if (is_hdcp_auth_aborted())
+	if (lk->is_aborted)
 		return -ECANCELED;
 
 	ret = hdcp_dplink_recv(DP_HDCP_2_2_REG_EKH_KM_RD_OFFSET,

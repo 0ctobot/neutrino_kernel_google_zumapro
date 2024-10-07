@@ -7,7 +7,6 @@ ccflags-y       += -I$(srctree)/include/
 ccflags-y       += -I$(KERNEL_SRC)/../private/google-modules/trusty/include
 
 exynos-hdcp2-y += auth-control.o
-exynos-hdcp2-y += auth-state.o
 exynos-hdcp2-y += auth13.o
 exynos-hdcp2-y += auth22.o
 exynos-hdcp2-y += auth22-ake.o
