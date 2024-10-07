@@ -16,7 +16,7 @@
 
 #include "exynos-hdcp-interface.h"
 
-#include "auth-control.h"
+#include "auth-state.h"
 #include "auth13.h"
 #include "dpcd.h"
 #include "hdcp-log.h"
@@ -36,8 +36,6 @@
 #define MAX_CASCADE_EXCEEDED (0x00000800)
 #define MAX_DEVS_EXCEEDED (0x00000080)
 #define BKSV_LIST_FIFO_SIZE (15)
-
-static bool is_aborted = false;
 
 static int compare_rprime(void)
 {
@@ -72,7 +70,7 @@ static int compare_rprime(void)
 		ri_retry_cnt++;
 		usleep_range(RI_DELAY * 1000, RI_DELAY * 1000 + 1);
 	}
-	while (ri_retry_cnt < RI_READ_RETRY_CNT && !is_aborted);
+	while (ri_retry_cnt < RI_READ_RETRY_CNT && !is_hdcp_auth_aborted());
 
 	return -EFAULT;
 }
@@ -86,7 +84,7 @@ static int read_ksv_list(u8* hdcp_ksv, u32 len)
 		-EIO : read_len;
 }
 
-static int proceed_repeater(void)
+int hdcp13_dplink_repeater_auth(void)
 {
 	uint8_t ksv_list[HDCP_KSV_MAX_LEN];
 	uint8_t *ksv_list_ptr = ksv_list;
@@ -107,7 +105,7 @@ static int proceed_repeater(void)
 		usleep_range(RI_AVAILABLE_WAITING * 1000, RI_AVAILABLE_WAITING * 1000 + 1);
 		waiting_time_ms = (s64)((ktime_get() - start_time_ns) / 1000000);
 		if ((waiting_time_ms >= REPEATER_READY_MAX_WAIT_DELAY) ||
-		     is_aborted) {
+		     is_hdcp_auth_aborted()) {
 			hdcp_err("Not repeater ready in RX part %lld\n",
 				waiting_time_ms);
 			return -EINVAL;
@@ -122,7 +120,7 @@ static int proceed_repeater(void)
 	} while (!(bstatus & DP_BSTATUS_READY));
 	hdcp_info("Ready HDCP RX Repeater!!!\n");
 
-	if (is_aborted)
+	if (is_hdcp_auth_aborted())
 		return -EINVAL;
 
 	ret = hdcp_dplink_recv(DP_AUX_HDCP_BINFO, (uint8_t*)&binfo, HDCP_BINFO_SIZE);
@@ -168,20 +166,19 @@ static int proceed_repeater(void)
 			hdcp_err("Vprime read failed (%d)\n", ret);
 
 		v_read_retry_cnt++;
-	} while(v_read_retry_cnt < V_READ_RETRY_CNT && !is_aborted);
+	} while(v_read_retry_cnt < V_READ_RETRY_CNT && !is_hdcp_auth_aborted());
 
 	hdcp_err("2nd Auth fail!!!\n");
 	return -EIO;
 }
 
-int hdcp13_dplink_authenticate(void)
+int hdcp13_dplink_authenticate(bool* second_stage_required)
 {
 	uint64_t aksv, bksv, an;
 	uint8_t bcaps;
 	int ret;
 
 	hdcp_info("Start SW Authentication\n");
-	is_aborted = false;
 
 	aksv = bksv = an = 0;
 
@@ -225,21 +222,8 @@ int hdcp13_dplink_authenticate(void)
 		return -EIO;
 	}
 
-	hdcp_tee_enable_enc_13();
 	hdcp_info("Done 1st Authentication\n");
-
-	if ((bcaps & DP_BCAPS_REPEATER_PRESENT) && proceed_repeater()) {
-		hdcp_err("HDCP Authentication fail!!!\n");
-		hdcp_tee_disable_enc();
-		return -EIO;
-	}
-
-	hdcp_info("Done SW Authentication\n");
-	return 0;
-}
-
-int hdcp13_dplink_abort(void) {
-	is_aborted = true;
+	*second_stage_required = bcaps & DP_BCAPS_REPEATER_PRESENT;
 	return 0;
 }
 
@@ -257,7 +241,6 @@ int hdcp13_dplink_handle_irq(void)
 	if (bstatus & DP_BSTATUS_LINK_FAILURE ||
 	    bstatus & DP_BSTATUS_REAUTH_REQ) {
 		hdcp_err("Resetting link and encryption\n");
-		hdcp_tee_disable_enc();
 		return -EFAULT;
 	}
 
