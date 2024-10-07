@@ -929,7 +929,7 @@ static void memperfd_wait_timeout(void)
 	timer.expires = jiffies + MEMPERFD_POLL_HZ + 1;
 	add_timer_on(&timer, 0);
 	schedule();
-	del_singleshot_timer_sync(&timer);
+	del_timer_sync(&timer);
 	destroy_timer_on_stack(&timer);
 }
 

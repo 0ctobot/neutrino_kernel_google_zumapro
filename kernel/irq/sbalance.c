@@ -371,7 +371,7 @@ static void sbalance_wait(long poll_jiffies)
 	timer.timer.expires = jiffies + poll_jiffies;
 	add_timer(&timer.timer);
 	schedule();
-	del_singleshot_timer_sync(&timer.timer);
+	del_timer_sync(&timer.timer);
 	destroy_timer_on_stack(&timer.timer);
 }
 
