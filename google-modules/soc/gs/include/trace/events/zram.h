@@ -1,6 +1,7 @@
 /* SPDX-License-Identifier: GPL-2.0 */
 #undef TRACE_SYSTEM
 #define TRACE_SYSTEM zram
+#define NOTRACE
 
 #if !defined(_TRACE_ZRAM_H) || defined(TRACE_HEADER_MULTI_READ)
 #define _TRACE_ZRAM_H

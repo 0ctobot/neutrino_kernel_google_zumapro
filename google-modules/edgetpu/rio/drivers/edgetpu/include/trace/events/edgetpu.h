@@ -11,6 +11,7 @@
 
 #undef TRACE_SYSTEM
 #define TRACE_SYSTEM edgetpu
+#define NOTRACE
 
 #if !defined(_TRACE_EDGETPU_H) || defined(TRACE_HEADER_MULTI_READ)
 #define _TRACE_EDGETPU_H
