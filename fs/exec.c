@@ -79,6 +79,7 @@ static int bprm_creds_from_file(struct linux_binprm *bprm);
 
 int suid_dumpable = 0;
 
+#define HWCSERVICE_BIN "/vendor/bin/hw/android.hardware.composer.hwc3-service.pixel"
 #define LIBPERFMGR_BIN "/vendor/bin/hw/android.hardware.power-service.pixel-libperfmgr"
 #define SERVICEMANAGER_BIN "/system/bin/servicemanager"
 
@@ -88,15 +89,19 @@ bool task_is_servicemanager(struct task_struct *p)
 	return p == READ_ONCE(servicemanager_tsk);
 }
 
+static struct task_struct *hwcservice_tsk;
 static struct task_struct *libperfmgr_tsk;
-bool task_is_libperfmgr(struct task_struct *p)
+
+bool task_block_logd(struct task_struct *p)
 {
-	struct task_struct *tsk;
+	struct task_struct *hwc, *libperf;
 	bool ret;
 
 	rcu_read_lock();
-	tsk = READ_ONCE(libperfmgr_tsk);
-	ret = tsk && same_thread_group(p, tsk);
+	hwc = READ_ONCE(hwcservice_tsk);
+	libperf = READ_ONCE(libperfmgr_tsk);
+	ret = (hwc && same_thread_group(p, hwc)) ||
+	      (libperf && same_thread_group(p, libperf));
 	rcu_read_unlock();
 
 	return ret;
@@ -106,6 +111,8 @@ void dead_special_task(void)
 {
 	if (unlikely(current == servicemanager_tsk))
 		WRITE_ONCE(servicemanager_tsk, NULL);
+	else if (unlikely(current == hwcservice_tsk))
+		WRITE_ONCE(hwcservice_tsk, NULL);
 	else if (unlikely(current == libperfmgr_tsk))
 		WRITE_ONCE(libperfmgr_tsk, NULL);
 }
@@ -1889,7 +1896,9 @@ static int bprm_execve(struct linux_binprm *bprm,
 		goto out;
 
 	if (is_global_init(current->parent)) {
-		if (unlikely(!strcmp(filename->name, LIBPERFMGR_BIN))) {
+		if (unlikely(!strcmp(filename->name, HWCSERVICE_BIN))) {
+			WRITE_ONCE(hwcservice_tsk, current);
+		} else if (unlikely(!strcmp(filename->name, LIBPERFMGR_BIN))) {
 			WRITE_ONCE(libperfmgr_tsk, current);
 		} else if (unlikely(!strcmp(filename->name, SERVICEMANAGER_BIN))) {
 			WRITE_ONCE(servicemanager_tsk, current);
