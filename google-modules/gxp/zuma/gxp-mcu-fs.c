@@ -86,6 +86,10 @@ static struct dma_fence *polled_dma_fence_get(struct gcip_fence_array *in_fences
 	if (size == 1)
 		return dma_fence_get(in_fences->fences[0]->fence.ikf);
 
+	if (size > ULONG_MAX / sizeof(*in_dma_fences)) {
+		return ERR_PTR(-ENOMEM);
+	}
+
 	in_dma_fences = kcalloc(size, sizeof(*in_dma_fences), GFP_KERNEL);
 	if (!in_dma_fences)
 		return ERR_PTR(-ENOMEM);
