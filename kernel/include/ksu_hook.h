@@ -9,7 +9,11 @@
 int ksu_handle_faccessat(int *dfd, const char __user **filename_user, int *mode,
 			 int *flags);
 
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(5, 18, 0)
+int ksu_handle_stat(int *dfd, struct filename **filename_user, int *flags);
+#else
 int ksu_handle_stat(int *dfd, const char __user **filename_user, int *flags);
+#endif
 
 // For ksud
 

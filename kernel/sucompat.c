@@ -66,9 +66,37 @@ int ksu_handle_faccessat(int *dfd, const char __user **filename_user, int *mode,
 	return 0;
 }
 
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(5, 18, 0)
+int ksu_handle_stat(int *dfd, struct filename **filename_user, int *flags)
+{
+	const char su[] = SU_PATH;
+	const char sh[] = SH_PATH;
+
+	if (!ksu_is_allow_uid(current_uid().val)) {
+		return 0;
+	}
+
+	if (unlikely(!filename_user)) {
+		return 0;
+	}
+
+	struct filename *filename = *filename_user;
+	if (IS_ERR(filename)) {
+		return 0;
+	}
+
+	if (likely(memcmp(filename->name, su, sizeof(su)))) {
+		return 0;
+	}
+
+	pr_info("vfs_statx su->sh!\n");
+	memcpy((void *)filename->name, sh, sizeof(sh));
+
+	return 0;
+}
+#else
 int ksu_handle_stat(int *dfd, const char __user **filename_user, int *flags)
 {
-	// const char sh[] = SH_PATH;
 	const char su[] = SU_PATH;
 
 	if (!ksu_is_allow_uid(current_uid().val)) {
@@ -81,30 +109,16 @@ int ksu_handle_stat(int *dfd, const char __user **filename_user, int *flags)
 
 	char path[sizeof(su) + 1];
 	memset(path, 0, sizeof(path));
-// Remove this later!! we use syscall hook, so this will never happen!!!!!
-#if LINUX_VERSION_CODE >= KERNEL_VERSION(5, 18, 0) && 0
-	// it becomes a `struct filename *` after 5.18
-	// https://elixir.bootlin.com/linux/v5.18/source/fs/stat.c#L216
-	const char sh[] = SH_PATH;
-	struct filename *filename = *((struct filename **)filename_user);
-	if (IS_ERR(filename)) {
-		return 0;
-	}
-	if (likely(memcmp(filename->name, su, sizeof(su))))
-		return 0;
-	pr_info("vfs_statx su->sh!\n");
-	memcpy((void *)filename->name, sh, sizeof(sh));
-#else
 	ksu_strncpy_from_user_nofault(path, *filename_user, sizeof(path));
 
 	if (unlikely(!memcmp(path, su, sizeof(su)))) {
 		pr_info("newfstatat su->sh!\n");
 		*filename_user = sh_user_path();
 	}
-#endif
 
 	return 0;
 }
+#endif
 
 // the call from execve_handler_pre won't provided correct value for __never_use_argument, use them after fix execve_handler_pre, keeping them for consistence for manually patched code
 int ksu_handle_execveat_sucompat(int *fd, struct filename **filename_ptr,
