@@ -1,0 +1,4 @@
+[submodule "KernelSU"]
+	path = KernelSU
+	url = https://github.com/0ctobot/neutrino_kernel_google_zumapro
+	branch = KernelSU/11928-neutrino
