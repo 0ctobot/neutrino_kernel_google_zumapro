@@ -10,13 +10,16 @@
 #include <linux/kthread.h>
 #include <linux/spinlock.h>
 
-#include <gcip/gcip-mailbox.h>
-
-#include "gxp-config.h"
 #include "gxp-client.h"
+#include "gxp-config.h" /* GXP_USE_LEGACY_MAILBOX */
 #include "gxp-dma.h"
 #include "gxp-internal.h"
 #include "gxp-mailbox-manager.h"
+
+#if !GXP_USE_LEGACY_MAILBOX
+#include <gcip/gcip-kci.h>
+#include <gcip/gcip-mailbox.h>
+#endif
 
 /* Pre-agreed values can be passed to gxp_mailbox_set_control(). */
 #define GXP_MBOX_CONTROL_MAGIC_POWER_DOWN (0xcafebabeu)
@@ -63,6 +66,8 @@ enum gxp_mailbox_command_code {
 enum gxp_mailbox_type {
 	/*
 	 * Mailbox will utilize `gcip-mailbox.h` internally.
+	 * (Note: On `GXP_USE_LEGACY_MAILBOX`, it utilizes `gxp-mailbox-impl.h`
+	 * instead.)
 	 * Mostly will be used for handling user commands.
 	 */
 	GXP_MBOX_TYPE_GENERAL = 0,
@@ -87,8 +92,6 @@ struct gxp_mailbox_descriptor {
 	u32 resp_queue_size;
 };
 
-struct gcip_kci;
-struct gcip_kci_ops;
 struct gxp_mailbox;
 
 /*
@@ -132,6 +135,7 @@ struct gxp_mailbox_ops {
 	void (*release_resources)(struct gxp_mailbox *mailbox,
 				  struct gxp_virtual_device *vd,
 				  uint virt_core);
+#if !GXP_USE_LEGACY_MAILBOX
 	/*
 	 * Operators which has dependency on the GCIP according to the type of mailbox.
 	 * - GXP_MBOX_TYPE_GENERAL: @gcip_ops.mbx must be defined.
@@ -141,6 +145,7 @@ struct gxp_mailbox_ops {
 		const struct gcip_mailbox_ops *mbx;
 		const struct gcip_kci_ops *kci;
 	} gcip_ops;
+#endif
 };
 
 struct gxp_mailbox_args {
@@ -198,6 +203,13 @@ struct gxp_mailbox {
 	struct gxp_mailbox_ops *ops;
 	void *data; /* private data */
 
+#if GXP_USE_LEGACY_MAILBOX
+	u64 cur_seq;
+	/* add to this list if a command needs to wait for a response */
+	struct list_head wait_list;
+	/* queue for waiting for the wait_list to be consumed */
+	wait_queue_head_t wait_list_waitq;
+#else /* !GXP_USE_LEGACY_MAILBOX */
 	/*
 	 * Implementation of the mailbox according to the type.
 	 * - GXP_MBOX_TYPE_GENERAL: @gcip_mbx will be allocated.
@@ -207,6 +219,7 @@ struct gxp_mailbox {
 		struct gcip_mailbox *gcip_mbx;
 		struct gcip_kci *gcip_kci;
 	} mbx_impl;
+#endif /* GXP_USE_LEGACY_MAILBOX */
 };
 
 /* Mailbox APIs */
@@ -242,12 +255,7 @@ int gxp_mailbox_register_interrupt_handler(struct gxp_mailbox *mailbox,
 int gxp_mailbox_unregister_interrupt_handler(struct gxp_mailbox *mailbox,
 					     u32 int_bit);
 
-/*
- * Initialises the mailbox CSRs.
- * Must be called only after mailbox is allocated via gxp_mailbox_alloc().
- */
-void gxp_mailbox_reinit(struct gxp_mailbox *mailbox);
-
+#if !GXP_USE_LEGACY_MAILBOX
 /*
  * Executes command synchronously. If @resp is not NULL, the response will be returned to it.
  * See the `gcip_mailbox_send_cmd` of `gcip-mailbox.h` or `gcip_kci_send_cmd` of `gcip-kci.h`
@@ -264,5 +272,6 @@ int gxp_mailbox_send_cmd(struct gxp_mailbox *mailbox, void *cmd, void *resp);
 struct gcip_mailbox_resp_awaiter *gxp_mailbox_put_cmd(struct gxp_mailbox *mailbox, void *cmd,
 						      void *resp, void *data,
 						      gcip_mailbox_cmd_flags_t flags);
+#endif /* !GXP_USE_LEGACY_MAILBOX */
 
 #endif /* __GXP_MAILBOX_H__ */

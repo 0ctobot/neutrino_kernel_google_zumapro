@@ -137,15 +137,18 @@ struct gcip_mailbox_resp_awaiter {
 struct gcip_mailbox_ops {
 	/* Mandatory. */
 	/*
+	 * Gets the head of mailbox command queue.
+	 * Context: normal.
+	 */
+	u32 (*get_cmd_queue_head)(struct gcip_mailbox *mailbox);
+	/*
 	 * Gets the tail of mailbox command queue.
-	 *
-	 * Context: cmd_queue_lock.
+	 * Context: normal.
 	 */
 	u32 (*get_cmd_queue_tail)(struct gcip_mailbox *mailbox);
 	/*
 	 * Increases the tail of mailbox command queue by @inc.
-	 *
-	 * Context: cmd_queue_lock.
+	 * Context: normal.
 	 */
 	void (*inc_cmd_queue_tail)(struct gcip_mailbox *mailbox, u32 inc);
 	/*
@@ -164,61 +167,43 @@ struct gcip_mailbox_ops {
 	int (*acquire_cmd_queue_lock)(struct gcip_mailbox *mailbox, bool try, bool *atomic);
 	/*
 	 * Releases the lock of cmd_queue which is acquired by calling `acquire_cmd_queue_lock`.
-	 *
-	 * Context: cmd_queue_lock.
+	 * Context: normal.
 	 */
 	void (*release_cmd_queue_lock)(struct gcip_mailbox *mailbox);
 	/*
 	 * Gets the sequence number of @cmd queue element.
-	 *
-	 * Context: cmd_queue_lock.
+	 * Context: normal.
 	 */
 	u64 (*get_cmd_elem_seq)(struct gcip_mailbox *mailbox, void *cmd);
 	/*
 	 * Sets the sequence number of @cmd queue element.
-	 *
-	 * Context: cmd_queue_lock.
+	 * Context: normal.
 	 */
 	void (*set_cmd_elem_seq)(struct gcip_mailbox *mailbox, void *cmd, u64 seq);
 	/*
 	 * Gets the code of @cmd queue element.
-	 *
 	 * Context: normal.
 	 */
 	u32 (*get_cmd_elem_code)(struct gcip_mailbox *mailbox, void *cmd);
-	/*
-	 * Waits for the cmd queue of @mailbox has a available space for putting the command. If
-	 * the queue has a space, returns 0. Otherwise, returns error as non-zero value. It depends
-	 * on the implementation details, but it is okay to return right away with error when the
-	 * queue is full. If this callback returns an error, `gcip_mailbox_send_cmd` function or
-	 * `gcip_mailbox_put_cmd` function will return that error too.
-	 *
-	 * Context: cmd_queue_lock.
-	 */
-	int (*wait_for_cmd_queue_not_full)(struct gcip_mailbox *mailbox);
 
 	/*
 	 * Gets the size of mailbox response queue.
-	 *
 	 * Context: normal.
 	 */
 	u32 (*get_resp_queue_size)(struct gcip_mailbox *mailbox);
 	/*
 	 * Gets the head of mailbox response queue.
-	 *
-	 * Context: resp_queue_lock.
+	 * Context: normal and in_interrupt().
 	 */
 	u32 (*get_resp_queue_head)(struct gcip_mailbox *mailbox);
 	/*
 	 * Gets the tail of mailbox response queue.
-	 *
-	 * Context: resp_queue_lock.
+	 * Context: normal and in_interrupt().
 	 */
 	u32 (*get_resp_queue_tail)(struct gcip_mailbox *mailbox);
 	/*
 	 * Increases the head of mailbox response queue by @inc.
-	 *
-	 * Context: resp_queue_lock.
+	 * Context: normal and in_interrupt().
 	 */
 	void (*inc_resp_queue_head)(struct gcip_mailbox *mailbox, u32 inc);
 	/*
@@ -239,20 +224,17 @@ struct gcip_mailbox_ops {
 	int (*acquire_resp_queue_lock)(struct gcip_mailbox *mailbox, bool try, bool *atomic);
 	/*
 	 * Releases the lock of resp_queue which is acquired by calling `acquire_resp_queue_lock`.
-	 *
-	 * Context: resp_queue_lock.
+	 * Context: normal and in_interrupt().
 	 */
 	void (*release_resp_queue_lock)(struct gcip_mailbox *mailbox);
 	/*
 	 * Gets the sequence number of @resp queue element.
-	 *
-	 * Context: wait_list_lock.
+	 * Context: normal and in_interrupt().
 	 */
 	u64 (*get_resp_elem_seq)(struct gcip_mailbox *mailbox, void *resp);
 	/*
 	 * Sets the sequence number of @resp queue element.
-	 *
-	 * Context: cmd_queue_lock.
+	 * Context: normal and in_interrupt().
 	 */
 	void (*set_resp_elem_seq)(struct gcip_mailbox *mailbox, void *resp, u64 seq);
 
@@ -267,7 +249,6 @@ struct gcip_mailbox_ops {
 	 * The lock can be a mutex lock or a spin lock. However, if @irqsave is considered and
 	 * "_irqsave" is used, it must be spin lock only.
 	 * The lock will be released by calling `release_wait_list_lock` callback.
-	 *
 	 * Context: normal and in_interrupt().
 	 */
 	void (*acquire_wait_list_lock)(struct gcip_mailbox *mailbox, bool irqsave,
@@ -276,13 +257,27 @@ struct gcip_mailbox_ops {
 	 * Releases the lock of wait_list which is acquired by calling `acquire_wait_list_lock`.
 	 * If @irqsave is true, restores @flags from `acquire_wait_list_lock` to the irq state.
 	 * Or it can be ignored, if @irqsave was not considered in the `acquire_wait_list_lock`.
-	 *
-	 * Context: wait_list_lock.
+	 * Context: normal and in_interrupt().
 	 */
 	void (*release_wait_list_lock)(struct gcip_mailbox *mailbox, bool irqrestore,
 				       unsigned long flags);
 
 	/* Optional. */
+	/*
+	 * Waits for the cmd queue of @mailbox has a available space for putting the command. If
+	 * the queue has a space, returns 0. Otherwise, returns error as non-zero value. It depends
+	 * on the implementation details, but it is okay to return right away with error when the
+	 * queue is full. If this callback returns an error, `gcip_mailbox_send_cmd` function or
+	 * `gcip_mailbox_put_cmd` function will return that error too. This callback is called with
+	 * the `cmd_queue_lock` being held.
+	 *
+	 * Note: if this callback is NULL, it will simply check the fullness of cmd_queue and
+	 * return -EAGAIN error right away if it is full. Please refer the implementation of the
+	 * `gcip_mailbox_enqueue_cmd` function.
+	 *
+	 * Context: normal.
+	 */
+	int (*wait_for_cmd_queue_not_full)(struct gcip_mailbox *mailbox);
 	/*
 	 * This callback will be called before putting the @resp into @mailbox->wait_list and
 	 * putting @cmd of @resp into the command queue. After this callback returns, the consumer
@@ -295,15 +290,15 @@ struct gcip_mailbox_ops {
 	 *
 	 * If @resp is synchronous, @awaiter will be NULL.
 	 *
-	 * Context: cmd_queue_lock.
+	 * Context: normal.
 	 */
 	int (*before_enqueue_wait_list)(struct gcip_mailbox *mailbox, void *resp,
 					struct gcip_mailbox_resp_awaiter *awaiter);
 	/*
 	 * This callback will be called after putting the @cmd to the command queue. It can be used
 	 * for triggering the doorbell. Returns 0 on success, or returns error code otherwise.
-	 *
-	 * Context: cmd_queue_lock.
+	 * This is called with the `cmd_queue_lock` being held.
+	 * Context: normal.
 	 */
 	int (*after_enqueue_cmd)(struct gcip_mailbox *mailbox, void *cmd);
 	/*
@@ -311,7 +306,6 @@ struct gcip_mailbox_ops {
 	 * a signal to break up waiting consuming the response queue. This is called without
 	 * holding any locks.
 	 * - @num_resps: the number of fetched responses.
-	 *
 	 * Context: normal and in_interrupt().
 	 */
 	void (*after_fetch_resps)(struct gcip_mailbox *mailbox, u32 num_resps);
@@ -319,7 +313,6 @@ struct gcip_mailbox_ops {
 	 * Before handling each fetched responses, this callback will be called. If this callback
 	 * is not defined or returns true, the mailbox will handle the @resp normally. If the @resp
 	 * should not be handled, returns false. This is called without holding any locks.
-	 *
 	 * Context: normal and in_interrupt().
 	 */
 	bool (*before_handle_resp)(struct gcip_mailbox *mailbox, const void *resp);
@@ -328,7 +321,6 @@ struct gcip_mailbox_ops {
 	 * chip implementation. However, @awaiter should be released by calling the
 	 * `gcip_mailbox_release_awaiter` function when the kernel driver doesn't need
 	 * @awaiter anymore.
-	 *
 	 * Context: normal and in_interrupt().
 	 */
 	void (*handle_awaiter_arrived)(struct gcip_mailbox *mailbox,
@@ -338,7 +330,6 @@ struct gcip_mailbox_ops {
 	 * implementation. However, @awaiter should be released by calling the
 	 * `gcip_mailbox_release_awaiter` function when the kernel driver doesn't need
 	 * @awaiter anymore. This is called without holding any locks.
-	 *
 	 * Context: normal and in_interrupt().
 	 */
 	void (*handle_awaiter_timedout)(struct gcip_mailbox *mailbox,
@@ -348,22 +339,20 @@ struct gcip_mailbox_ops {
 	 * The @awaiter should be marked as unprocessable to make it not to be processed by
 	 * the `handle_awaiter_arrived` or `handle_awaiter_timedout` callbacks in race
 	 * conditions. Don't have to release @awaiter of this function by calling the
-	 * `gcip_mailbox_release_awaiter` function. It will be released internally.
-	 *
-	 * Context: wait_list_lock.
+	 * `gcip_mailbox_release_awaiter` function. It will be released internally. This is
+	 * called with the `wait_list_lock` being held.
+	 * Context: normal.
 	 */
 	void (*flush_awaiter)(struct gcip_mailbox *mailbox,
 			      struct gcip_mailbox_resp_awaiter *awaiter);
 	/*
 	 * Releases the @data which was passed to the `gcip_mailbox_put_cmd` function. This is
 	 * called without holding any locks.
-	 *
 	 * Context: normal and in_interrupt().
 	 */
 	void (*release_awaiter_data)(void *data);
 	/*
 	 * Checks if the block is off.
-	 *
 	 * Context: in_interrupt()
 	 */
 	bool (*is_block_off)(struct gcip_mailbox *mailbox);
@@ -373,13 +362,11 @@ struct gcip_mailbox_ops {
 	 * be fetched from @cmd, @resp or @data passed to the `gcip_mailbox_put_cmd` function.
 	 * Therefore, this callback passes all of them not only @cmd. This can be called without
 	 * holding any locks.
-	 *
 	 * Context: normal.
 	 */
 	u32 (*get_cmd_timeout)(struct gcip_mailbox *mailbox, void *cmd, void *resp, void *data);
 	/*
 	 * Called when a command fails to be sent.
-	 *
 	 * Context: normal.
 	 */
 	void (*on_error)(struct gcip_mailbox *mailbox, int err);

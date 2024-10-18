@@ -6,7 +6,6 @@
 GXP_CHIP := CALLISTO
 CONFIG_$(GXP_CHIP) ?= m
 GCIP_DIR := gcip-kernel-driver/drivers/gcip
-CURRENT_DIR := $(dir $(abspath $(lastword $(MAKEFILE_LIST))))
 
 obj-$(CONFIG_$(GXP_CHIP)) += gxp.o
 
@@ -14,7 +13,6 @@ gxp-objs += \
 		gxp-bpm.o \
 		gxp-client.o \
 		gxp-core-telemetry.o \
-		gxp-dci.o \
 		gxp-debug-dump.o \
 		gxp-dma-fence.o \
 		gxp-dma-iommu.o \
@@ -36,6 +34,7 @@ gxp-objs += \
 		gxp-vd.o
 
 gxp-mcu-objs := \
+		gxp-dci.o \
 		gxp-kci.o \
 		gxp-mcu-firmware.o \
 		gxp-mcu-fs.o \
@@ -87,12 +86,11 @@ M ?= $(srctree)/$(src)
 GXP_PLATFORM ?= SILICON
 
 gxp-flags := -DCONFIG_GXP_$(GXP_PLATFORM) -DCONFIG_$(GXP_CHIP)=1 \
-	     -I$(CURRENT_DIR)/include -I$(CURRENT_DIR)/gcip-kernel-driver/include \
+	     -I$(M)/include -I$(M)/gcip-kernel-driver/include \
+	     -I$(srctree)/$(M)/include \
+	     -I$(srctree)/$(M)/gcip-kernel-driver/include \
+	     -I$(srctree)/drivers/gxp/include \
 	     -I$(KERNEL_SRC)/../private/google-modules/power/mitigation
-# TODO(b/336717718): Remove path of embedded IIF
-gxp-flags += -I$(CURRENT_DIR)/gcip-kernel-driver/drivers/gcip/iif/include \
-	     -I$(KERNEL_SRC)/../private/google-modules/iif/include
-
 ccflags-y += $(EXTRA_CFLAGS) $(gxp-flags)
 # Flags needed for external modules.
 ccflags-y += -DCONFIG_GOOGLE_BCL
@@ -102,18 +100,11 @@ KBUILD_OPTIONS += GXP_CHIP=$(GXP_CHIP) GXP_PLATFORM=$(GXP_PLATFORM)
 ifneq ($(OUT_DIR),)
 # Access TPU driver's exported symbols.
 EXTRA_SYMBOLS += $(GMODULE_PATH)/edgetpu/$(EDGETPU_CHIP)/drivers/edgetpu/Module.symvers
-ifneq ($(wildcard $(GMODULE_PATH)/soc/gs/drivers/soc/google/gsa/Module.symvers),)
-EXTRA_SYMBOLS += $(GMODULE_PATH)/soc/gs/drivers/soc/google/gsa/Module.symvers
-endif
 
 ifneq ($(GXP_POWER_MITIGATION), false)
 EXTRA_SYMBOLS += $(GMODULE_PATH)/power/mitigation/Module.symvers
 endif
-
-ifneq ($(wildcard $(GMODULE_PATH)/iif/Module.symvers),)
-EXTRA_SYMBOLS += $(GMODULE_PATH)/iif/Module.symvers
 endif
-endif # OUT_DIR
 
 modules modules_install:
 	$(MAKE) -C $(KERNEL_SRC) M=$(M)/$(GCIP_DIR) gcip.o

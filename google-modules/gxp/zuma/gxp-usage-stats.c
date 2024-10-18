@@ -73,7 +73,7 @@ static int get_default_dvfs_freqs_num(void *data)
 	return AUR_NUM_POWER_STATE;
 }
 
-static unsigned int get_default_dvfs_freq(int idx, void *data)
+static int get_default_dvfs_freq(int idx, void *data)
 {
 	if (idx >= AUR_NUM_POWER_STATE)
 		return 0;

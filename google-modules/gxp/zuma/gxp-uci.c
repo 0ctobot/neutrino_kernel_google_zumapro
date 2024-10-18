@@ -11,11 +11,9 @@
 #include <linux/slab.h>
 #include <uapi/linux/sched/types.h>
 
+#include <gcip/iif/iif.h>
 #include <gcip/gcip-fence-array.h>
 #include <gcip/gcip-fence.h>
-#include <iif/iif.h>
-
-#include <trace/events/gxp.h>
 
 #include "gxp-config.h"
 #include "gxp-internal.h"
@@ -255,7 +253,7 @@ gxp_uci_before_enqueue_wait_list(struct gcip_mailbox *mailbox, void *resp,
 	}
 
 	ret = gcip_fence_array_submit_waiter_and_signaler(async_resp->in_fences,
-							  async_resp->out_fences, IIF_IP_DSP);
+							  async_resp->out_fences);
 	if (ret) {
 		dev_err(mailbox->dev, "Failed to submit waiter or signaler to fences, ret=%d", ret);
 		list_del_init(&async_resp->wait_list_entry);
@@ -296,11 +294,9 @@ static void gxp_uci_push_async_response(struct gcip_mailbox *mailbox,
 	spin_unlock_irqrestore(async_resp->queue_lock, flags);
 
 	gcip_fence_array_signal(async_resp->out_fences, (status != GXP_RESP_OK) ? -ETIMEDOUT : 0);
-	gcip_fence_array_waited(async_resp->in_fences, IIF_IP_DSP);
+	gcip_fence_array_waited(async_resp->in_fences);
 	if (async_resp->eventfd)
 		gxp_eventfd_signal(async_resp->eventfd);
-
-	trace_gxp_uci_rsp_end(async_resp->resp.seq);
 
 	wake_up(async_resp->dest_queue_waitq);
 }
@@ -360,6 +356,7 @@ static u32 gxp_uci_get_cmd_timeout(struct gcip_mailbox *mailbox, void *cmd, void
 }
 
 static const struct gcip_mailbox_ops gxp_uci_gcip_mbx_ops = {
+	.get_cmd_queue_head = gxp_mailbox_gcip_ops_get_cmd_queue_head,
 	.get_cmd_queue_tail = gxp_mailbox_gcip_ops_get_cmd_queue_tail,
 	.inc_cmd_queue_tail = gxp_mailbox_gcip_ops_inc_cmd_queue_tail,
 	.acquire_cmd_queue_lock = gxp_mailbox_gcip_ops_acquire_cmd_queue_lock,
@@ -577,7 +574,10 @@ int gxp_uci_reinit(struct gxp_uci *uci)
 {
 	struct gxp_mailbox *mailbox = uci->mbx;
 
-	gxp_mailbox_reinit(mailbox);
+	gxp_mailbox_write_descriptor(mailbox, mailbox->descriptor_buf.dsp_addr);
+	gxp_mailbox_reset(uci->mbx);
+	gxp_mailbox_enable_interrupt(mailbox);
+	gxp_mailbox_write_status(mailbox, 1);
 
 	return 0;
 }

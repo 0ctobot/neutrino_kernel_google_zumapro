@@ -8,7 +8,7 @@
 #ifndef __IIF_IIF_SIGNALER_SUBMISSION_WAITER_H__
 #define __IIF_IIF_SIGNALER_SUBMISSION_WAITER_H__
 
-#include <iif/iif-fence.h>
+#include <gcip/iif/iif-fence.h>
 
 #define IIF_NO_REGISTER_EVENTFD (~0u)
 

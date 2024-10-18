@@ -12,26 +12,6 @@
 
 #include <gcip/gcip-image-config.h>
 
-/*
- * Return true for a secure config mapping that is not shared.  The host IP driver doesn't need to
- * process such mappings.
- */
-static bool skip_secure_mapping(struct gcip_image_config *config, u32 map_flags)
-{
-	return gcip_image_config_is_secure(config) && !GCIP_IMAGE_CONFIG_MAP_SHARED(map_flags);
-}
-
-static dma_addr_t virt_address_to_dma(u32 virt_address)
-{
-	dma_addr_t daddr = virt_address & ~(GCIP_IMG_CFG_MAP_FLAGS_MASK);
-	u32 flags = virt_address & GCIP_IMG_CFG_MAP_FLAGS_MASK;
-
-	if (GCIP_IMAGE_CONFIG_MAP_36BIT(flags))
-		daddr <<= 4;
-
-	return daddr;
-}
-
 static int setup_iommu_mappings(struct gcip_image_config_parser *parser,
 				struct gcip_image_config *config)
 {
@@ -39,13 +19,9 @@ static int setup_iommu_mappings(struct gcip_image_config_parser *parser,
 	dma_addr_t daddr;
 	size_t size;
 	phys_addr_t paddr;
-	u32 map_flags;
 
 	for (i = 0; i < config->num_iommu_mappings; i++) {
-		daddr = virt_address_to_dma(config->iommu_mappings[i].virt_address);
-		map_flags = config->iommu_mappings[i].virt_address & GCIP_IMG_CFG_MAP_FLAGS_MASK;
-		if (skip_secure_mapping(config, map_flags))
-			continue;
+		daddr = config->iommu_mappings[i].virt_address;
 		if (unlikely(!daddr)) {
 			dev_warn(parser->dev, "Invalid config, device address is zero");
 			ret = -EIO;
@@ -61,7 +37,7 @@ static int setup_iommu_mappings(struct gcip_image_config_parser *parser,
 			ret = -EOVERFLOW;
 			goto err;
 		}
-		ret = parser->ops->map(parser->data, daddr, paddr, size, map_flags,
+		ret = parser->ops->map(parser->data, daddr, paddr, size,
 				       GCIP_IMAGE_CONFIG_FLAGS_SECURE);
 		if (ret) {
 			dev_err(parser->dev,
@@ -75,13 +51,9 @@ static int setup_iommu_mappings(struct gcip_image_config_parser *parser,
 
 err:
 	while (i--) {
-		daddr = config->iommu_mappings[i].virt_address & ~(GCIP_IMG_CFG_MAP_FLAGS_MASK);
-		map_flags = config->iommu_mappings[i].virt_address & GCIP_IMG_CFG_MAP_FLAGS_MASK;
-		if (skip_secure_mapping(config, map_flags))
-			continue;
+		daddr = config->iommu_mappings[i].virt_address;
 		size = gcip_config_to_size(config->iommu_mappings[i].image_config_value);
-		parser->ops->unmap(parser->data, daddr, size, map_flags,
-				   GCIP_IMAGE_CONFIG_FLAGS_SECURE);
+		parser->ops->unmap(parser->data, daddr, size, GCIP_IMAGE_CONFIG_FLAGS_SECURE);
 	}
 	return ret;
 }
@@ -91,19 +63,14 @@ static void clear_iommu_mappings(struct gcip_image_config_parser *parser,
 {
 	dma_addr_t daddr;
 	size_t size;
-	u32 map_flags;
 	int i;
 
 	for (i = config->num_iommu_mappings - 1; i >= 0; i--) {
-		daddr = virt_address_to_dma(config->iommu_mappings[i].virt_address);
-		map_flags = config->iommu_mappings[i].virt_address & GCIP_IMG_CFG_MAP_FLAGS_MASK;
-		if (skip_secure_mapping(config, map_flags))
-			continue;
+		daddr = config->iommu_mappings[i].virt_address;
 		size = gcip_config_to_size(config->iommu_mappings[i].image_config_value);
 		dev_dbg(parser->dev, "Image config removing IOMMU mapping: %pad size=%#lx", &daddr,
 			size);
-		parser->ops->unmap(parser->data, daddr, size, map_flags,
-				   GCIP_IMAGE_CONFIG_FLAGS_SECURE);
+		parser->ops->unmap(parser->data, daddr, size, GCIP_IMAGE_CONFIG_FLAGS_SECURE);
 	}
 }
 
@@ -129,7 +96,7 @@ static int setup_ns_iommu_mappings(struct gcip_image_config_parser *parser,
 			ret = -EOVERFLOW;
 			goto err;
 		}
-		ret = parser->ops->map(parser->data, daddr, paddr, size, 0, 0);
+		ret = parser->ops->map(parser->data, daddr, paddr, size, 0);
 		if (ret)
 			goto err;
 		paddr += size;
@@ -141,7 +108,7 @@ err:
 	while (i--) {
 		size = gcip_ns_config_to_size(config->ns_iommu_mappings[i]);
 		daddr = config->ns_iommu_mappings[i] & GCIP_IMG_CFG_ADDR_MASK;
-		parser->ops->unmap(parser->data, daddr, size, 0, 0);
+		parser->ops->unmap(parser->data, daddr, size, 0);
 	}
 	return ret;
 }
@@ -158,7 +125,7 @@ static void clear_ns_iommu_mappings(struct gcip_image_config_parser *parser,
 		daddr = config->ns_iommu_mappings[i] & GCIP_IMG_CFG_ADDR_MASK;
 		dev_dbg(parser->dev, "Image config removing NS IOMMU mapping: %pad size=%#lx",
 			&daddr, size);
-		parser->ops->unmap(parser->data, daddr, size, 0, 0);
+		parser->ops->unmap(parser->data, daddr, size, 0);
 	}
 }
 
@@ -169,16 +136,19 @@ static int map_image_config(struct gcip_image_config_parser *parser,
 
 	if (ret)
 		return ret;
-	ret = setup_iommu_mappings(parser, config);
-	if (ret)
-		clear_ns_iommu_mappings(parser, config);
+	if (gcip_image_config_is_ns(config)) {
+		ret = setup_iommu_mappings(parser, config);
+		if (ret)
+			clear_ns_iommu_mappings(parser, config);
+	}
 	return ret;
 }
 
 static void unmap_image_config(struct gcip_image_config_parser *parser,
 			       struct gcip_image_config *config)
 {
-	clear_iommu_mappings(parser, config);
+	if (gcip_image_config_is_ns(config))
+		clear_iommu_mappings(parser, config);
 	clear_ns_iommu_mappings(parser, config);
 }
 

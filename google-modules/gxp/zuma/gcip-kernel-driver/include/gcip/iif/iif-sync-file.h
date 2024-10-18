@@ -1,12 +1,8 @@
 /* SPDX-License-Identifier: GPL-2.0-only */
 /*
- * IIF driver sync file.
+ * GCIP-integrated IIF driver sync file.
  *
- * To export fences to the userspace, the driver will allocate a sync file to a fence and will
- * return its file descriptor to the user. The user can distinguish fences with it. The driver will
- * convert the file descriptor to the corresponding fence ID and will pass it to the IP.
- *
- * Copyright (C) 2023-2024 Google LLC
+ * Copyright (C) 2023 Google LLC
  */
 
 #ifndef __IIF_IIF_SYNC_FILE_H__
@@ -15,7 +11,7 @@
 #include <linux/file.h>
 #include <linux/wait.h>
 
-#include <iif/iif-fence.h>
+#include <gcip/iif/iif-fence.h>
 
 #define IIF_SYNC_FILE_FLAGS_POLL_ENABLED 0
 

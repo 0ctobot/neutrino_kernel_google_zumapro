@@ -12,7 +12,6 @@
 #include <gcip/gcip-image-config.h>
 
 #include "gxp-config.h"
-#include "gxp-firmware-data.h"
 #include "gxp-firmware-loader.h"
 #include "gxp-firmware.h"
 #include "gxp-internal.h"
@@ -247,27 +246,13 @@ err_unload_core:
 int gxp_firmware_loader_load_if_needed(struct gxp_dev *gxp)
 {
 	struct gxp_firmware_loader_manager *mgr = gxp->fw_loader_mgr;
-	resource_size_t addr_size;
 	int ret = 0;
 
 	mutex_lock(&mgr->lock);
 	if (mgr->is_loaded)
-		goto out_unlock;
+		goto out;
 	ret = gxp_firmware_loader_load_locked(gxp);
-	if (ret)
-		goto out_unlock;
-	/*
-	 * This should be done only after the firmware is successfully loaded because the size of
-	 * system config region is required.
-	 */
-	addr_size = mgr->core_img_cfg.iommu_mappings[SYS_CFG_REGION_IDX].image_config_value;
-	mutex_unlock(&mgr->lock);
-
-	gxp_fw_data_populate_system_config(gxp, gcip_config_to_size(addr_size));
-
-	return 0;
-
-out_unlock:
+out:
 	mutex_unlock(&mgr->lock);
 	return ret;
 }

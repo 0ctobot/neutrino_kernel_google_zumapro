@@ -18,14 +18,19 @@
 
 #include "gxp-mailbox-driver.c"
 
-static u32 gxp_mailbox_get_interrupt_status(struct gxp_mailbox *mailbox)
+static u32 csr_read(struct gxp_mailbox *mailbox, uint reg_offset)
 {
-	return gxp_mailbox_csr_read(mailbox, MBOX_INTMSR1_OFFSET);
+	return readl(mailbox->csr_reg_base + reg_offset);
+}
+
+static void csr_write(struct gxp_mailbox *mailbox, uint reg_offset, u32 value)
+{
+	writel(value, mailbox->csr_reg_base + reg_offset);
 }
 
 void gxp_mailbox_reset_hw(struct gxp_mailbox *mailbox)
 {
-	gxp_mailbox_csr_write(mailbox, MBOX_MCUCTLR_OFFSET, 1);
+	csr_write(mailbox, MBOX_MCUCTLR_OFFSET, 1);
 }
 
 /* Interrupt to signal a response from the device to host */
@@ -73,16 +78,21 @@ void gxp_mailbox_generate_device_interrupt(struct gxp_mailbox *mailbox, u32 int_
 	 */
 	wmb();
 
-	gxp_mailbox_csr_write(mailbox, MBOX_INTGR0_OFFSET, int_mask);
+	csr_write(mailbox, MBOX_INTGR0_OFFSET, int_mask);
 }
 
 void gxp_mailbox_clear_interrupts(struct gxp_mailbox *mailbox, u32 intr_bits)
 {
-	gxp_mailbox_csr_write(mailbox, MBOX_INTCR1_OFFSET, intr_bits);
+	csr_write(mailbox, MBOX_INTCR1_OFFSET, intr_bits);
 }
 
 void gxp_mailbox_enable_interrupt(struct gxp_mailbox *mailbox)
 {
+}
+
+u32 gxp_mailbox_get_interrupt_status(struct gxp_mailbox *mailbox)
+{
+	return csr_read(mailbox, MBOX_INTMSR1_OFFSET);
 }
 
 int gxp_mailbox_wait_for_device_mailbox_init(struct gxp_mailbox *mailbox)
