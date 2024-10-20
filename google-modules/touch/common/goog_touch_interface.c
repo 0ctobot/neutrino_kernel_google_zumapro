@@ -29,6 +29,35 @@
 static struct class *gti_class;
 static u8 gti_dev_num;
 
+static const char *const gesture_params_list[GTI_GESTURE_PARAMS_MAX] = {
+	"sttw_min_x",
+	"sttw_max_x",
+	"sttw_min_y",
+	"sttw_max_y",
+	"sttw_min_frame",
+	"sttw_max_frame",
+	"sttw_jitter",
+	"sttw_max_touch_size",
+	"lptw_min_x",
+	"lptw_max_x",
+	"lptw_min_y",
+	"lptw_max_y",
+	"lptw_min_frame",
+	"lptw_jitter",
+	"lptw_max_touch_size",
+	"lptw_marginal_min_x",
+	"lptw_marginal_max_x",
+	"lptw_marginal_min_y",
+	"lptw_marginal_max_y",
+	"lptw_monitor_ch_min_tx",
+	"lptw_monitor_ch_max_tx",
+	"lptw_monitor_ch_min_rx",
+	"lptw_monitor_ch_max_rx",
+	"lptw_node_count_min",
+	"lptw_motion_boundary",
+	"gesture_type",
+};
+
 /*-----------------------------------------------------------------------------
  * GTI/common: forward declarations, structures and functions.
  */
@@ -215,6 +244,7 @@ heatmap_process_err:
 
 static int goog_proc_dump_show(struct seq_file *m, void *v)
 {
+#ifdef GTI_DEBUG_INPUT_KFIFO_LEN
 	char trace_tag[128];
 	u64 i, hc_cnt, input_cnt;
 	int ret, slot;
@@ -298,6 +328,9 @@ static int goog_proc_dump_show(struct seq_file *m, void *v)
 	ATRACE_END();
 
 	return ret;
+#else
+	return 0;
+#endif
 }
 
 static int goog_proc_ms_base_show(struct seq_file *m, void *v)
@@ -1978,6 +2011,9 @@ void gti_debug_healthcheck_dump(struct goog_touch_interface *gti)
 			last_fifo[i].input_index, last_fifo[i].slot_bit_active);
 	}
 }
+#else
+static inline
+void gti_debug_healthcheck_update(struct goog_touch_interface *gti, bool from_top_half) { }
 #endif /* GTI_DEBUG_HEALTHCHECK_KFIFO_LEN */
 
 #ifdef GTI_DEBUG_INPUT_KFIFO_LEN
@@ -2102,12 +2138,15 @@ void gti_debug_input_dump(struct goog_touch_interface *gti)
 			gti->offload.coords[slot].pressure);
 	}
 }
+#else
+static inline
+void gti_debug_input_update(struct goog_touch_interface *gti) { }
 #endif /* GTI_DEBUG_INPUT_KFIFO_LEN */
 
 /*-----------------------------------------------------------------------------
  * DRM: functions and structures.
  */
-struct drm_connector *get_bridge_connector(struct drm_bridge *bridge)
+static struct drm_connector *get_bridge_connector(struct drm_bridge *bridge)
 {
 	struct drm_connector *connector;
 	struct drm_connector_list_iter conn_iter;
@@ -2983,15 +3022,17 @@ exit:
 void goog_offload_populate_frame(struct goog_touch_interface *gti,
 		struct touch_offload_frame *frame, bool reset_data)
 {
-	char trace_tag[128];
 	u32 channel_type;
 	int i;
 	int ret;
 	struct gti_sensor_data_cmd *cmd = &gti->cmd.sensor_data_cmd;
+#if IS_ENABLED(CONFIG_VH_SYSTRACE)
+	char trace_tag[128];
 
 	scnprintf(trace_tag, sizeof(trace_tag), "%s: IDX=%llu IN_TS=%lld.\n",
 		__func__, gti->frame_index, gti->input_timestamp);
 	ATRACE_BEGIN(trace_tag);
+#endif
 
 	frame->header.index = gti->frame_index;
 	frame->header.timestamp = gti->input_timestamp;
@@ -3312,6 +3353,7 @@ void goog_offload_input_report(void *handle,
 	int error;
 	unsigned long slot_bit_active = 0;
 	unsigned long slot_bit_cancel = 0;
+#if IS_ENABLED(CONFIG_VH_SYSTRACE)
 	char trace_tag[128];
 	ktime_t ktime = ktime_get();
 
@@ -3321,6 +3363,7 @@ void goog_offload_input_report(void *handle,
 		ktime_to_ns(report->timestamp), ktime_to_ns(ktime),
 		ktime_to_ns(ktime_sub(ktime, report->timestamp)));
 	ATRACE_BEGIN(trace_tag);
+#endif
 
 	if (gti->lptw_suppress_coords_enabled && gti->lptw_track_finger)
 		cancel_delayed_work_sync(&gti->lptw_cancel_delayed_work);
@@ -3772,16 +3815,20 @@ int goog_input_process(struct goog_touch_interface *gti, bool reset_data)
 	if (gti->offload_enabled) {
 		ret = touch_offload_reserve_frame(&gti->offload, frame);
 		if (ret != 0 || frame == NULL) {
+#ifdef GTI_DEBUG_INPUT_KFIFO_LEN
 			if (gti->offload.offload_running && gti->debug_warning_limit) {
 				gti->debug_warning_limit--;
 				GOOG_WARN(gti, "offload: No buffers available, ret=%d IDX=%llu!\n",
 					ret, gti->frame_index);
 			}
+#endif
 			goog_offload_set_running(gti, false);
 			ret = -EBUSY;
 		} else {
+#ifdef GTI_DEBUG_INPUT_KFIFO_LEN
 			if (!gti->offload.offload_running)
 				gti->debug_warning_limit = TOUCH_OFFLOAD_BUFFER_NUM;
+#endif
 			goog_offload_set_running(gti, true);
 			goog_offload_populate_frame(gti, *frame, reset_data);
 			ret = touch_offload_queue_frame(&gti->offload, *frame);
@@ -4196,16 +4243,22 @@ static int goog_set_sensing_mode_nop(
 
 void goog_init_input(struct goog_touch_interface *gti)
 {
+#ifdef GTI_DEBUG_INPUT_KFIFO_LEN
 	int i;
+#endif
 
 	if (!gti)
 		return;
 
+#ifdef GTI_DEBUG_HEALTHCHECK_KFIFO_LEN
 	INIT_KFIFO(gti->debug_fifo_healthcheck);
+#endif
+#ifdef GTI_DEBUG_INPUT_KFIFO_LEN
 	INIT_KFIFO(gti->debug_fifo_input);
 	for (i = 0 ; i < MAX_SLOTS ; i++)
 		gti->debug_input[i].slot = i;
 	gti->debug_warning_limit = TOUCH_OFFLOAD_BUFFER_NUM;
+#endif
 
 	if (gti->vendor_dev && gti->vendor_input_dev) {
 		gti->abs_x_max = input_abs_get_max(gti->vendor_input_dev, ABS_MT_POSITION_X);
@@ -4750,8 +4803,6 @@ static int goog_pm_probe(struct goog_touch_interface *gti)
 	mutex_init(&pm->lock_mutex);
 	INIT_WORK(&pm->state_update_work, goog_pm_state_update_work);
 
-	/* init pm_qos. */
-	cpu_latency_qos_add_request(&gti->pm_qos_req, PM_QOS_DEFAULT_VALUE);
 	pm->enabled = true;
 
 	return ret;
@@ -5043,6 +5094,13 @@ static irqreturn_t gti_irq_thread_fn(int irq, void *data)
 	return ret;
 }
 
+static void gti_pm_qos_init(struct goog_touch_interface *gti, unsigned int irq)
+{
+	gti->pm_qos_req.type = PM_QOS_REQ_AFFINE_IRQ;
+	gti->pm_qos_req.irq = irq;
+	cpu_latency_qos_add_request(&gti->pm_qos_req, PM_QOS_DEFAULT_VALUE);
+}
+
 int goog_devm_request_threaded_irq(struct goog_touch_interface *gti,
 		struct device *dev, unsigned int irq,
 		irq_handler_t handler, irq_handler_t thread_fn,
@@ -5055,6 +5113,7 @@ int goog_devm_request_threaded_irq(struct goog_touch_interface *gti,
 		gti->vendor_irq_cookie = dev_id;
 		gti->vendor_irq_handler = handler;
 		gti->vendor_irq_thread_fn = thread_fn;
+		gti_pm_qos_init(gti, irq);
 		ret = devm_request_threaded_irq(dev, irq, gti_irq_handler, gti_irq_thread_fn,
 				irqflags, devname, gti);
 	} else {
@@ -5083,6 +5142,7 @@ int goog_request_threaded_irq(struct goog_touch_interface *gti,
 		gti->vendor_irq_cookie = dev_id;
 		gti->vendor_irq_handler = handler;
 		gti->vendor_irq_thread_fn = thread_fn;
+		gti_pm_qos_init(gti, irq);
 		ret = request_threaded_irq(irq, gti_irq_handler, gti_irq_thread_fn,
 				irqflags, devname, gti);
 	} else {
@@ -5098,7 +5158,7 @@ struct goog_touch_interface *goog_touch_interface_probe(
 		struct device *dev,
 		struct input_dev *input_dev,
 		int (*default_handler)(void *private_data,
-			u32 cmd_type, struct gti_union_cmd_data *cmd),
+			enum gti_cmd_type cmd_type, struct gti_union_cmd_data *cmd),
 		struct gti_optional_configuration *options)
 {
 	int ret;

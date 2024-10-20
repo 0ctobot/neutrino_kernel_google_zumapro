@@ -22,6 +22,13 @@
 struct cal_regs_dqe regs_dqe[REGS_DQE_ID_MAX];
 struct cal_regs_dqe regs_dqe_cgc[REGS_DQE_ID_MAX];
 
+struct cal_regs_offset regs_dqe_offset[DQE_VERSION_MAX] = {
+	{0x0,   0x0,   0x0,   0x0,   0x0,   0x0},       /* GS101(9845) EVT0/A0 */
+	{0x400, 0x800, 0x800, 0x800, 0x400, 0x400},     /* GS101(9845) EVT1/B0 */
+	{0x400, 0x800, 0x800, 0x800, 0x400, 0x400},	/* GS201(9855) */
+	{0x400, 0x800, 0x800, 0x800, 0x400, 0x400},	/* Zuma(9865) */
+};
+
 void
 dqe_regs_desc_init(void __iomem *regs, phys_addr_t start, const char *name,
 		   enum dqe_version ver, unsigned int dqe_id)
@@ -880,9 +887,9 @@ int dqe_reg_wait_cgc_dma_done_internal(u32 dqe_id, unsigned long timeout_us)
 	u32 val;
 	int ret;
 
-	ret = readl_poll_timeout_atomic(dqe_cgc_regs_desc(dqe_id)->regs +
+	ret = readl_poll_timeout(dqe_cgc_regs_desc(dqe_id)->regs +
 			DQE_CGC_CON, val,
-			!(val & CGC_COEF_DMA_REQ), 2, timeout_us);
+			!(val & CGC_COEF_DMA_REQ), 4, timeout_us);
 	if (ret) {
 		cal_log_err(dqe_id, "timeout of CGC COEF DMA request (0x%x)\n",
 				!(val & CGC_COEF_DMA_REQ));

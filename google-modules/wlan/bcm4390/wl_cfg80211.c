@@ -175,6 +175,7 @@ module_param(idauth_enable, uint, 0660);
 
 static struct device *cfg80211_parent_dev = NULL;
 static struct bcm_cfg80211 *g_bcmcfg = NULL;
+#ifdef DHD_DEBUG
 /*
  * wl_dbg_level : a default level to print to dmesg buffer
  * wl_log_level : a default level to log to DLD or Ring
@@ -184,6 +185,7 @@ static struct bcm_cfg80211 *g_bcmcfg = NULL;
  */
 u32 wl_dbg_level = WL_DBG_ERR | WL_DBG_P2P_ACTION | WL_DBG_INFO;
 u32 wl_log_level = WL_DBG_ERR | WL_DBG_P2P_ACTION | WL_DBG_INFO;
+#endif /* DHD_DEBUG */
 
 #define MAX_WAIT_TIME 1500
 #ifdef WLAIBSS_MCHAN
@@ -2008,6 +2010,7 @@ bool static wl_cfg80211_is_oce_ap(struct wiphy *wiphy, const u8 *bssid_hint)
 	const struct cfg80211_bss_ies *ies;
 	u32 len;
 	struct cfg80211_bss *bss;
+	bool ret = false;
 
 	bss = CFG80211_GET_BSS(wiphy, NULL, bssid_hint, 0, 0);
 	if (!bss) {
@@ -2021,23 +2024,26 @@ bool static wl_cfg80211_is_oce_ap(struct wiphy *wiphy, const u8 *bssid_hint)
 		len = ies->len;
 	} else {
 		WL_ERR(("ies is NULL"));
-		return false;
+		goto put_bss;
 	}
 
 	while ((ie = bcm_parse_tlvs(parse, len, DOT11_MNG_VS_ID))) {
 		if (wl_cfgoce_is_oce_ie((const uint8*)ie, (u8 const **)&parse, &len) == TRUE) {
-			return true;
+			ret = true;
+			goto put_bss;
 		} else {
 			ie = bcm_next_tlv((const bcm_tlv_t*) ie, &len);
 			if (!ie) {
-				return false;
+				goto put_bss;
 			}
 			parse = (uint8 *)ie;
 			WL_DBG(("NON OCE IE. next ie ptr:%p", parse));
 		}
 	}
 	WL_DBG(("OCE IE NOT found"));
-	return false;
+put_bss:
+	CFG80211_PUT_BSS(wiphy, bss);
+	return ret;
 }
 #endif /* WL_FW_OCE_AP_SELECT */
 
@@ -7617,7 +7623,7 @@ wl_cfg80211_is_wfa_cap_ie(wlcfg_assoc_info_t *assoc_info, struct bcm_cfg80211 *c
 		len = ies->len;
 	} else {
 		WL_ERR(("ies is NULL"));
-		goto done;
+		goto put_bss;
 	}
 
 	if (wl_dbg_level & WL_DBG_DBG) {
@@ -7626,6 +7632,8 @@ wl_cfg80211_is_wfa_cap_ie(wlcfg_assoc_info_t *assoc_info, struct bcm_cfg80211 *c
 
 	/* Check to see if the WFA Capabilities IE is present and handles it accordingly */
 	ret_val = dhd_dscp_process_wfa_cap_ie(cfg, parse, len);
+put_bss:
+	CFG80211_PUT_BSS(wiphy, bss);
 done:
 	return ret_val;
 }
@@ -10660,10 +10668,12 @@ static s32 wl_cfg80211_update_pmksa(struct wiphy *wiphy, struct net_device *dev,
 			}
 			pmk_list->pmkid->pmkid_len = WPA2_PMKID_LEN;
 
+#ifdef DHD_DEBUG
 			if (pmksa->bssid) {
 				WL_INFORM_MEM(("PMKID bssid:"MACDBG"\n", MAC2STRDBG(pmksa->bssid)));
 				prhex("PMKID data", (const u8 *)pmksa->pmkid, WPA2_PMKID_LEN);
 			}
+#endif /* DHD_DEBUG */
 		}
 #if (LINUX_VERSION_CODE >= KERNEL_VERSION(4, 12, 0))
 		if (pmksa->pmk) {
@@ -16245,8 +16255,6 @@ static s32 wl_update_bss_info(struct bcm_cfg80211 *cfg, struct net_device *ndev,
 			WL_INFORM_MEM(("Update bssinfo for ASSOCIATED bssid\n"));
 			curbssid = wl_read_prof(cfg, ndev, WL_PROF_BSSID);
 		}
-		bss = CFG80211_GET_BSS(wiphy, NULL, curbssid,
-			ssid->SSID, ssid->SSID_len);
 
 		*(u32 *)buf = htod32(WL_EXTRA_BUF_MAX);
 		if (target_bssid) {
@@ -16271,6 +16279,8 @@ static s32 wl_update_bss_info(struct bcm_cfg80211 *cfg, struct net_device *ndev,
 			goto update_bss_info_out;
 		}
 
+		bss = CFG80211_GET_BSS(wiphy, NULL, curbssid,
+			ssid->SSID, ssid->SSID_len);
 		if (!bss) {
 			if (memcmp(bi->BSSID.octet, curbssid, ETHER_ADDR_LEN)) {
 				WL_ERR(("Bssid doesn't match."
@@ -16306,7 +16316,6 @@ static s32 wl_update_bss_info(struct bcm_cfg80211 *cfg, struct net_device *ndev,
 #endif /* WL_CFG80211_P2P_DEV_IF */
 			beacon_interval = bss->beacon_interval;
 
-			CFG80211_PUT_BSS(wiphy, bss);
 		}
 
 		if ((link_idx == 0) || (link_idx == NON_ML_LINK)) {
@@ -16324,6 +16333,8 @@ static s32 wl_update_bss_info(struct bcm_cfg80211 *cfg, struct net_device *ndev,
 					&dtim_period, sizeof(dtim_period));
 				if (unlikely(err)) {
 					WL_ERR(("WLC_GET_DTIMPRD error (%d)\n", err));
+					if (bss)
+						CFG80211_PUT_BSS(wiphy, bss);
 					goto update_bss_info_out;
 				}
 			}
@@ -16332,6 +16343,9 @@ static s32 wl_update_bss_info(struct bcm_cfg80211 *cfg, struct net_device *ndev,
 			wl_update_prof(cfg, ndev, NULL, &beacon_interval, WL_PROF_BEACONINT);
 			wl_update_prof(cfg, ndev, NULL, &dtim_period, WL_PROF_DTIMPERIOD);
 		}
+
+		if (bss)
+			CFG80211_PUT_BSS(wiphy, bss);
 	}
 
 update_bss_info_out:
@@ -16503,7 +16517,7 @@ wl_bss_roaming_done(struct bcm_cfg80211 *cfg, struct net_device *ndev,
 
 			if (link_id >= IEEE80211_MLD_MAX_NUM_LINKS) {
 				WL_ERR(("wrong value for link_id:%d\n", link_id));
-				return BCME_ERROR;
+				goto put_bss;
 			}
 			roam_info.links[link_id].addr = link->link_addr;
 			roam_info.links[link_id].bssid = link->peer_link_addr;
@@ -16513,7 +16527,7 @@ wl_bss_roaming_done(struct bcm_cfg80211 *cfg, struct net_device *ndev,
 				WL_ERR(("null bss for BSSID " MACDBG "\n", MAC2STRDBG((const u8*)(
 					&mld_netinfo->mlinfo.links[link_id].peer_link_addr))));
 				err = BCME_ERROR;
-				goto fail;
+				goto put_bss;
 			}
 			roam_info.valid_links |= BIT(link_id);
 			WL_INFORM_MEM(("peer_link_addr:" MACDBG " link_addr:" MACDBG "link_id:%d\n",
@@ -16525,7 +16539,7 @@ wl_bss_roaming_done(struct bcm_cfg80211 *cfg, struct net_device *ndev,
 			if (notify_channel == NULL) {
 				WL_ERR(("Invalid roam notify channel\n"));
 				err = BCME_BADCHAN;
-				goto fail;
+				goto put_current_bss;
 			}
 			roam_info.links[link_id].channel = notify_channel;
 		}
@@ -16599,6 +16613,15 @@ wl_bss_roaming_done(struct bcm_cfg80211 *cfg, struct net_device *ndev,
 			e, data, LINK_UPDATE_ROAM_SUCCESS);
 	return err;
 
+put_current_bss:
+	i++;
+put_bss:
+	while (i--) {
+		wl_mlo_link_t *link = &mld_netinfo->mlinfo.links[i];
+		u8 link_id = link->link_id;
+
+		CFG80211_PUT_BSS(wiphy, roam_info.links[link_id].bss);
+	}
 fail:
 	/* Clear driver states on roam failure and notify upper layer */
 	wl_clr_drv_status(cfg, CONNECTED, ndev);
@@ -16639,12 +16662,7 @@ wl_cfg80211_verify_bss(struct bcm_cfg80211 *cfg, struct net_device *ndev,
 	*bss = CFG80211_GET_BSS(wiphy, NULL, curbssid,
 		ssid->SSID, ssid->SSID_len);
 	if (*bss) {
-#if (LINUX_VERSION_CODE < KERNEL_VERSION(4, 7, 0))
-		/* Update the reference count after use. In case of kernel version >= 4.7
-		* the cfg802_put_bss is called in cfg80211_connect_bss context
-		*/
 		CFG80211_PUT_BSS(wiphy, *bss);
-#endif /* LINUX_VERSION_CODE < KERNEL_VERSION(4, 7, 0) */
 		ret = true;
 	} else {
 		WL_ERR(("No bss entry for bssid:"MACDBG" ssid_len:%d\n",
@@ -16780,7 +16798,7 @@ wl_fillup_conn_resp_params(struct bcm_cfg80211 *cfg, struct net_device *ndev,
 
 			if (link_id >= IEEE80211_MLD_MAX_NUM_LINKS) {
 				WL_ERR(("wrong value for link_id:%d\n", link_id));
-				return BCME_ERROR;
+				goto put_bss;
 			}
 			resp_params->links[link_id].addr = link->link_addr;
 			resp_params->links[link_id].bssid = link->peer_link_addr;
@@ -16794,7 +16812,7 @@ wl_fillup_conn_resp_params(struct bcm_cfg80211 *cfg, struct net_device *ndev,
 			if (!resp_params->links[link_id].bss && (status == WLAN_STATUS_SUCCESS)) {
 				WL_ERR(("null bss for BSSID " MACDBG "\n", MAC2STRDBG((const u8*)(
 					&mld_netinfo->mlinfo.links[link_id].peer_link_addr))));
-				return BCME_ERROR;
+				goto put_bss;
 			}
 		}
 		if (resp_params->valid_links) {
@@ -16860,6 +16878,15 @@ wl_fillup_conn_resp_params(struct bcm_cfg80211 *cfg, struct net_device *ndev,
 
 exit:
 	return ret;
+
+put_bss:
+	while (i--) {
+		wl_mlo_link_t *link = &mld_netinfo->mlinfo.links[i];
+		u8 link_id = link->link_id;
+
+		CFG80211_PUT_BSS(wiphy, resp_params->links[link_id].bss);
+	}
+	return BCME_ERROR;
 }
 #endif /* (LINUX_VERSION_CODE >= KERNEL_VERSION(4, 12, 0)) */
 
@@ -22521,19 +22548,23 @@ int wl_cfg80211_do_driver_init(struct net_device *net)
 
 void wl_cfg80211_enable_log_trace(bool set, u32 level)
 {
+#ifdef DHD_DEBUG
 	if (set) {
 		wl_log_level = level & WL_DBG_LEVEL;
 	} else {
 		wl_log_level |= (WL_DBG_LEVEL & level);
 	}
+#endif /* DHD_DEBUG */
 }
 
 void wl_cfg80211_enable_trace(bool set, u32 level)
 {
+#ifdef DHD_DEBUG
 	if (set)
 		wl_dbg_level = level & WL_DBG_LEVEL;
 	else
 		wl_dbg_level |= (WL_DBG_LEVEL & level);
+#endif /* DHD_DEBUG */
 }
 
 uint32 wl_cfg80211_get_print_level(void)
@@ -23913,7 +23944,7 @@ wl_cfg80211_recv_nbr_resp(struct net_device *dev, uint8 *body, uint body_len)
 	wl_roam_channel_list_t channel_list;
 #endif /* HOST_RCC_UPDATE */
 
-	if (body_len < DOT11_RM_ACTION_LEN) {
+	if (body_len < DOT11_RM_ACTION_LEN + BCM_TLV_HDR_SIZE + DOT11_NEIGHBOR_REP_IE_FIXED_LEN) {
 		WL_ERR(("Received Neighbor Report frame with incorrect length %d\n",
 			body_len));
 		return BCME_ERROR;
@@ -24202,6 +24233,7 @@ wl_cfg80211_set_frameburst(struct bcm_cfg80211 *cfg, bool enable)
 s32
 wl_cfg80211_set_dbg_verbose(struct net_device *ndev, u32 level)
 {
+#ifdef DHD_DEBUG
 	/* configure verbose level for debugging */
 	if (level) {
 		/* Enable increased verbose */
@@ -24213,6 +24245,7 @@ wl_cfg80211_set_dbg_verbose(struct net_device *ndev, u32 level)
 		wl_log_level &= ~WL_DBG_DBG;
 	}
 	WL_INFORM(("debug verbose set to %d\n", level));
+#endif /* DHD_DEBUG */
 
 	return BCME_OK;
 }

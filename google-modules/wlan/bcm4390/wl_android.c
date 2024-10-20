@@ -5603,11 +5603,13 @@ int wl_android_wifi_off(struct net_device *dev, bool force_off)
 			DHD_PRINT(("%s() platform set power off is skipped due to init\n",
 				__FUNCTION__));
 		}
-#ifdef WBRC
-		wl2wbrc_wlan_off_finished();
-#endif /* WBRC */
 		g_wifi_on = FALSE;
 	}
+#ifdef WBRC
+	if (wifi_on || force_off) {
+		wl2wbrc_wlan_off_finished();
+	}
+#endif /* WBRC */
 	dhd_net_if_unlock(dev);
 
 	return ret;
@@ -13743,10 +13745,7 @@ wl_handle_private_cmd(struct net_device *net, char *command, u32 cmd_len)
 #if defined(DHD_BLOB_EXISTENCE_CHECK)
 		dhd_pub_t *dhdp = wl_cfg80211_get_dhdp(net);
 #endif /* DHD_BLOB_EXISTENCE_CHECK */
-		if ((rev_info_delim) &&
-			(strnicmp(rev_info_delim, CMD_COUNTRY_DELIMITER,
-			strlen(CMD_COUNTRY_DELIMITER)) == 0) &&
-			(rev_info_delim + 1)) {
+		if (*rev_info_delim == *CMD_COUNTRY_DELIMITER) {
 			revinfo  = bcm_atoi(rev_info_delim + 1);
 		} else {
 			revinfo = 0;

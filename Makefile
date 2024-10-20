@@ -5,6 +5,14 @@ SUBLEVEL = 113
 EXTRAVERSION =
 NAME = Curry Ramen
 
+export KCONFIG_EXT_PREFIX := google-devices/caimito/
+export KCONFIG_EXT_MODULES_PREFIX := ./
+export KCONFIG_SOC_GS_PREFIX := google-modules/soc/gs/
+
+ifeq ($(MAKECMDGOALS),)
+MAKECMDGOALS := Image.lz4 dtbs
+endif
+
 # *DOCUMENTATION*
 # To see a list of typical targets execute "make help"
 # More info can be located in ./README
@@ -192,6 +200,8 @@ export mixed-build-prefix
 #
 # The O= assignment takes precedence over the KBUILD_OUTPUT environment
 # variable.
+
+KBUILD_OUTPUT := out
 
 # Do we want to change the working directory?
 ifeq ("$(origin O)", "command line")
@@ -418,7 +428,8 @@ include $(srctree)/scripts/subarch.include
 # Alternatively CROSS_COMPILE can be set in the environment.
 # Default value for CROSS_COMPILE is not to prefix executables
 # Note: Some architectures assign CROSS_COMPILE in their arch/*/Makefile
-ARCH		?= $(SUBARCH)
+ARCH		:= arm64
+CROSS_COMPILE	?= aarch64-linux-gnu-
 
 # Architecture as present in compile.h
 UTS_MACHINE 	:= $(ARCH)
@@ -518,8 +529,8 @@ STRIP		= $(LLVM_PREFIX)llvm-strip$(LLVM_SUFFIX)
 else
 CC		= $(CROSS_COMPILE)gcc
 LD		= $(CROSS_COMPILE)ld
-AR		= $(CROSS_COMPILE)ar
-NM		= $(CROSS_COMPILE)nm
+AR		?= $(CROSS_COMPILE)ar
+NM		?= $(CROSS_COMPILE)nm
 OBJCOPY		= $(CROSS_COMPILE)objcopy
 OBJDUMP		= $(CROSS_COMPILE)objdump
 READELF		= $(CROSS_COMPILE)readelf
@@ -765,6 +776,25 @@ ifdef need-config
 include include/config/auto.conf
 endif
 
+ifdef CONFIG_INTEGRATE_MODULES
+KBUILD_CFLAGS_MODULE += -include $(srctree)/include/linux/integrated_module.h
+endif
+
+ifdef CONFIG_LTO_GCC
+CC_FLAGS_LTO	:= -flto=jobserver -fipa-pta -fno-fat-lto-objects \
+		   -fuse-linker-plugin -fwhole-program
+KBUILD_CFLAGS	+= $(CC_FLAGS_LTO)
+LTO_LDFLAGS	:= $(CC_FLAGS_LTO) -Wno-lto-type-mismatch -Wno-psabi \
+		   -Wno-stringop-overflow -flinker-output=nolto-rel
+LDFINAL		:= $(CONFIG_SHELL) $(srctree)/scripts/gcc-ld $(LTO_LDFLAGS)
+AR		:= $(CROSS_COMPILE)gcc-ar
+NM		:= $(CROSS_COMPILE)gcc-nm
+export CC_FLAGS_LTO LDFINAL
+else
+LDFINAL		:= $(LD)
+export LDFINAL
+endif
+
 ifeq ($(KBUILD_EXTMOD),)
 # Objects we will link into vmlinux / subdirs we need to visit
 core-y		:=
@@ -849,6 +879,9 @@ KBUILD_CFLAGS	+= $(call cc-disable-warning, address-of-packed-member)
 ifdef CONFIG_CC_OPTIMIZE_FOR_PERFORMANCE
 KBUILD_CFLAGS += -O2
 KBUILD_RUSTFLAGS += -Copt-level=2
+else ifdef CONFIG_CC_OPTIMIZE_FOR_PERFORMANCE_O3
+KBUILD_CFLAGS += -O3
+KBUILD_RUSTFLAGS += -Copt-level=3
 else ifdef CONFIG_CC_OPTIMIZE_FOR_SIZE
 KBUILD_CFLAGS += -Os
 KBUILD_RUSTFLAGS += -Copt-level=s
@@ -1088,11 +1121,6 @@ KBUILD_CFLAGS	+= -fno-strict-overflow
 
 # Make sure -fstack-check isn't enabled (like gentoo apparently did)
 KBUILD_CFLAGS  += -fno-stack-check
-
-# conserve stack if available
-ifdef CONFIG_CC_IS_GCC
-KBUILD_CFLAGS   += -fconserve-stack
-endif
 
 # Prohibit date/time macros, which would make the build non-deterministic
 KBUILD_CFLAGS   += -Werror=date-time
@@ -1500,6 +1528,10 @@ ifneq ($(wildcard $(srctree)/arch/$(SRCARCH)/boot/dts/),)
 # one to compile a device tree that is located out-of-tree.
 dtstree ?= arch/$(SRCARCH)/boot/dts
 endif
+
+dtstree := google-devices/zumapro/dts
+DTC_INCLUDE := $(srctree)/google-modules/soc/gs/include/dtc
+export DTC_INCLUDE
 
 ifneq ($(dtstree),)
 

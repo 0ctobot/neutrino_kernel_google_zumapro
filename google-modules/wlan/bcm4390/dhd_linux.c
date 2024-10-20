@@ -573,8 +573,10 @@ static dhd_if_t * dhd_get_ifp_by_ndev(dhd_pub_t *dhdp, struct net_device *ndev);
 static void dhd_update_rx_pkt_chainable_state(dhd_pub_t* dhdp, uint32 idx);
 #endif /* DHD_WET || DHD_MCAST_REGEN || DHD_L2_FILTER */
 
+#ifdef DHD_DEBUG
 /* Error bits */
 module_param(dhd_msg_level, int, 0);
+#endif /* DHD_DEBUG */
 
 #ifdef DHD_FORCE_MAX_CPU_FREQ
 uint dhd_force_max_cpu_freq = 1;
@@ -3922,20 +3924,24 @@ dhd_dpc_tasklet_dispatcher_work(struct work_struct * work)
 
 	DHD_INFO(("%s:\n", __FUNCTION__));
 
-	tasklet_schedule(&dhd->tasklet);
+	dhd_sched_dpc(&dhd->pub);
 }
 
 void
 dhd_schedule_delayed_dpc_on_dpc_cpu(dhd_pub_t *dhdp, ulong delay)
 {
 	dhd_info_t *dhd = (dhd_info_t *)dhdp->info;
-	int dpc_cpu = atomic_read(&dhd->dpc_cpu);
 	DHD_INFO(("%s:\n", __FUNCTION__));
 
-	/* scheduler will take care of scheduling to appropriate cpu if dpc_cpu is not online */
-	schedule_delayed_work_on(dpc_cpu, &dhd->dhd_dpc_dispatcher_work, delay);
-
-	return;
+	if (dhd->thr_dpc_ctl.thr_pid >= 0) {
+		if (delay)
+			queue_delayed_work(system_unbound_wq, &dhd->dhd_dpc_dispatcher_work, delay);
+		else
+			dhd_dpc_tasklet_dispatcher_work(&dhd->dhd_dpc_dispatcher_work.work);
+	} else {
+		/* scheduler will take care of scheduling to appropriate cpu if dpc_cpu is not online */
+		schedule_delayed_work_on(atomic_read(&dhd->dpc_cpu), &dhd->dhd_dpc_dispatcher_work, delay);
+	}
 }
 
 #ifdef SHOW_LOGTRACE
@@ -4897,7 +4903,6 @@ dhd_dpc_thread(void *data)
 #endif /* ENABLE_ADAPTIVE_SCHED */
 			SMP_RD_BARRIER_DEPENDS();
 			if (tsk->terminated) {
-				DHD_OS_WAKE_UNLOCK(&dhd->pub);
 				break;
 			}
 
@@ -4922,11 +4927,9 @@ dhd_dpc_thread(void *data)
 #endif /* DEBUG_DPC_THREAD_WATCHDOG */
 				}
 				dhd_os_wd_timer_extend(&dhd->pub, FALSE);
-				DHD_OS_WAKE_UNLOCK(&dhd->pub);
 			} else {
 				if (dhd->pub.up)
 					dhd_bus_stop(dhd->pub.bus, TRUE);
-				DHD_OS_WAKE_UNLOCK(&dhd->pub);
 			}
 		} else {
 			break;
@@ -5056,13 +5059,7 @@ dhd_sched_dpc(dhd_pub_t *dhdp)
 	dhd_info_t *dhd = (dhd_info_t *)dhdp->info;
 
 	if (dhd->thr_dpc_ctl.thr_pid >= 0) {
-		DHD_OS_WAKE_LOCK(dhdp);
-		/* If the semaphore does not get up,
-		* wake unlock should be done here
-		*/
-		if (!binary_sema_up(&dhd->thr_dpc_ctl)) {
-			DHD_OS_WAKE_UNLOCK(dhdp);
-		}
+		binary_sema_up(&dhd->thr_dpc_ctl);
 		return;
 	} else {
 		tasklet_schedule(&dhd->tasklet);
@@ -6539,6 +6536,7 @@ dhd_force_collect_socram_during_wifi_onoff(dhd_pub_t *dhdp)
 #endif /* OEM_ANDROID */
 }
 
+#ifdef SHOW_LOGTRACE
 static void
 dhd_free_event_data_fmts_buf(dhd_info_t *dhd)
 {
@@ -6575,6 +6573,7 @@ dhd_free_event_data_fmts_buf(dhd_info_t *dhd)
 #endif /* COEX_CPU */
 
 }
+#endif /* SHOW_LOGTRACE */
 
 int
 dhd_stop(struct net_device *net)
@@ -6961,6 +6960,7 @@ dhd_force_collect_init_fail_dumps(dhd_pub_t *dhdp)
 #endif /* DEBUG_DNGL_INIT_FAIL */
 #endif /* CUSTOMER_HW4_DEBUG */
 
+#ifdef DHD_FW_COREDUMP
 	/* for android force collect socram for FW init failures
 	 * by putting bus state to LOAD
 	 */
@@ -6970,7 +6970,6 @@ dhd_force_collect_init_fail_dumps(dhd_pub_t *dhdp)
 	if (dhdp->busstate == DHD_BUS_DOWN) {
 		dhdp->busstate = DHD_BUS_LOAD;
 	}
-#ifdef DHD_FW_COREDUMP
 	/* save core dump or write to a file */
 	if (dhdp->memdump_enabled && (dhdp->busstate != DHD_BUS_DOWN)) {
 #ifdef DHD_SDTC_ETB_DUMP
@@ -9861,6 +9860,7 @@ dhd_attach(osl_t *osh, struct dhd_bus *bus, uint bus_hdrlen)
 	}
 #endif /* EWP_EDL */
 
+#ifdef DHD_FW_COREDUMP
 	/* alloc memory for socram during init itself, newer chips
 	 * require 4M and this requires vmalloc which will fail
 	 * if called from a non sleepable context
@@ -9869,6 +9869,7 @@ dhd_attach(osl_t *osh, struct dhd_bus *bus, uint bus_hdrlen)
 		DHD_ERROR(("%s: Failed to alloc memdump memory !\n", __FUNCTION__));
 		goto fail;
 	}
+#endif
 
 	/* Allocate core dump size after each section len is set up
 	 * coredump consist of hdr, socram, sssr, sdtc and coex
@@ -19282,7 +19283,6 @@ int dhd_os_wake_unlock(dhd_pub_t *pub)
 	unsigned long flags;
 	int ret = 0;
 
-	dhd_os_wake_lock_timeout(pub);
 	if (dhd && (dhd->dhd_state & DHD_ATTACH_STATE_WAKELOCKS_INIT)) {
 		DHD_WAKE_SPIN_LOCK(&dhd->wakelock_spinlock, flags);
 

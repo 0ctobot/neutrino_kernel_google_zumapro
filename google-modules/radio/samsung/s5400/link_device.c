@@ -2775,14 +2775,14 @@ static void pcie_send_ap2cp_irq(struct mem_link_device *mld, u16 mask)
 	spin_lock_irqsave(&mc->pcie_tx_lock, flags);
 
 	if (mutex_is_locked(&mc->pcie_onoff_lock)) {
-		mif_info_limited("Reserve doorbell interrupt: PCI on/off working\n");
+		mif_debug("Reserve doorbell interrupt: PCI on/off working\n");
 		set_ctrl_msg(&mld->ap2cp_msg, mask);
 		mc->reserve_doorbell_int = true;
 		goto exit;
 	}
 
 	if (!mc->pcie_powered_on) {
-		mif_info_limited("Reserve doorbell interrupt: PCI not powered on\n");
+		mif_debug("Reserve doorbell interrupt: PCI not powered on\n");
 		set_ctrl_msg(&mld->ap2cp_msg, mask);
 		mc->reserve_doorbell_int = true;
 		s5100_try_gpio_cp_wakeup(mc);
@@ -4176,7 +4176,7 @@ static int parse_ect_tables(struct platform_device *pdev,
 	return 0;
 }
 
-struct link_device *create_link_device(struct platform_device *pdev, u32 link_type)
+struct link_device *s5400_create_link_device(struct platform_device *pdev, u32 link_type)
 {
 	struct modem_data *modem;
 	struct mem_link_device *mld;

@@ -64,24 +64,17 @@ EDGETPU_CHIP := rio
 
 endif
 
+ifdef CONFIG_MODULES
 ifeq ($(CONFIG_$(GXP_CHIP)),m)
 
 gxp-objs += $(GCIP_DIR)/gcip.o
 
 endif
+endif
 
 KERNEL_SRC ?= /lib/modules/$(shell uname -r)/build
 -include $(KERNEL_SRC)/../private/google-modules/soc/gs/Makefile.include
-M ?= $(shell pwd)
-
-# Obtain the current git commit hash for logging on probe
-GIT_PATH=$(shell cd $(KERNEL_SRC); readlink -e $(M))
-GIT_BIN=/usr/bin/git
-GIT=$(GIT_BIN) -C $(GIT_PATH)
-ifeq ($(shell $(GIT) rev-parse --is-inside-work-tree),true)
-        GIT_REPO_STATE=$(shell ($(GIT) --work-tree=$(GIT_PATH) status --porcelain | grep -q .) && echo -dirty)
-        ccflags-y       += -DGIT_REPO_TAG=\"$(shell $(GIT) rev-parse --short HEAD)$(GIT_REPO_STATE)\"
-endif
+M ?= $(srctree)/$(src)
 
 # If building via make directly, specify target platform by adding
 #     "GXP_PLATFORM=<target>"

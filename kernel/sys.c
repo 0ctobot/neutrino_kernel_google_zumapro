@@ -1301,10 +1301,27 @@ static int override_release(char __user *release, size_t len)
 SYSCALL_DEFINE1(newuname, struct new_utsname __user *, name)
 {
 	struct new_utsname tmp;
+	struct task_struct *t;
+	bool is_gms = false;
 
 	down_read(&uts_sem);
 	memcpy(&tmp, utsname(), sizeof(tmp));
 	up_read(&uts_sem);
+
+	rcu_read_lock();
+	for_each_thread(current, t) {
+		if (thread_group_leader(t)) {
+			is_gms = !strcmp(t->comm, "id.gms.unstable");
+			break;
+		}
+	}
+	rcu_read_unlock();
+
+	if (is_gms)
+		snprintf(tmp.release, sizeof(tmp.release), "%u.%u.%u",
+			 LINUX_VERSION_MAJOR, LINUX_VERSION_PATCHLEVEL,
+			 LINUX_VERSION_SUBLEVEL);
+
 	if (copy_to_user(name, &tmp, sizeof(tmp)))
 		return -EFAULT;
 
@@ -2327,6 +2344,7 @@ static inline bool is_valid_name_char(char ch)
 static int prctl_set_vma(unsigned long opt, unsigned long addr,
 			 unsigned long size, unsigned long arg)
 {
+	char name[ANON_VMA_NAME_MAX_LEN] __aligned(sizeof(long));
 	struct mm_struct *mm = current->mm;
 	const char __user *uname;
 	struct anon_vma_name *anon_name = NULL;
@@ -2337,21 +2355,27 @@ static int prctl_set_vma(unsigned long opt, unsigned long addr,
 	case PR_SET_VMA_ANON_NAME:
 		uname = (const char __user *)arg;
 		if (uname) {
-			char *name, *pch;
+			char *pch;
+			long len;
 
-			name = strndup_user(uname, ANON_VMA_NAME_MAX_LEN);
-			if (IS_ERR(name))
-				return PTR_ERR(name);
+			len = strnlen_user(uname, sizeof(name));
+			if (!len)
+				return -EFAULT;
+
+			if (len > sizeof(name))
+				return -EINVAL;
+
+			if (copy_from_user(name, uname, len))
+				return -EFAULT;
+
+			name[len - 1] = '\0';
 
 			for (pch = name; *pch != '\0'; pch++) {
-				if (!is_valid_name_char(*pch)) {
-					kfree(name);
+				if (!is_valid_name_char(*pch))
 					return -EINVAL;
-				}
 			}
 			/* anon_vma has its own copy */
 			anon_name = anon_vma_name_alloc(name);
-			kfree(name);
 			if (!anon_name)
 				return -ENOMEM;
 

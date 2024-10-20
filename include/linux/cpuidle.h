@@ -286,17 +286,18 @@ extern s64 cpuidle_governor_latency_req(unsigned int cpu);
 ({									\
 	int __ret = 0;							\
 									\
-	if (!idx) {							\
+	if (need_resched()) {						\
+		__ret = -1;						\
+	} else if (!idx) {						\
 		cpu_do_idle();						\
-		return idx;						\
-	}								\
-									\
-	if (!is_retention)						\
-		__ret =  cpu_pm_enter();				\
-	if (!__ret) {							\
-		__ret = low_level_idle_enter(state);			\
+	} else {							\
 		if (!is_retention)					\
-			cpu_pm_exit();					\
+			__ret = cpu_pm_enter();				\
+		if (!__ret) {						\
+			__ret = low_level_idle_enter(state);		\
+			if (!is_retention)				\
+				cpu_pm_exit();				\
+		}							\
 	}								\
 									\
 	__ret ? -1 : idx;						\
@@ -314,12 +315,14 @@ extern s64 cpuidle_governor_latency_req(unsigned int cpu);
 #define CPU_PM_CPU_IDLE_ENTER_RETENTION_PARAM(low_level_idle_enter, idx, state)	\
 	__CPU_PM_CPU_IDLE_ENTER(low_level_idle_enter, idx, state, 1)
 
-#ifdef CONFIG_CPU_IDLE_GOV_TEO
-unsigned long teo_cpu_get_util_threshold(int cpu);
-void teo_cpu_set_util_threshold(int cpu, unsigned long util);
+#ifdef CONFIG_SMP
+void cpuidle_set_idle_cpu(unsigned int cpu);
+void cpuidle_clear_idle_cpu(unsigned int cpu);
+void wake_idle_cpus_in_mask(const struct cpumask *mask);
 #else
-static inline unsigned long teo_cpu_get_util_threshold(int cpu) {return -1;}
-static inline void teo_cpu_set_util_threshold(int cpu, unsigned long util) {}
+static inline void cpuidle_set_idle_cpu(unsigned int cpu) { }
+static inline void cpuidle_clear_idle_cpu(unsigned int cpu) { }
+static inline void wake_idle_cpus_in_mask(const struct cpumask *mask) { }
 #endif
 
 #endif /* _LINUX_CPUIDLE_H */

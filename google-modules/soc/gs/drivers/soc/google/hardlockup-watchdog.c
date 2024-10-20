@@ -9,6 +9,7 @@
 #include <linux/cpuhotplug.h>
 #include <linux/suspend.h>
 #include <linux/sched/clock.h>
+#include <linux/sched/debug.h>
 #include <linux/preempt.h>
 #include <uapi/linux/sched/types.h>
 
@@ -168,7 +169,9 @@ static void watchdog_check_hardlockup_other_cpu(void)
 
 		if (hardlockup_watchdog.panic) {
 			atomic_notifier_call_chain(&hardlockup_notifier_list, 0, (void *)&next_cpu);
-			panic("Watchdog detected hard LOCKUP on cpu %u", next_cpu);
+			printk("Watchdog detected hard LOCKUP on cpu %u", next_cpu);
+			dump_cpu_task(next_cpu);
+			panic("Watchdog hard lockup on cpu %u", next_cpu);
 		} else {
 			WARN(1, "Watchdog detected hard LOCKUP on cpu %u", next_cpu);
 		}
@@ -238,18 +241,10 @@ static void hardlockup_watchdog_disable(unsigned int cpu)
 
 	hrtimer = &pcpu_val->hrtimer;
 
-	WARN_ON_ONCE(cpu != smp_processor_id());
-
 	pr_debug("%s: cpu%x: disabled\n", __func__, cpu);
 
 	cpumask_clear_cpu(cpu, &hardlockup_watchdog.allowed_mask);
 	hrtimer_cancel(hrtimer);
-}
-
-static int hardlockup_stop_fn(void *data)
-{
-	hardlockup_watchdog_disable(smp_processor_id());
-	return 0;
 }
 
 static void hardlockup_stop_all(void)
@@ -257,7 +252,7 @@ static void hardlockup_stop_all(void)
 	int cpu;
 
 	for_each_cpu(cpu, &hardlockup_watchdog.allowed_mask)
-		smp_call_on_cpu(cpu, hardlockup_stop_fn, NULL, false);
+		hardlockup_watchdog_disable(cpu);
 
 	cpumask_clear(&hardlockup_watchdog.allowed_mask);
 }
@@ -290,7 +285,7 @@ static int hardlockup_watchdog_offline_cpu(unsigned int cpu)
 	if (!cpumask_test_cpu(cpu, &hardlockup_watchdog.allowed_mask))
 		return 0;
 
-	smp_call_on_cpu(cpu, hardlockup_stop_fn, NULL, false);
+	hardlockup_watchdog_disable(cpu);
 	return 0;
 }
 

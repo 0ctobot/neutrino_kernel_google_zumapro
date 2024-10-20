@@ -289,6 +289,9 @@ __setup("deferred_probe_timeout=", deferred_probe_timeout_setup);
  */
 int driver_deferred_probe_check_state(struct device *dev)
 {
+	if (IS_ENABLED(CONFIG_INTEGRATE_MODULES) && initcalls_done)
+		return -EPROBE_DEFER;
+
 	if (!IS_ENABLED(CONFIG_MODULES) && initcalls_done) {
 		dev_warn(dev, "ignoring dependency for device, assuming no driver\n");
 		return -ENODEV;
@@ -875,6 +878,10 @@ __setup("driver_async_probe=", save_async_options);
 
 bool driver_allows_async_probing(struct device_driver *drv)
 {
+	/* Force modules to probe deterministically when integrated */
+	if (IS_ENABLED(CONFIG_INTEGRATE_MODULES))
+		return false;
+
 	switch (drv->probe_type) {
 	case PROBE_PREFER_ASYNCHRONOUS:
 		return true;

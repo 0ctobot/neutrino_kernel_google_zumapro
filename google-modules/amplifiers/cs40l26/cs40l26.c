@@ -656,7 +656,7 @@ static irqreturn_t cs40l26_handle_mbox_buffer(int irq, void *data)
 	irqreturn_t irq_status = IRQ_HANDLED;
 	struct device *dev = cs40l26->dev;
 	u32 val = 0;
-	int error;
+	int __maybe_unused error;
 
 	mutex_lock(&cs40l26->lock);
 
@@ -4432,7 +4432,7 @@ static char **cs40l26_get_tuning_names(struct cs40l26_private *cs40l26, int *act
 	return coeff_files;
 
 err_free:
-	for (; i >= 0; i--)
+	while (i--)
 		kfree(coeff_files[i]);
 	kfree(coeff_files);
 	*actual_num_files = 0;
@@ -4471,6 +4471,8 @@ static int cs40l26_coeff_load(struct cs40l26_private *cs40l26, u32 tuning)
 		release_firmware(coeff);
 	}
 
+	for (i = 0; i < CS40L26_MAX_TUNING_FILES; i++)
+		kfree(coeff_files[i]);
 	kfree(coeff_files);
 
 	return 0;
@@ -4611,15 +4613,15 @@ static int cs40l26_fw_upload(struct cs40l26_private *cs40l26)
 	else
 		error = request_firmware(&fw, CS40L26_FW_FILE_NAME, dev);
 
-	if (error) {
-		release_firmware(fw);
+	if (error)
 		return error;
-	}
 
 	if (!cs40l26->fw_rom_only) {
 		error = cs40l26_dsp_pre_config(cs40l26);
-		if (error)
+		if (error) {
+			release_firmware(fw);
 			return error;
+		}
 	}
 
 	error = cl_dsp_firmware_parse(cs40l26->dsp, fw, !cs40l26->fw_rom_only);

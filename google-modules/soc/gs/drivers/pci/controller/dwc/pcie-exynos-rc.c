@@ -411,15 +411,15 @@ void exynos_pcie_set_perst_gpio(int ch_num, bool on)
 	struct exynos_pcie *exynos_pcie = &g_pcie_rc[ch_num];
 
 	if (exynos_pcie->ep_device_type == EP_SAMSUNG_MODEM) {
-		pr_info("%s: force settig for abnormal state\n", __func__);
+		pr_debug("%s: force setting for abnormal state\n", __func__);
 		if (on) {
 			gpio_set_value(exynos_pcie->perst_gpio, 1);
-			pr_info("%s: Set PERST to HIGH, gpio val = %d\n",
-				__func__, gpio_get_value(exynos_pcie->perst_gpio));
+			pr_debug("%s: Set PERST to HIGH, gpio val = %d\n",
+				 __func__, gpio_get_value(exynos_pcie->perst_gpio));
 		} else {
 			gpio_set_value(exynos_pcie->perst_gpio, 0);
-			pr_info("%s: Set PERST to LOW, gpio val = %d\n",
-				__func__, gpio_get_value(exynos_pcie->perst_gpio));
+			pr_debug("%s: Set PERST to LOW, gpio val = %d\n",
+				 __func__, gpio_get_value(exynos_pcie->perst_gpio));
 		}
 	}
 }
@@ -1514,10 +1514,8 @@ static int exynos_pcie_rc_rd_own_conf(struct dw_pcie_rp *pp, int where, int size
 	struct dw_pcie *pci = to_dw_pcie_from_pp(pp);
 	struct device *dev = pci->dev;
 	struct exynos_pcie *exynos_pcie = to_exynos_pcie(pci);
-	int is_linked = 0;
-	int ret = 0;
-	u32 __maybe_unused reg_val;
 	unsigned long flags;
+	int ret;
 
 	if (exynos_pcie_check_skip_config(exynos_pcie)) {
 		*val = 0xffffffff;
@@ -1531,31 +1529,7 @@ static int exynos_pcie_rc_rd_own_conf(struct dw_pcie_rp *pp, int where, int size
 	}
 
 	spin_lock_irqsave(&exynos_pcie->reg_lock, flags);
-
-	if (exynos_pcie->state == STATE_LINK_UP)
-		is_linked = 1;
-
-	if (is_linked == 0) {
-		exynos_pcie_rc_clock_enable(pp, PCIE_ENABLE_CLOCK);
-		exynos_pcie_rc_phy_clock_enable(pp, PCIE_ENABLE_CLOCK);
-
-		if (exynos_pcie->phy_ops.phy_check_rx_elecidle)
-			exynos_pcie->phy_ops.phy_check_rx_elecidle(exynos_pcie->phy_pcs_base,
-								   IGNORE_ELECIDLE,
-								   exynos_pcie->ch_num);
-	}
-
 	ret = dw_pcie_read(exynos_pcie->rc_dbi_base + (where), size, val);
-
-	if (is_linked == 0) {
-		if (exynos_pcie->phy_ops.phy_check_rx_elecidle)
-			exynos_pcie->phy_ops.phy_check_rx_elecidle(exynos_pcie->phy_pcs_base,
-								   ENABLE_ELECIDLE,
-								   exynos_pcie->ch_num);
-
-		exynos_pcie_rc_phy_clock_enable(pp, PCIE_DISABLE_CLOCK);
-		exynos_pcie_rc_clock_enable(pp, PCIE_DISABLE_CLOCK);
-	}
 	spin_unlock_irqrestore(&exynos_pcie->reg_lock, flags);
 
 	return ret;
@@ -1566,10 +1540,8 @@ static int exynos_pcie_rc_wr_own_conf(struct dw_pcie_rp *pp, int where, int size
 	struct dw_pcie *pci = to_dw_pcie_from_pp(pp);
 	struct device *dev = pci->dev;
 	struct exynos_pcie *exynos_pcie = to_exynos_pcie(pci);
-	int is_linked = 0;
-	int ret = 0;
-	u32 __maybe_unused reg_val;
 	unsigned long flags;
+	int ret;
 
 	if (exynos_pcie_check_skip_config(exynos_pcie)) {
 		dev_err(dev,"skip wr_own_conf where=%#04x val=%#02x\n", where, val);
@@ -1580,33 +1552,9 @@ static int exynos_pcie_rc_wr_own_conf(struct dw_pcie_rp *pp, int where, int size
 		return PCIBIOS_DEVICE_NOT_FOUND;
 
 	spin_lock_irqsave(&exynos_pcie->reg_lock, flags);
-
-	if (exynos_pcie->state == STATE_LINK_UP)
-		is_linked = 1;
-
-	if (is_linked == 0) {
-		exynos_pcie_rc_clock_enable(pp, PCIE_ENABLE_CLOCK);
-		exynos_pcie_rc_phy_clock_enable(pp, PCIE_ENABLE_CLOCK);
-
-		if (exynos_pcie->phy_ops.phy_check_rx_elecidle)
-			exynos_pcie->phy_ops.phy_check_rx_elecidle(exynos_pcie->phy_pcs_base,
-								   IGNORE_ELECIDLE,
-								   exynos_pcie->ch_num);
-	}
-
 	ret = dw_pcie_write(exynos_pcie->rc_dbi_base + (where), size, val);
-
-	if (is_linked == 0) {
-		if (exynos_pcie->phy_ops.phy_check_rx_elecidle)
-			exynos_pcie->phy_ops.phy_check_rx_elecidle(exynos_pcie->phy_pcs_base,
-								   ENABLE_ELECIDLE,
-								   exynos_pcie->ch_num);
-
-		exynos_pcie_rc_phy_clock_enable(pp, PCIE_DISABLE_CLOCK);
-		exynos_pcie_rc_clock_enable(pp, PCIE_DISABLE_CLOCK);
-	}
-
 	spin_unlock_irqrestore(&exynos_pcie->reg_lock, flags);
+
 	return ret;
 }
 
@@ -3711,7 +3659,7 @@ retry:
 				__func__, try_cnt);
 			if (try_cnt < 10) {
 				gpio_set_value(exynos_pcie->perst_gpio, 0);
-				dev_info(dev, "Set PERST LOW, gpio val = %d\n",
+				dev_dbg(dev, "Set PERST LOW, gpio val = %d\n",
 					gpio_get_value(exynos_pcie->perst_gpio));
 				/* LTSSM disable */
 				exynos_elbi_write(exynos_pcie, PCIE_ELBI_LTSSM_DISABLE,
@@ -3913,6 +3861,10 @@ int exynos_pcie_rc_poweron(int ch_num)
 		val = readl(exynos_pcie->phy_pcs_base + 0x150);
 		dev_dbg(dev, "pwron: pcs+0x150: %#x\n", val);
 	}
+
+	if (exynos_pcie->ep_l1ss_cap_off == U32_MAX)
+		WRITE_ONCE(exynos_pcie->ep_l1ss_cap_off,
+			   pci_find_ext_capability(exynos_pcie->ep_pci_dev, PCI_EXT_CAP_ID_L1SS));
 
 	dev_dbg(dev, "end poweron, state: %d\n", exynos_pcie->state);
 	logbuffer_log(exynos_pcie->log, "end poweron, state: %d\n", exynos_pcie->state);
@@ -4252,9 +4204,9 @@ static int exynos_pcie_rc_set_l1ss(int enable, struct dw_pcie_rp *pp, int id)
 			__func__, exynos_pcie->l1ss_ctrl_id_state, id);
 
 		return -1;
+	} else if (READ_ONCE(exynos_pcie->ep_l1ss_cap_off) == U32_MAX) {
+		return -1;
 	} else {
-		exynos_pcie->ep_l1ss_cap_off =
-			pci_find_ext_capability(exynos_pcie->ep_pci_dev, PCI_EXT_CAP_ID_L1SS);
 		exynos_pcie->ep_link_ctrl_off = exynos_pcie->ep_pci_dev->pcie_cap + PCI_EXP_LNKCTL;
 		exynos_pcie->ep_l1ss_ctrl1_off = exynos_pcie->ep_l1ss_cap_off + PCI_L1SS_CTL1;
 		exynos_pcie->ep_l1ss_ctrl2_off = exynos_pcie->ep_l1ss_cap_off + PCI_L1SS_CTL2;
@@ -4861,9 +4813,9 @@ EXPORT_SYMBOL_GPL(exynos_pcie_rc_set_affinity);
 
 int exynos_pcie_rc_set_enable_wake(struct irq_data *data, unsigned int enable)
 {
-	int ret = 0;
 	struct dw_pcie_rp *pp = data->parent_data->domain->host_data;
 	struct dw_pcie *pci = to_dw_pcie_from_pp(pp);
+	struct irq_data *parent;
 
 	dev_dbg(pci->dev, "%s: enable = %d\n", __func__, enable);
 
@@ -4872,12 +4824,11 @@ int exynos_pcie_rc_set_enable_wake(struct irq_data *data, unsigned int enable)
 		return -EINVAL;
 	}
 
-	if (enable)
-		ret = enable_irq_wake(pp->irq);
-	else
-		ret = disable_irq_wake(pp->irq);
+	parent = irq_get_irq_data(pp->irq);
+	if (parent && parent->chip->irq_set_wake)
+		return parent->chip->irq_set_wake(parent, enable);
 
-	return ret;
+	return -EINVAL;
 }
 
 #if IS_ENABLED(CONFIG_CPU_IDLE)
@@ -4943,10 +4894,6 @@ static int exynos_pcie_msi_set_affinity(struct irq_data *irq_data, const struct 
 	exynos_pcie = to_exynos_pcie(pci);
 	if (!exynos_pcie)
 		return -ENODEV;
-
-	/* modem driver sets msi irq affinity */
-	if (exynos_pcie->ch_num == 0)
-		return 0;
 
 	idata = irq_get_irq_data(pp->irq);
 	if (!idata || !idata->chip)
@@ -5562,6 +5509,7 @@ static int exynos_pcie_rc_probe(struct platform_device *pdev)
 	pp = &pci->pp;
 	pp->ops = &exynos_pcie_rc_ops;
 
+	exynos_pcie->ep_l1ss_cap_off = U32_MAX;
 	spin_lock_init(&exynos_pcie->pcie_l1_exit_lock);
 	spin_lock_init(&exynos_pcie->conf_lock);
 	spin_lock_init(&exynos_pcie->power_stats_lock);

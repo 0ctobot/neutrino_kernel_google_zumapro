@@ -29,20 +29,6 @@
 #define GOOG_LOGW(gti, fmt, args...) GOOG_WARN(gti, "%s: "fmt, __func__, ##args)
 #define GOOG_LOGE(gti, fmt, args...) GOOG_ERR(gti, "%s: "fmt, __func__, ##args)
 #define MAX_SLOTS 10
-/*
- * GTI_DEBUG_HEALTHCHECK_KFIFO_LEN
- * Define the array length of struct gti_debug_healthcheck to track recent
- * touch interrupts information for debug.
- */
-#define GTI_DEBUG_HEALTHCHECK_KFIFO_LEN 32	/* must be power of 2. */
-#define GTI_DEBUG_HEALTHCHECK_LOGS_LEN 4
-/*
- * GTI_DEBUG_INPUT_KFIFO_LEN
- * Define the array length of struct gti_debug_input to track recent
- * touch input report for debug.
- */
-#define GTI_DEBUG_INPUT_KFIFO_LEN 16	/* must be power of 2. */
-#define GTI_DEBUG_INPUT_LOGS_LEN 4
 
 /*-----------------------------------------------------------------------------
  * Interactive calibration minimum and maximum state times.
@@ -404,39 +390,6 @@ enum gti_ical_state : u32 {
 	ICAL_STATE_RUN_RESET = 302,
 	ICAL_STATE_END_RESET = 303,
 	ICAL_STATE_NA = 0xFFFFFFFF,
-};
-
-/*-----------------------------------------------------------------------------
- * const char.
- */
-
-const static char *gesture_params_list[GTI_GESTURE_PARAMS_MAX] = {
-	"sttw_min_x",
-	"sttw_max_x",
-	"sttw_min_y",
-	"sttw_max_y",
-	"sttw_min_frame",
-	"sttw_max_frame",
-	"sttw_jitter",
-	"sttw_max_touch_size",
-	"lptw_min_x",
-	"lptw_max_x",
-	"lptw_min_y",
-	"lptw_max_y",
-	"lptw_min_frame",
-	"lptw_jitter",
-	"lptw_max_touch_size",
-	"lptw_marginal_min_x",
-	"lptw_marginal_max_x",
-	"lptw_marginal_min_y",
-	"lptw_marginal_max_y",
-	"lptw_monitor_ch_min_tx",
-	"lptw_monitor_ch_max_tx",
-	"lptw_monitor_ch_min_rx",
-	"lptw_monitor_ch_max_rx",
-	"lptw_node_count_min",
-	"lptw_motion_boundary",
-	"gesture_type",
 };
 
 /*-----------------------------------------------------------------------------
@@ -1000,16 +953,20 @@ struct goog_touch_interface {
 	int (*vendor_default_handler)(void *private_data,
 		enum gti_cmd_type cmd_type, struct gti_union_cmd_data *cmd);
 
+#ifdef GTI_DEBUG_INPUT_KFIFO_LEN
 	/* Debug used. */
 	u64 released_index;
 	int debug_warning_limit;
 	struct gti_debug_input debug_input[MAX_SLOTS];
 	struct gti_debug_input debug_input_history[GTI_DEBUG_INPUT_KFIFO_LEN];
 	DECLARE_KFIFO(debug_fifo_input, struct gti_debug_input, GTI_DEBUG_INPUT_KFIFO_LEN);
+#endif
+#ifdef GTI_DEBUG_HEALTHCHECK_KFIFO_LEN
 	struct gti_debug_healthcheck debug_healthcheck;
 	struct gti_debug_healthcheck debug_healthcheck_history[GTI_DEBUG_HEALTHCHECK_KFIFO_LEN];
 	DECLARE_KFIFO(debug_fifo_healthcheck, struct gti_debug_healthcheck,
 		GTI_DEBUG_HEALTHCHECK_KFIFO_LEN);
+#endif
 };
 
 /*-----------------------------------------------------------------------------
@@ -1074,8 +1031,18 @@ int goog_pm_unregister_notification(struct goog_touch_interface *gti);
 
 void goog_notify_fw_status_changed(struct goog_touch_interface *gti,
 		enum gti_fw_status status, struct gti_fw_status_data* data);
+#ifdef GTI_DEBUG_HEALTHCHECK_KFIFO_LEN
 void gti_debug_healthcheck_dump(struct goog_touch_interface *gti);
+#else
+static inline
+void gti_debug_healthcheck_dump(struct goog_touch_interface *gti) { }
+#endif
+#ifdef GTI_DEBUG_INPUT_KFIFO_LEN
 void gti_debug_input_dump(struct goog_touch_interface *gti);
+#else
+static inline
+void gti_debug_input_dump(struct goog_touch_interface *gti) { }
+#endif
 
 int goog_get_lptw_triggered(struct goog_touch_interface *gti);
 
