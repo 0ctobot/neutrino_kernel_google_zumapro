@@ -163,22 +163,30 @@ static int qbt_touch_connect(struct input_handler *handler,
 		return ret;
 	}
 
-	drvdata->input_touch_dev = handle->dev;
+	/* Get the specific input device. */
+	if (handle->dev->uniq && strncmp(handle->dev->uniq, "google_touchscreen", 18) == 0)
+		drvdata->input_touch_dev = handle->dev;
+
 	pr_info("Connected device: %s\n", dev_name(&dev->dev));
 	return ret;
 }
 static void qbt_touch_disconnect(struct input_handle *handle)
 {
+	struct qbt_drvdata *drvdata = handle->handler->private;
 	pr_info("Disconnected device: %s\n", dev_name(&handle->dev->dev));
 	input_close_device(handle);
 	input_unregister_handle(handle);
+	if (handle->dev->uniq && strncmp(handle->dev->uniq, "google_touchscreen", 18) == 0) {
+		if (drvdata->input_touch_dev)
+			drvdata->input_touch_dev = NULL;
+	}
 	kfree(handle);
 }
 static void qbt_touch_report_event(struct input_handle *handle,
 	unsigned int type, unsigned int code, int value)
 {
-	int touch_width = 0;
-	int display_width = 0;
+	int touch_width = 1;
+	int display_width = 1;
 	struct qbt_drvdata *drvdata = handle->handler->private;
 	struct finger_detect_touch *fd_touch = &drvdata->fd_touch;
 	struct touch_event *event = NULL;
@@ -191,9 +199,10 @@ static void qbt_touch_report_event(struct input_handle *handle,
 			fd_touch->current_slot);
 		return;
 	}
-
-	touch_width = input_abs_get_max(drvdata->input_touch_dev, ABS_MT_POSITION_X) + 1;
-	display_width = fd_touch->config.left + fd_touch->config.right;
+	if (drvdata->input_touch_dev) {
+		touch_width = input_abs_get_max(drvdata->input_touch_dev, ABS_MT_POSITION_X) + 1;
+		display_width = fd_touch->config.left + fd_touch->config.right;
+	}
 
 	event = &fd_touch->current_events[fd_touch->current_slot];
 	switch (code) {
@@ -949,8 +958,13 @@ static void qbt_gpio_report_event(struct qbt_drvdata *drvdata, int state)
 void qbt_lptw_report_event(int x, int y, int state) {
 	struct fd_event event;
 	struct qbt_drvdata *drvdata = qbt_touch_handler.private;
-	int touch_width = input_abs_get_max(drvdata->input_touch_dev, ABS_MT_POSITION_X) + 1;
-	int display_width = drvdata->fd_touch.config.left + drvdata->fd_touch.config.right;
+	int touch_width = 1;
+	int display_width = 1;
+
+	if (drvdata->input_touch_dev) {
+		touch_width = input_abs_get_max(drvdata->input_touch_dev, ABS_MT_POSITION_X) + 1;
+		display_width = drvdata->fd_touch.config.left + drvdata->fd_touch.config.right;
+	}
 
 	x = x * display_width / touch_width;
 	y = y * display_width / touch_width;
