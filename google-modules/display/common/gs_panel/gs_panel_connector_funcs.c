@@ -236,6 +236,9 @@ static int gs_panel_connector_get_property(struct gs_drm_connector *gs_connector
 	} else if (property == p->mipi_sync) {
 		*val = gs_state->mipi_sync;
 		dev_dbg(ctx->dev, "%s: mipi_sync(0x%llx)\n", __func__, *val);
+	} else if (property == p->frame_interval) {
+		*val = gs_state->frame_interval_us * NSEC_PER_USEC;
+		dev_dbg(ctx->dev, "%s: frame_interval(%llu)\n", __func__, *val);
 	} else
 		return -EINVAL;
 
@@ -277,6 +280,12 @@ static int gs_panel_connector_set_property(struct gs_drm_connector *gs_connector
 	} else if (property == p->mipi_sync) {
 		gs_state->mipi_sync = val;
 		dev_dbg(ctx->dev, "%s: mipi_sync(0x%lx)\n", __func__, gs_state->mipi_sync);
+	} else if (property == p->frame_interval) {
+		if (val != 0)
+			do_div(val, NSEC_PER_USEC);
+		gs_state->frame_interval_us = val;
+		PANEL_ATRACE_INT("prop_frame_interval", val);
+		dev_dbg(ctx->dev, "%s: frame interval(%u)us\n", __func__, gs_state->frame_interval_us);
 	} else {
 		dev_err(ctx->dev, "property not recognized within %s- \n", __func__);
 		return -EINVAL;
@@ -379,6 +388,15 @@ static void gs_panel_commit_properties(struct gs_panel *ctx,
 	bool mipi_sync;
 	bool ghbm_updated = false;
 
+	mutex_lock(&ctx->mode_lock);
+	if (conn_state->frame_interval_us)
+		ctx->frame_interval_us = conn_state->frame_interval_us;
+
+	/* assign target present timestamp to panel context */
+	ctx->timestamps.conn_last_present_ts = conn_state->crtc_last_present_ts;
+
+	mutex_unlock(&ctx->mode_lock);
+
 	if (!conn_state->pending_update_flags)
 		return;
 
@@ -419,8 +437,18 @@ static void gs_panel_commit_properties(struct gs_panel *ctx,
 	if ((conn_state->pending_update_flags & GS_HBM_FLAG_BL_UPDATE) &&
 	    (ctx->bl->props.brightness != conn_state->brightness_level)) {
 		PANEL_ATRACE_BEGIN("set_bl");
+		/*
+		 * backlight update happens at the same time that atomic_commit is taking
+		 * place, any delays can be avoided by command alignment.
+		 */
+		mutex_lock(&ctx->mode_lock);
+		ctx->skip_cmd_align = true;
+		mutex_unlock(&ctx->mode_lock);
 		ctx->bl->props.brightness = conn_state->brightness_level;
 		backlight_update_status(ctx->bl);
+		mutex_lock(&ctx->mode_lock);
+		ctx->skip_cmd_align = false;
+		mutex_unlock(&ctx->mode_lock);
 		PANEL_ATRACE_END("set_bl");
 	}
 
@@ -569,6 +597,7 @@ static int gs_panel_connector_attach_properties(struct gs_panel *ctx)
 	drm_object_attach_property(obj, p->rr_switch_duration, desc->rr_switch_duration);
 	drm_object_attach_property(obj, p->operation_rate, 0);
 	drm_object_attach_property(obj, p->refresh_on_lp, desc->refresh_on_lp);
+	drm_object_attach_property(obj, p->frame_interval, desc->frame_interval_us);
 
 	if (desc->brightness_desc->brt_capability) {
 		ret = gs_panel_attach_brightness_capability(ctx->gs_connector,
