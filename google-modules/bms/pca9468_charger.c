@@ -3632,12 +3632,10 @@ static int pca9468_check_apdo_switch(struct pca9468_charger *pca9468)
 				val = new_ta_max_cur / PD_MSG_TA_CUR_STEP;
 				pca9468->ta_cur = val * PD_MSG_TA_CUR_STEP;
 				pca9468->ta_max_cur = pca9468->ta_cur;
-				pca9468->ta_max_vol = ta_max_vol;
 			}
 		} else {
 			val = new_ta_cur / PD_MSG_TA_CUR_STEP;
 			pca9468->ta_cur = val * PD_MSG_TA_CUR_STEP;
-			pca9468->ta_max_vol = ta_max_vol;
 			pca9468->ta_max_cur = new_ta_max_cur;
 		}
 	}

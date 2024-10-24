@@ -73,6 +73,8 @@ enum gsu_usecases {
 	GSU_MODE_USB_OTG_POGO_VOUT	= 17,
 
 	GSU_MODE_FWUPDATE	= 18,   /* boost mode for frimware update */
+
+	GSU_MODE_STANDBY_BUCK_ON = 100,	/* indicates input_suspend and plugged in */
 };
 
 enum wlc_state_t {

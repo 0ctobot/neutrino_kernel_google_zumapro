@@ -698,13 +698,15 @@ static int max77779_get_usecase(struct max77779_foreach_cb_data *cb_data,
 	} else if (!buck_on && !wlc_rx) {
 		mode = MAX77779_CHGR_MODE_ALL_OFF;
 
-		/* Rtx using the internal battery */
-		usecase = GSU_MODE_STANDBY;
-		dc_on = false;
-		if (wlc_tx) {
+		if (cb_data->buck_on) {
+			usecase = GSU_MODE_STANDBY_BUCK_ON;
+		} else if (wlc_tx) { /* Rtx using the internal battery */
 			usecase = GSU_MODE_WLC_TX;
 			mode = MAX77779_CHGR_MODE_BOOST_UNO_ON;
+		} else {
+			usecase = GSU_MODE_STANDBY;
 		}
+		dc_on = false;
 	} else if (wlc_tx) {
 		/* above checks that buck_on is false */
 		usecase = GSU_MODE_WLC_TX;

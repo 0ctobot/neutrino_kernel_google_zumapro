@@ -268,6 +268,7 @@ int gs201_to_standby(struct max77779_usecase_data *uc_data, int use_case)
 		need_stby = use_case != GSU_MODE_POGO_VOUT;
 		break;
 	case GSU_MODE_STANDBY:
+	case GSU_MODE_STANDBY_BUCK_ON:
 	default:
 		need_stby = false;
 		break;
@@ -560,6 +561,8 @@ int gs201_to_usecase(struct max77779_usecase_data *uc_data, int use_case)
 	case GSU_MODE_USB_CHG:
 	case GSU_MODE_USB_DC:
 		rtx_avail = false;
+		break;
+	case GSU_MODE_STANDBY_BUCK_ON:
 		break;
 	case GSU_MODE_STANDBY:
 	case GSU_RAW_MODE:
