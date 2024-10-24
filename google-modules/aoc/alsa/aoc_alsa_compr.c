@@ -679,6 +679,10 @@ static int aoc_compr_get_codec_caps(struct snd_soc_component *component,
 	pr_debug("%s, %d\n", __func__, codec->codec);
 
 	switch (codec->codec) {
+#if !IS_ENABLED(CONFIG_SOC_GS101) && !IS_ENABLED(CONFIG_SOC_GS201)
+	case SND_AUDIOCODEC_PCM:
+		break;
+#endif
 	case SND_AUDIOCODEC_MP3:
 		break;
 	case SND_AUDIOCODEC_AAC:
@@ -755,6 +759,10 @@ static int snd_audiocodec_to_aoc_decoder(int snd_type, int codec_param)
 	}
 #endif
 	switch(snd_type) {
+#if !IS_ENABLED(CONFIG_SOC_GS101) && !IS_ENABLED(CONFIG_SOC_GS201)
+	case SND_AUDIOCODEC_PCM:
+		return AUDIO_OUTPUT_DECODER_PCM;
+#endif
 	case SND_AUDIOCODEC_MP3:
 		return AUDIO_OUTPUT_DECODER_MP3;
 	case SND_AUDIOCODEC_AAC:
@@ -773,6 +781,9 @@ static int aoc_compr_set_params(struct snd_soc_component *component,
 
 	uint8_t *temp_data_buf;
 	int buffer_size;
+#if !IS_ENABLED(CONFIG_SOC_GS101) && !IS_ENABLED(CONFIG_SOC_GS201)
+	int i;
+#endif
 
 	pr_debug("%s, fragment size = %d, number of fragment = %d\n", __func__,
 		 params->buffer.fragment_size, params->buffer.fragments);
@@ -799,7 +810,14 @@ static int aoc_compr_set_params(struct snd_soc_component *component,
 	alsa_stream->channels  =  params->codec.ch_out;
 	alsa_stream->compr_offload_codec =
 		snd_audiocodec_to_aoc_decoder(params->codec.id, codec->reserved[0]);
-
+	memset(alsa_stream->compr_offload_codec_options, 0,
+		sizeof(alsa_stream->compr_offload_codec_options));
+#if !IS_ENABLED(CONFIG_SOC_GS101) && !IS_ENABLED(CONFIG_SOC_GS201)
+	if (alsa_stream->compr_offload_codec == AUDIO_OUTPUT_DECODER_PCM)
+		for(i = 0;i < CODEC_RESERVED_SIZE;i ++)
+			alsa_stream->compr_offload_codec_options[i] =
+				(uint8_t)codec->reserved[i];
+#endif
 	if (alsa_stream->compr_offload_codec == AUDIO_OUTPUT_DECODER_UNKNOWN) {
 		pr_err("ERR: unsupport codec %x\n", params->codec.id);
 		return -EINVAL;

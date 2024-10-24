@@ -240,8 +240,14 @@ static int snd_aoc_pcm_open(struct snd_soc_component *component,
 
 	/* TODO: refactor needed on mapping between device number and entrypoint */
 	alsa_stream->entry_point_idx = (idx == 7) ? HAPTICS : idx;
+
+	/* reuse incall_capture 0 on tablet for voip path.
+	 * and using new incall capture 3 for phone platform. */
 	if (rtd->dai_link->id == IDX_INCALL_CAP0_TX &&
 		chip->incall_capture_state[0] == INCALL_CAPTURE_3MIC) {
+		alsa_stream->reused_for_voip = true;
+	} else if (rtd->dai_link->id == IDX_INCALL_CAP3_TX &&
+		chip->incall_capture_state[3] == INCALL_CAPTURE_3MIC) {
 		alsa_stream->reused_for_voip = true;
 	}
 	mutex_unlock(&chip->audio_mutex);
@@ -348,6 +354,7 @@ static long get_wait_time(struct snd_pcm_substream *substream)
 	case IDX_INCALL_CAP0_TX:
 	case IDX_INCALL_CAP1_TX:
 	case IDX_INCALL_CAP2_TX:
+	case IDX_INCALL_CAP3_TX:
 		return msecs_to_jiffies(chip->voice_pcm_wait_time_in_ms);
 	default:
 		return msecs_to_jiffies(chip->pcm_wait_time_in_ms);

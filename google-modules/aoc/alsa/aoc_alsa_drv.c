@@ -68,6 +68,7 @@ static const char *const audio_service_names[] = {
 #endif
 #if IS_ENABLED(CONFIG_SOC_ZUMA)
 	"audio_displayport",
+	"audio_incall_cap_3",
 #endif
 	NULL,
 };

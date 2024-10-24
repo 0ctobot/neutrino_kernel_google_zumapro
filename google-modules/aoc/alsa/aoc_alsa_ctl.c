@@ -2360,6 +2360,7 @@ static const char *incall_capture_stream_texts[] = { "Off", "UL", "DL", "UL_DL",
 static SOC_ENUM_SINGLE_DECL(incall_capture_stream0_enum, 1, 0, incall_capture_stream_texts);
 static SOC_ENUM_SINGLE_DECL(incall_capture_stream1_enum, 1, 1, incall_capture_stream_texts);
 static SOC_ENUM_SINGLE_DECL(incall_capture_stream2_enum, 1, 2, incall_capture_stream_texts);
+static SOC_ENUM_SINGLE_DECL(incall_capture_stream3_enum, 1, 3, incall_capture_stream_texts);
 
 /* audio capture mic source */
 static const char *audio_capture_mic_source_texts[] = { "Default", "Builtin_MIC", "USB_MIC",
@@ -2593,6 +2594,8 @@ static struct snd_kcontrol_new snd_aoc_ctl[] = {
 	SOC_ENUM_EXT("Incall Capture Stream1", incall_capture_stream1_enum,
 		     incall_capture_enable_ctl_get, incall_capture_enable_ctl_set),
 	SOC_ENUM_EXT("Incall Capture Stream2", incall_capture_stream2_enum,
+		     incall_capture_enable_ctl_get, incall_capture_enable_ctl_set),
+	SOC_ENUM_EXT("Incall Capture Stream3", incall_capture_stream3_enum,
 		     incall_capture_enable_ctl_get, incall_capture_enable_ctl_set),
 
 	SOC_SINGLE_EXT("Incall Playback Stream0", SND_SOC_NOPM, 0, 1, 0,

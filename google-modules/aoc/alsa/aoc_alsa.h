@@ -81,7 +81,7 @@ enum uc_device_id {
 #define MAX_NUM_OF_SINKS_PER_STREAM 2
 #define NUM_OF_MIC_BROKEN_RECORD 5
 
-#define MAX_NUM_OF_INCALL_CAPTURE_STREAM 3
+#define MAX_NUM_OF_INCALL_CAPTURE_STREAM 4
 
 #define N_MIC_IN_SPATIAL_MODULE 3
 
@@ -129,6 +129,8 @@ enum uc_device_id {
 #define MAX_NUM_OF_MAILBOX_INDEX 15
 
 #define NULL_PATH -1
+
+#define CODEC_RESERVED_SIZE 3
 
 #define AOC_CODEC_TAG 0xA0CC
 
@@ -333,6 +335,7 @@ struct aoc_alsa_stream {
 	struct snd_pcm_substream *substream;
 	struct snd_compr_stream *cstream; /* compress offload stream */
 	int compr_offload_codec;
+	uint8_t compr_offload_codec_options[AUDIO_OUTPUT_DECODER_CFG_OPTIONS_LEN];
 	int gapless_offload_enable;
 	int send_metadata;
 	int eof_reach;
