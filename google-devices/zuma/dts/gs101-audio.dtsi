@@ -889,6 +889,21 @@
 				};
 			};
 
+			dai_fe_incall_cap3_tx: fe_incall_cap3_tx {
+				dai-name = "audio_incall_cap_3";
+				stream-name = "audio_incall_cap_3";
+				id = <IDX_INCALL_CAP3_TX>;
+				capture;
+				cpu {
+					sound-dai = <&aud_aoc_path IDX_INCALL_CAP3_TX>;
+				};
+				platform {
+					tx1 {
+						of_drv = <&aoc_incall_ep>;
+					};
+				};
+			};
+
 			dai_be_dp_rx: be_dp_rx  {
 				status = "disabled";
 				dai-name = "DP_DMA_RX Playback";
