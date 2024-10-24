@@ -274,7 +274,7 @@ static bool dp_check_fec_caps(struct dp_device *dp, u8 fec_dpcd)
 {
 	u8 fec_data;
 
-	if (!drm_dp_sink_supports_fec(fec_dpcd))
+	if (!drm_dp_sink_supports_fec(fec_dpcd) || !dp->host.fec)
 		return false;
 
 	fec_data = DP_FEC_DECODE_EN_DETECTED | DP_FEC_DECODE_DIS_DETECTED;

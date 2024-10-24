@@ -533,6 +533,8 @@ struct decon_device {
 
 	bool keep_unmask;
 	struct exynos_partial *partial;
+	bool cgc_need_update;
+	bool dqe_need_update;
 };
 
 static inline struct decon_device *to_decon_device(const struct device *dev)

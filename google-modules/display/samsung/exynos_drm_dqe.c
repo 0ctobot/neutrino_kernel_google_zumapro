@@ -738,7 +738,7 @@ static void exynos_degamma_update(struct exynos_dqe *dqe, struct exynos_dqe_stat
 		dqe_reg_print_degamma_lut(id, &p);
 }
 
-static void
+static bool
 exynos_cgc_update(struct exynos_dqe *dqe, struct exynos_dqe_state *state)
 {
 	struct cgc_debug_override *cgc = &dqe->cgc;
@@ -750,7 +750,7 @@ exynos_cgc_update(struct exynos_dqe *dqe, struct exynos_dqe_state *state)
 
 	pr_debug("en(%d) dirty(%d)\n", info->force_en, info->dirty);
 	if (decon->cgc_dma && !info->force_en)
-		return;
+		return false;
 
 	if (info->force_en)
 		state->cgc_lut = &cgc->force_lut;
@@ -770,8 +770,7 @@ exynos_cgc_update(struct exynos_dqe *dqe, struct exynos_dqe_state *state)
 	if (info->verbose)
 		dqe_reg_print_cgc_lut(id, cgc->verbose_cnt, &p);
 
-	if (updated)
-		decon_reg_update_req_cgc(id);
+	return updated;
 }
 
 static void
@@ -1047,7 +1046,7 @@ static void exynos_set_cgc_dma(struct decon_device *decon, struct exynos_dqe_sta
 	}
 }
 
-static void exynos_cgc_dma_update(struct exynos_dqe *dqe, struct exynos_dqe_state *state)
+static bool exynos_cgc_dma_update(struct exynos_dqe *dqe, struct exynos_dqe_state *state)
 {
 	struct decon_device *decon = dqe->decon;
 	struct cgc_debug_override *cgc = &dqe->cgc;
@@ -1057,7 +1056,7 @@ static void exynos_cgc_dma_update(struct exynos_dqe *dqe, struct exynos_dqe_stat
 	bool updated = false;
 
 	if (!decon->cgc_dma || info->force_en)
-		return;
+		return false;
 
 	if (dqe->state.cgc_gem != state->cgc_gem) {
 		exynos_set_cgc_dma(decon, state);
@@ -1072,15 +1071,15 @@ static void exynos_cgc_dma_update(struct exynos_dqe *dqe, struct exynos_dqe_stat
 	if (info->verbose)
 		dqe_reg_print_cgc_lut(id, cgc->verbose_cnt, &p);
 
-	if (updated)
-		decon_reg_update_req_cgc(id);
+	return updated;
 }
 
 static void __exynos_dqe_update(struct exynos_dqe *dqe,
 				struct exynos_dqe_state *state, u32 width, u32 height)
 {
-	const struct decon_device *decon = dqe->decon;
+	struct decon_device *decon = dqe->decon;
 	u32 id = decon->id;
+	bool cgc_updated;
 
 	pr_debug("enabled(%d) +\n", state->enabled);
 
@@ -1100,14 +1099,15 @@ static void __exynos_dqe_update(struct exynos_dqe *dqe,
 	exynos_gamma_matrix_update(dqe, state);
 	exynos_degamma_update(dqe, state);
 	exynos_linear_matrix_update(dqe, state);
-	exynos_cgc_update(dqe, state);
+	cgc_updated = exynos_cgc_update(dqe, state);
 	exynos_regamma_update(dqe, state);
 	exynos_dither_update(dqe, state);
 	exynos_histogram_update(dqe, state);
 	exynos_rcd_update(dqe, state);
-	exynos_cgc_dma_update(dqe, state);
+	cgc_updated |= exynos_cgc_dma_update(dqe, state);
 
-	decon_reg_update_req_dqe(id);
+	decon->dqe_need_update = true;
+	decon->cgc_need_update |= cgc_updated;
 
 	pr_debug("-\n");
 }

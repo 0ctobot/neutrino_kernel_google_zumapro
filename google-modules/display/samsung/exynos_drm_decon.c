@@ -187,7 +187,6 @@ static void decon_set_color_map(struct decon_device *decon, u32 win_id,
 #endif
 	win_info.blend = DECON_BLENDING_NONE;
 	decon_reg_set_window_control(decon->id, win_id, &win_info, true);
-	decon_reg_update_req_window(decon->id, win_id);
 
 	decon_debug(decon, "%s -\n", __func__);
 }
@@ -1145,14 +1144,29 @@ static void decon_atomic_flush(struct exynos_drm_crtc *exynos_crtc,
 		exynos_partial_update(partial, &old_exynos_crtc_state->partial_region,
 				&new_exynos_crtc_state->partial_region);
 
-	decon_reg_all_win_shadow_update_req(decon->id);
-
 	if (new_exynos_crtc_state->seamless_mode_changed)
 		decon_seamless_mode_set(exynos_crtc, old_crtc_state);
 
 	decon_wait_earliest_process_time(old_exynos_crtc_state, new_exynos_crtc_state);
 
 	spin_lock_irqsave(&decon->slock, flags);
+	if (decon->config.mode.op_mode == DECON_COMMAND_MODE) {
+		if (decon->cgc_need_update) {
+			decon_reg_update_req_cgc(decon->id);
+			decon->cgc_need_update = false;
+		}
+		if (decon->dqe_need_update) {
+			decon_reg_update_req_dqe(decon->id);
+			decon->dqe_need_update = false;
+		}
+		decon_reg_all_win_shadow_update_req(decon->id);
+	} else {
+		decon_reg_direct_on_off(decon->id, 1);
+		decon_video_mode_reg_update_req(decon->id, decon->cgc_need_update,
+			decon->dqe_need_update);
+		decon->cgc_need_update = false;
+		decon->dqe_need_update = false;
+	}
 	decon_reg_start(decon->id, &decon->config);
 	atomic_inc(&decon->frames_pending);
 	if (!new_crtc_state->no_vblank)

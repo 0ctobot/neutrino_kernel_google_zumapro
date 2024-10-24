@@ -372,6 +372,7 @@ struct decon_dsc {
 void decon_reg_set_rcd_enable_internal(u32 id, bool en);
 #else
 static inline void decon_reg_set_rcd_enable_internal(u32 id, bool en) {}
+void decon_video_mode_reg_update_req_internal(u32 id, bool dqe_need_update);
 #endif
 
 #if defined(CONFIG_SOC_GS201)
@@ -386,6 +387,7 @@ void decon_regs_desc_init(void __iomem *regs, phys_addr_t start, const char *nam
 /*************** DECON CAL APIs exposed to DECON driver ***************/
 /* DECON control */
 int decon_reg_init(u32 id, struct decon_config *config);
+void decon_reg_direct_on_off(u32 id, u32 en);
 int decon_reg_start(u32 id, struct decon_config *config);
 int decon_reg_stop(u32 id, struct decon_config *config, bool rst, u32 fps);
 void decon_reg_set_bpc_and_dither_path(u32 id, struct decon_config *config);
@@ -459,6 +461,16 @@ void __decon_unmap_regs(struct decon_device *decon);
 #endif
 bool is_decon_using_ch(u32 id, u64 rsc_ch, u32 ch);
 bool is_decon_using_win(u32 id, u64 rsc_win, u32 win);
+
+#if defined(CONFIG_SOC_GS201) || defined(CONFIG_SOC_ZUMA)
+void decon_video_mode_reg_update_req(u32 id, bool cgc_need_update, bool dqe_need_update);
+#else
+static inline void decon_video_mode_reg_update_req(u32 id,
+	__maybe_unused bool cgc_need_update, bool dqe_need_update)
+{
+	decon_video_mode_reg_update_req_internal(id, dqe_need_update);
+}
+#endif
 
 static inline void decon_reg_set_rcd_enable(u32 dqe_id, bool en)
 {

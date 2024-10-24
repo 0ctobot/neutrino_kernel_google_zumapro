@@ -1329,13 +1329,15 @@ static irqreturn_t dma_irq_handler(int irq, void *priv)
 			else
 				decon_dump_all(decon, DPU_EVT_CONDITION_IDMA_ERROR, true);
 			last_dumptime = jiffies;
-		}
-		if (irqs & IDMA_STATUS_DEADLOCK_IRQ) {
-			char idma_dl_msg[40];
 
-			scnprintf(idma_dl_msg, sizeof(idma_dl_msg),
-				"dpp[%u] deadlock in decon[%u]\n", dpp->id, dpp->decon_id);
-			dbg_snapshot_emergency_reboot(idma_dl_msg);
+			if ((irqs & IDMA_STATUS_DEADLOCK_IRQ) &&
+				(decon->config.mode.op_mode == DECON_COMMAND_MODE)) {
+				char idma_dl_msg[40];
+
+				scnprintf(idma_dl_msg, sizeof(idma_dl_msg),
+					"dpp[%u] deadlock in decon[%u]\n", dpp->id, dpp->decon_id);
+				dbg_snapshot_emergency_reboot(idma_dl_msg);
+			}
 		}
 	}
 

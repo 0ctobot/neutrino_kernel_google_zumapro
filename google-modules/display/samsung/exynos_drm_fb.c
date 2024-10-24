@@ -829,12 +829,26 @@ static void exynos_atomic_commit_tail(struct drm_atomic_state *old_state)
 			struct gs_drm_connector *gs_connector = to_gs_connector(connector);
 			const struct gs_drm_connector_helper_funcs *funcs =
 				gs_connector->helper_private;
+			struct gs_drm_connector_state *new_gs_conn_state, *old_gs_conn_state;
+
 			if (!funcs->atomic_pre_commit)
 				continue;
 
+			new_gs_conn_state = to_gs_connector_state(new_conn_state);
+			old_gs_conn_state = to_gs_connector_state(old_conn_state);
+
+			if (new_conn_state->crtc) {
+				struct exynos_drm_crtc_state *new_exynos_crtc_state;
+
+				new_crtc_state = drm_atomic_get_new_crtc_state(old_state,
+						new_conn_state->crtc);
+				new_exynos_crtc_state = to_exynos_crtc_state(new_crtc_state);
+				new_gs_conn_state->crtc_last_present_ts =
+					new_exynos_crtc_state->expected_present_time;
+			}
 			funcs->atomic_pre_commit(gs_connector,
-						 to_gs_connector_state(old_conn_state),
-						 to_gs_connector_state(new_conn_state));
+						 old_gs_conn_state,
+						 new_gs_conn_state);
 		}
 #endif
 	}

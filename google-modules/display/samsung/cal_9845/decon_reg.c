@@ -90,7 +90,7 @@ static void decon_reg_set_operation_mode(u32 id, enum decon_op_mode mode)
 	decon_write_mask(id, GLOBAL_CON, val, mask);
 }
 
-static void decon_reg_direct_on_off(u32 id, u32 en)
+void decon_reg_direct_on_off(u32 id, u32 en)
 {
 	u32 val, mask;
 
@@ -1873,8 +1873,10 @@ int decon_reg_start(u32 id, struct decon_config *config)
 {
 	int ret = 0;
 
-	decon_reg_direct_on_off(id, 1);
-	decon_reg_update_req_global(id);
+	if (config->mode.op_mode == DECON_COMMAND_MODE) {
+		decon_reg_direct_on_off(id, 1);
+		decon_reg_update_req_global(id);
+	}
 
 	/* clear pending frame start if any to ensure next frame start reflects new update */
 	decon_reg_clear_int(id, INT_EN_FRAME_START);
@@ -1975,6 +1977,21 @@ void decon_reg_all_win_shadow_update_req(u32 id)
 
 	decon_write_mask(id, SHD_REG_UP_REQ, ~0, mask);
 }
+
+#if defined(CONFIG_SOC_GS101)
+void decon_video_mode_reg_update_req_internal(u32 id, bool dqe_need_update)
+{
+	u32 mask;
+
+	mask = SHD_REG_UP_REQ_FOR_DECON | SHD_REG_UP_REQ_GLOBAL;
+	if (id != 2)
+		mask |= SHD_REG_UP_REQ_CMP;
+	if (dqe_need_update)
+		mask |= SHD_REG_UP_REQ_DQE;
+
+	decon_write_mask(id, SHD_REG_UP_REQ, ~0, mask);
+}
+#endif
 
 void decon_reg_set_window_control(u32 id, int win_idx,
 		struct decon_window_regs *regs, u32 winmap_en)
