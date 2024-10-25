@@ -14,6 +14,7 @@
 
 #include <linux/completion.h>
 #include <linux/slab.h>
+#include <linux/overflow.h>
 
 #include "lwis_allocator.h"
 #include "lwis_device.h"
@@ -385,6 +386,7 @@ static int prepare_response(struct lwis_client *client, struct lwis_periodic_io 
 	int read_entries = 0;
 	const int reg_value_bytewidth = client->lwis_dev->native_value_bitwidth / 8;
 	unsigned long flags;
+	size_t result_size, read_buf_total, temp_size, total_size;
 
 	spin_lock_irqsave(&client->periodic_io_lock, flags);
 	info->id = client->periodic_io_counter;
@@ -410,12 +412,20 @@ static int prepare_response(struct lwis_client *client, struct lwis_periodic_io 
 		}
 	}
 
+	if (check_mul_overflow(read_entries, sizeof(struct lwis_periodic_io_result),
+			       &result_size) ||
+	    check_mul_overflow(result_size, info->batch_size, &result_size) ||
+	    check_mul_overflow(read_buf_size, info->batch_size, &read_buf_total) ||
+	    check_add_overflow(sizeof(struct lwis_periodic_io_response_header), result_size,
+			       &temp_size) ||
+	    check_add_overflow(temp_size, read_buf_total, &total_size)) {
+		return -EOVERFLOW;
+	}
+
 	/* Periodic io response payload consists of one response header and
 	 * batch_size of batches, each of which contains num_entries_per_period
 	 * pairs of lwis_periodic_io_result and its read_buf. */
-	resp_size = sizeof(struct lwis_periodic_io_response_header) +
-		    read_entries * sizeof(struct lwis_periodic_io_result) * info->batch_size +
-		    read_buf_size * info->batch_size;
+	resp_size = sizeof(struct lwis_periodic_io_response_header) + result_size + read_buf_total;
 	periodic_io->resp = kmalloc(resp_size, GFP_KERNEL);
 	if (!periodic_io->resp) {
 		return -ENOMEM;

@@ -287,6 +287,10 @@ static int construct_io_entry(struct lwis_client *client, struct lwis_io_entry *
 	uint8_t *user_buf;
 	uint8_t *k_buf;
 	struct lwis_device *lwis_dev = client->lwis_dev;
+	/* Following variables are used to avoid lwis integer overflow */
+	int read_entries = 0;
+	size_t read_buf_size = 0;
+	const int reg_value_bytewidth = client->lwis_dev->native_value_bitwidth / 8;
 
 	entry_size = num_io_entries * sizeof(struct lwis_io_entry);
 	if (entry_size / sizeof(struct lwis_io_entry) != num_io_entries) {
@@ -311,6 +315,8 @@ static int construct_io_entry(struct lwis_client *client, struct lwis_io_entry *
 	 * will be allocated in the form of lwis_io_result in io processing.
 	 */
 	for (i = 0; i < num_io_entries; ++i) {
+		const size_t remaining_capacity = LWIS_IO_ENTRY_READ_RESTRICTION - read_buf_size -
+						  read_entries * sizeof(struct lwis_io_result);
 		if (k_entries[i].type == LWIS_IO_ENTRY_WRITE_BATCH ||
 		    k_entries[i].type == LWIS_IO_ENTRY_WRITE_BATCH_V2) {
 			user_buf = k_entries[i].rw_batch.buf;
@@ -408,6 +414,24 @@ static int construct_io_entry(struct lwis_client *client, struct lwis_io_entry *
 			k_entries[i].write_to_buffer.buffer->io_sys_map = sys_map;
 			k_entries[i].write_to_buffer.buffer->dma_buf = dma_buffer;
 			last_buf_alloc_idx = i;
+		} else if (k_entries[i].type == LWIS_IO_ENTRY_READ ||
+			   k_entries[i].type == LWIS_IO_ENTRY_READ_V2) {
+			/* Check for size_t overflow. */
+			if (reg_value_bytewidth > remaining_capacity ||
+			    ++read_entries >= LWIS_IO_ENTRY_READ_OVERFLOW_BOUND) {
+				ret = -EOVERFLOW;
+				goto error_free_buf;
+			}
+			read_buf_size += reg_value_bytewidth;
+		} else if (k_entries[i].type == LWIS_IO_ENTRY_READ_BATCH ||
+			   k_entries[i].type == LWIS_IO_ENTRY_READ_BATCH_V2) {
+			/* Check for size_t overflow. */
+			if (k_entries[i].rw_batch.size_in_bytes > remaining_capacity ||
+			    ++read_entries >= LWIS_IO_ENTRY_READ_OVERFLOW_BOUND) {
+				ret = -EOVERFLOW;
+				goto error_free_buf;
+			}
+			read_buf_size += k_entries[i].rw_batch.size_in_bytes;
 		}
 	}
 
