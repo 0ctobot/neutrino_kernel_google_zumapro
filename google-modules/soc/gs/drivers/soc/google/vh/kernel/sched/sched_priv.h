@@ -172,6 +172,7 @@ struct vendor_group_property {
 #endif
 	struct uclamp_se uc_req[UCLAMP_CNT];
 	unsigned int rampup_multiplier;
+	bool disable_util_est;
 };
 
 #if IS_ENABLED(CONFIG_USE_VENDOR_GROUP_UTIL)
@@ -496,6 +497,42 @@ static inline bool get_uclamp_fork_reset(struct task_struct *p, bool inherited)
 		return get_vendor_task_struct(p)->uclamp_fork_reset;
 }
 
+static inline bool is_binder_task(struct task_struct *p)
+{
+	return get_vendor_task_struct(p)->is_binder_task;
+}
+
+static inline bool should_auto_prefer_idle(struct task_struct *p, int group)
+{
+	if (group == VG_TOPAPP) {
+		/*
+		 * Binder Task
+		 */
+		if (is_binder_task(p))
+			return true;
+		/*
+		 * Task of prio <= 120 and with possitive wake_q_count
+		 */
+		if (p->prio <= DEFAULT_PRIO && p->wake_q_count)
+			return true;
+		/*
+		 * Task of prio <= 120 and waked up by another process
+		 */
+		if (current) {
+			if (p->prio <= DEFAULT_PRIO && current->tgid != p->tgid)
+				return true;
+		}
+	} else if (group == VG_FOREGROUND) {
+		/*
+		 * Binder Task
+		 */
+		if (is_binder_task(p))
+			return true;
+	}
+
+	return false;
+}
+
 static inline bool get_prefer_idle(struct task_struct *p)
 {
 	struct vendor_task_struct *vp = get_vendor_task_struct(p);
@@ -507,7 +544,7 @@ static inline bool get_prefer_idle(struct task_struct *p)
 	if (get_uclamp_fork_reset(p, true) || vp->prefer_idle || vbinder->prefer_idle)
 		return true;
 	else if (vendor_sched_auto_prefer_idle)
-		return vp->group == VG_TOPAPP && p->prio <= DEFAULT_PRIO && p->wake_q_count;
+		return should_auto_prefer_idle(p, vp->group);
 	else if (vendor_sched_reduce_prefer_idle)
 		return (vg[vp->group].prefer_idle && p->prio <= DEFAULT_PRIO &&
 			uclamp_eff_value_pixel_mod(p, UCLAMP_MAX) == SCHED_CAPACITY_SCALE);
@@ -533,6 +570,7 @@ static inline void init_vendor_task_struct(struct vendor_task_struct *v_tsk)
 	v_tsk->uclamp_filter.uclamp_min_ignored = 0;
 	v_tsk->uclamp_filter.uclamp_max_ignored = 0;
 	v_tsk->iowait_boost = 0;
+	v_tsk->is_binder_task = false;
 	v_tsk->binder_task.uclamp[UCLAMP_MIN] = uclamp_none(UCLAMP_MIN);
 	v_tsk->binder_task.uclamp[UCLAMP_MIN] = uclamp_none(UCLAMP_MAX);
 	v_tsk->binder_task.prefer_idle = false;

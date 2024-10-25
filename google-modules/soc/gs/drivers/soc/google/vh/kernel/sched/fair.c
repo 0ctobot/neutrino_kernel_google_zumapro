@@ -2243,6 +2243,7 @@ void initialize_vendor_group_property(void)
 		vg[i].ug = UG_AUTO;
 #endif
 		vg[i].rampup_multiplier = 1;
+		vg[i].disable_util_est = false;
 	}
 
 #if IS_ENABLED(CONFIG_USE_VENDOR_GROUP_UTIL)
@@ -2310,13 +2311,13 @@ void rvh_util_est_update_pixel_mod(void *data, struct cfs_rq *cfs_rq, struct tas
 		else
 			rampup_multiplier = vg[get_vendor_group(p)].rampup_multiplier;
 
-		if (!rampup_multiplier) {
+		if (vg[get_vendor_group(p)].disable_util_est) {
 			p->se.avg.util_est.enqueued = 0;
 			p->se.avg.util_est.ewma = 0;
 			return;
 		}
 
-		if (vp->ignore_util_est_update)
+		if (vp->ignore_util_est_update && rampup_multiplier)
 			return;
 	}
 
@@ -3002,47 +3003,6 @@ void rvh_dequeue_task_fair_pixel_mod(void *data, struct rq *rq, struct task_stru
 	 */
 	if (vp->iowait_boost == vrq->iowait_boost)
 		vrq->iowait_boost = 0;
-}
-
-void rvh_update_misfit_status_pixel_mod(void *data, struct task_struct *p,
-	struct rq *rq, bool *need_update)
-{
-	int cpu;
-	struct root_domain *rd = cpu_rq(smp_processor_id())->rd;
-	struct perf_domain *pd;
-	unsigned long task_util;
-	struct cpumask cluster = { CPU_BITS_NONE };
-
-	rcu_read_lock();
-
-	if (!p || p->nr_cpus_allowed == 1)
-		goto out;
-
-	pd = rcu_dereference(rd->pd);
-	if (!pd)
-		goto out;
-
-	task_util = uclamp_task_util(p, uclamp_eff_value_pixel_mod(p, UCLAMP_MIN),
-				     uclamp_eff_value_pixel_mod(p, UCLAMP_MAX));
-
-	for (; pd; pd = pd->next) {
-		cpumask_and(&cluster, p->cpus_ptr, perf_domain_span(pd));
-		cpu = cpumask_first(&cluster);
-
-		if (cpu >= nr_cpu_ids)
-			continue;
-
-		/* update misfit if task p fit cpu */
-		if (task_util <= capacity_orig_of(cpu)) {
-			rcu_read_unlock();
-			return;
-		}
-	}
-
-out:
-	rq->misfit_task_load = 0;
-	*need_update = false;
-	rcu_read_unlock();
 }
 
 void vh_sched_resume_end(void *data, void *unused)
