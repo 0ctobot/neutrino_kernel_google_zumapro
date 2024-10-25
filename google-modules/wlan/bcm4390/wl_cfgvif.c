@@ -6635,6 +6635,7 @@ int wl_chspec_chandef(chanspec_t chanspec,
 			chan_type = NL80211_CHAN_HT20;
 			break;
 		case WL_CHANSPEC_BW_40:
+#ifdef WL_FORCE_40BW_CHANDEF
 		{
 			if (CHSPEC_SB_UPPER(chanspec)) {
 				channel += CH_10MHZ_APART;
@@ -6643,6 +6644,11 @@ int wl_chspec_chandef(chanspec_t chanspec,
 			}
 		}
 			chan_type = NL80211_CHAN_HT40PLUS;
+#else
+			/* Use 20MHz BW for chandef */
+			channel = wf_chspec_primary20_chan(chanspec);
+			chan_type = NL80211_CHAN_HT20;
+#endif
 			break;
 
 #if (LINUX_VERSION_CODE >= KERNEL_VERSION (3, 8, 0))
@@ -8370,6 +8376,49 @@ wl_cfgvif_sta_multilink_config(struct bcm_cfg80211 *cfg, wl_assoc_state_t assoc_
 	}
 }
 
+#ifdef WL_AGGRESSIVE_ROAM
+void
+wl_cfgvif_enable_aggressive_roam(struct bcm_cfg80211 *cfg, struct net_device *dev,
+	bool enable)
+{
+	int ret = BCME_OK;
+	int roam_trigger[2];
+	struct net_info *netinfo = wl_get_netinfo_by_wdev(cfg, dev->ieee80211_ptr);
+
+	if (!cfg || !dev || !netinfo) {
+		WL_ERR(("%s: invalid args\n", __FUNCTION__));
+		return;
+	}
+
+	if (enable) {
+		roam_trigger[0] = WL_AGGR_ROAM_TRIGGER_VALUE;
+	} else {
+		if (netinfo->aggressive_roam == FALSE) {
+			/* Already in default state. Do nothing */
+			return;
+		}
+		roam_trigger[0] = WL_AUTO_ROAM_TRIGGER;
+#ifdef WBTEXT
+		/* on aggressive roam disable, revert back the roam prof */
+		wl_cfg80211_wbtext_set_default(dev);
+#endif /* WBTEXT */
+	}
+
+	roam_trigger[1] = WLC_BAND_ALL;
+	ret = wldev_ioctl_set(dev, WLC_SET_ROAM_TRIGGER, roam_trigger,
+			sizeof(roam_trigger));
+	if (ret != BCME_OK) {
+		WL_ERR(("failed to set roam trigger (%d)\n", ret));
+		return;
+	}
+
+	netinfo->aggressive_roam = enable;
+	WL_INFORM_MEM(("[%s] aggressive_roam:%d connected_stas:%d\n",
+		dev->name, enable, cfg->stas_associated));
+	return;
+}
+#endif /* WL_AGGRESSIVE_ROAM */
+
 void
 wl_cfgvif_roam_config(struct bcm_cfg80211 *cfg, struct net_device *dev,
 		wl_roam_conf_t state)
@@ -9458,6 +9507,83 @@ exit:
 	return res;
 }
 #endif /* KEEP_ALIVE && OEM_ANDROID */
+
+#if (LINUX_VERSION_CODE >= KERNEL_VERSION(6, 0, 0))
+s32
+wl_cfgvif_set_eht_features(struct net_device *dev, struct bcm_cfg80211 *cfg,
+	u32 eht_mask)
+{
+	bcm_xtlv_t read_eht_xtlv;
+	uint8 set_eht_xtlv[32];
+	int set_eht_xtlv_len = sizeof(set_eht_xtlv);
+	xtlv_v32_t v32;
+	u32 eht_feature = 0;
+	s32 err = BCME_OK;
+	uint8 iovar_buf[WLC_IOCTL_SMLEN];
+
+	bzero(&v32, sizeof(xtlv_v32_t));
+	bzero(&read_eht_xtlv, sizeof(read_eht_xtlv));
+
+	read_eht_xtlv.id = WL_EHT_CMD_FEATURES;
+	read_eht_xtlv.len = 0;
+
+	err = wldev_iovar_getbuf(dev, "eht", &read_eht_xtlv, sizeof(read_eht_xtlv),
+			iovar_buf, WLC_IOCTL_SMLEN, NULL);
+	if (err < 0) {
+		WL_ERR(("EHT get failed. error=%d\n", err));
+		goto exit;
+	} else {
+		eht_feature = *(int*)iovar_buf;
+		eht_feature = dtoh32(eht_feature);
+	}
+
+	v32.id = WL_EHT_CMD_FEATURES;
+	v32.len = sizeof(s32);
+
+	v32.val = eht_feature;
+
+	if (eht_mask) {
+		if (eht_mask & DHD_DISABLE_STA_EHT) {
+			/* Host enforced EHT disable */
+			v32.val |= WL_EHT_FEATURES_STA_DISABLE;
+			WL_INFORM(("host enforced STA EHT disable. fw_cap:0x%x\n",
+					(eht_feature & WL_EHT_FEATURES_STA_DISABLE)));
+		}
+
+		if (eht_mask & DHD_ENABLE_STA_EHT) {
+			if (eht_feature & WL_EHT_FEATURES_STA_DISABLE) {
+				v32.val &= ~WL_EHT_FEATURES_STA_DISABLE;
+				WL_INFORM(("Reset host enforced EHT disable. fw_cap:0x%x\n",
+						v32.val));
+			}
+		}
+	}
+
+	if (eht_feature == v32.val) {
+		WL_INFORM(("eht_feature val is unchanged, skip overwrite\n"));
+		goto exit;
+	}
+
+	err = bcm_pack_xtlv_buf((void *)&v32, set_eht_xtlv, sizeof(set_eht_xtlv),
+			BCM_XTLV_OPTION_ALIGN32, wl_get_uint_cb, wl_pack_uint_cb,
+			&set_eht_xtlv_len);
+	if (err != BCME_OK) {
+		WL_ERR(("failed to pack eht settvl=%d\n", err));
+		goto exit;
+	}
+
+	err = wldev_iovar_setbuf(dev, "eht", set_eht_xtlv, sizeof(set_eht_xtlv),
+			cfg->ioctl_buf, WLC_IOCTL_SMLEN, &cfg->ioctl_buf_sync);
+	if (err < 0) {
+		WL_ERR(("failed to set eht features, error=%d\n", err));
+		goto exit;
+	}
+
+	WL_INFORM_MEM(("Set EHT done: 0x%x\n", v32.val));
+exit:
+	return err;
+}
+#endif /* LINUX_VERSION_CODE >= KERNEL_VERSION(6, 0, 0) */
 
 s32
 wl_cfgvif_get_eht_features(struct net_device *dev, u32 *eht_feature_val)

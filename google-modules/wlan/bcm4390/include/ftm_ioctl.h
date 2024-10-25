@@ -141,6 +141,9 @@ typedef uint32	wl_ftm_flags_t;
 									 * regardless of assoc
 									 */
 
+#define WL_FTM_SESSION_FLAG_USE_ANT_DIVERSITY	0x0020000000000000llu	/* Use antenna diversity
+									 * for ranging operation
+									 */
 #define WL_FTM_SESSION_FLAG_ALL			0xffffffffffffffffllu
 typedef uint64 wl_ftm_session_flags_t;
 
@@ -181,7 +184,8 @@ typedef uint64 wl_ftm_session_flags_t;
 	| WL_FTM_SESSION_FLAG_SEQ_EN \
 	| WL_FTM_SESSION_FLAG_NOCHANSWT \
 	| WL_FTM_SESSION_FLAG_MBURST_FOLLOWUP \
-	| WL_FTM_SESSION_FLAG_ONE_WAY)
+	| WL_FTM_SESSION_FLAG_ONE_WAY \
+	| WL_FTM_SESSION_FLAG_USE_ANT_DIVERSITY)
 
 /* flags common for TB/NTB sessions */
 #define FTM_TB_NTB_COMMON_CONFIG_MASK \
@@ -387,6 +391,18 @@ typedef enum {
 	WL_FTM_TLV_ID_TB_ISTA_AW		= 52,	/* TB ISTA Availabilty Window */
 	WL_FTM_TLV_ID_AZ_NDP_MCS		= 53,	/* MCS index of HE Ranging NDP frame */
 
+	WL_FTM_TLV_ID_TX_COREMASK		= 54,	/* tx coremask for ranging frm tx */
+	WL_FTM_TLV_ID_ANT_DIVERSITY_MODE	= 55,	/* Antenna Diversity Mode */
+
+	/* security */
+	WL_FTM_TLV_ID_SECURITY_KEY_IDLE_TIME	= 56, /* ftm security key_idle time */
+	WL_FTM_TLV_ID_SECURITY_KEY_LIFE_TIME	= 57, /* ftm security key life time */
+	WL_FTM_TLV_ID_SECURITY_AKM		= 58, /* ftm security AKM */
+	WL_FTM_TLV_ID_SECURITY_PASSPHRASE	= 59, /* ftm security passphrase */
+	WL_FTM_TLV_ID_SECURITY_PASSPHRASE_LEN	= 60, /* ftm security passphrase len */
+	WL_FTM_TLV_ID_SECURITY_CIPHER_TYPE	= 61, /* ftm security cipher type */
+	WL_FTM_TLV_ID_SECURITY_LTF_REQD		= 62,	/* ftm security, secure ltf needed */
+
 	/* Extra common TLV IDs */
 	WL_FTM_TLV_ID_TYPE_FLAGS		= 128,
 
@@ -431,18 +447,13 @@ typedef enum {
 	WL_FTM_TLV_ID_CSI_PROC_RESULT		= 1039,	/* wl_ftm_csi_proc_result_t */
 	WL_FTM_TLV_ID_CSI_PROC_RTT		= 1040,	/* wl_ftm_csi_proc_rtt_t */
 	WL_FTM_TLV_ID_TIMESTAMP_DUMP_V1		= 1041,	/* wl_ftm_timestamp_dump_t */
-
-	/* security */
-	WL_FTM_TLV_ID_SECURITY_KEY_IDLE_TIME	= 1042, /* ftm security key_idle time */
-	WL_FTM_TLV_ID_SECURITY_KEY_LIFE_TIME	= 1043, /* ftm security key life time */
-	WL_FTM_TLV_ID_SECURITY_AKM		= 1044, /* ftm security AKM */
-	WL_FTM_TLV_ID_SECURITY_PASSPHRASE	= 1045, /* ftm security passphrase */
-	WL_FTM_TLV_ID_SECURITY_PASSPHRASE_LEN	= 1046, /* ftm security passphrase len */
-	WL_FTM_TLV_ID_SECURITY_CIPHER_TYPE	= 1047, /* ftm security cipher type */
-	WL_FTM_TLV_ID_SECURITY_LTF_REQD		= 1048,	/* ftm security, secure ltf needed */
-
-	WL_FTM_TLV_ID_TX_COREMASK		= 1049	/* tx coremask for ranging frm tx */
 } wl_ftm_tlv_types_t;
+
+enum wl_ftm_ant_div_mode {
+	WL_FTM_ANT_DIV_AVG_MODE	= 0u,
+	WL_FTM_ANT_DIV_MIN_MODE	= 1u
+};
+typedef uint8 wl_ftm_ant_div_mode_t;
 
 enum wl_ftm_wait_reason {
 	WL_FTM_WAIT_NONE	= 0x0000,

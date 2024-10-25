@@ -3448,7 +3448,8 @@ exit:
 #ifdef ROAMEXP_SUPPORT
 typedef enum {
 	FW_ROAMING_DISABLE,
-	FW_ROAMING_ENABLE
+	FW_ROAMING_ENABLE,
+	ROAMING_AGGRESSIVE
 } fw_roaming_state_t;
 
 static int
@@ -3458,7 +3459,7 @@ wl_cfgvendor_set_fw_roaming_state(struct wiphy *wiphy,
 	fw_roaming_state_t requested_roaming_state;
 	int type;
 	int err = 0;
-	wl_roam_conf_t roam_req;
+	wl_roam_conf_t roam_req = ROAM_CONF_INVALID;
 	struct bcm_cfg80211 *cfg = wl_get_cfg(wdev_to_ndev(wdev));
 
 	if (!data) {
@@ -3483,8 +3484,16 @@ wl_cfgvendor_set_fw_roaming_state(struct wiphy *wiphy,
 
 	if (requested_roaming_state == FW_ROAMING_ENABLE) {
 		roam_req = ROAM_CONF_ROAM_ENAB_REQ;
+#ifdef WL_AGGRESSIVE_ROAM
+		wl_cfgvif_enable_aggressive_roam(cfg, wdev->netdev, FALSE);
+#endif /* WL_AGGRESSIVE_ROAM */
 	} else if (requested_roaming_state == FW_ROAMING_DISABLE) {
 		roam_req = ROAM_CONF_ROAM_DISAB_REQ;
+#ifdef WL_AGGRESSIVE_ROAM
+	} else if (requested_roaming_state == ROAMING_AGGRESSIVE) {
+		roam_req = ROAM_CONF_ROAM_ENAB_REQ;
+		wl_cfgvif_enable_aggressive_roam(cfg, wdev->netdev, TRUE);
+#endif /* WL_AGGRESSIVE_ROAM */
 	} else {
 		WL_ERR(("unexpected roam_state_request:%d\n", requested_roaming_state));
 		return -EINVAL;
@@ -12007,7 +12016,7 @@ wl_cfgvendor_tx_power_scenario(struct wiphy *wiphy,
 				break;
 			default:
 				WL_ERR(("SAR: invalid wifi tx power scenario = %d\n",
-					sar_tx_power_val));
+					wifi_tx_power_mode));
 				err = -EINVAL;
 				goto exit;
 		}
@@ -13770,7 +13779,7 @@ static int wl_cfgvendor_get_usable_channels_handler(struct bcm_cfg80211 *cfg,
 	u32 mask = 0;
 	uint32 channel;
 	uint32 freq, width;
-	uint32 chspec, chaninfo;
+	uint32 chspec, chaninfo, cfg_chaninfo;
 	u16 list_count;
 	int found_idx = BCME_NOTFOUND;
 	bool ch_160mhz_5g;
@@ -13975,6 +13984,14 @@ static int wl_cfgvendor_get_usable_channels_handler(struct bcm_cfg80211 *cfg,
 					/* handle 2G and 5G channels */
 					if (!(chaninfo & WL_CHAN_P2P_PROHIBITED)) {
 						mask |= (1 << WIFI_INTERFACE_P2P_GO);
+					}
+
+					if (CHSPEC_IS2G(chspec) ||
+						(CHSPEC_IS5G(chspec) &&
+						((wl_cfgscan_get_chan_info(cfg,
+						&cfg_chaninfo, chspec) == BCME_OK) &&
+						!((cfg_chaninfo & WL_CHAN_RADAR) ||
+						(cfg_chaninfo & WL_CHAN_PASSIVE))))) {
 						mask |= (1 << WIFI_INTERFACE_SOFTAP);
 					}
 #ifdef WL_NAN_INSTANT_MODE

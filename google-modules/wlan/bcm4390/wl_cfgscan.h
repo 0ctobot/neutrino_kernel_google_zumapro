@@ -252,4 +252,6 @@ extern s32 wl_cfgscan_get_chan_info(struct bcm_cfg80211 *cfg,
 extern u8 wl_cfgscan_get_max_num_chans_per_bw(chanspec_t chspec);
 extern s32 wl_cfgscan_get_dynamic_chan_info(struct bcm_cfg80211 *cfg,
 		u32 *chan_info, chanspec_t in_chspec, u32 chan_info_flags);
+extern void wl_connected_channel_debuggability(struct bcm_cfg80211 * cfg,
+		struct net_device * ndev);
 #endif /* _wl_cfgscan_h_ */

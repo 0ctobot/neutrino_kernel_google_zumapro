@@ -472,13 +472,15 @@ typedef uint32 ratespec_t;
 #define WL_BSS2_FLAGS_RNR_MATCH		0x10	/* To report original BSS that has RNR match */
 #define WL_BSS2_FLAGS_HE_BCN_PRBRSP	0x20	/* BSS update to indiacte HE bcn or prb rsp. */
 #define WL_BSS2_FLAGS_HE_6G_DUP		0x40	/* non-HT dup'ed beacon indicator */
-#define WL_BSS2_FLAGS_FROM_SS		0x80	/* bss_info from results on slim scan */
+#define WL_BSS2_FLAGS_FROM_SS		0x80	/* obsoleted. to be removed */
+#define WL_BSS2_FLAGS_FROM_MS		0x80	/* bss_info from results on multi scan */
 
 /* bit definitions for bcnflags in wl_bss_info */
 #define WL_BSS_BCNFLAGS_INTERWORK_PRESENT	0x01 /* beacon had IE, accessnet valid */
 #define WL_BSS_BCNFLAGS_INTERWORK_PRESENT_VALID 0x02 /* on indicates support for this API */
-#define WL_BSS_BCNFLAGS_MULTIPLE_BSSID_SET 0x4 /* this AP belongs to a multiple BSSID set */
-#define WL_BSS_BCNFLAGS_NONTRANSMITTED_BSSID 0x8 /* this AP is the transmitted BSSID */
+#define WL_BSS_BCNFLAGS_MULTIPLE_BSSID_SET	0x04 /* this AP belongs to a multiple BSSID set */
+#define WL_BSS_BCNFLAGS_NONTRANSMITTED_BSSID	0x08 /* this AP is the transmitted BSSID */
+#define WL_BSS_BCNFLAGS_BSSCOLOR_PRESENT	0x10 /* this AP has BSS color info */
 
 /* bssinfo flag for nbss_cap */
 #define VHT_BI_SGI_80MHZ		0x00000100
@@ -1877,28 +1879,37 @@ typedef uint32 ratespec_t;
 #define CHANIM_ACS_RECORD			10
 
 /* CHANIM */
-#define CCASTATS_TXDUR  0
-#define CCASTATS_INBSS  1
-#define CCASTATS_OBSS   2
-#define CCASTATS_NOCTG  3
-#define CCASTATS_NOPKT  4
-#define CCASTATS_DOZE   5
-#define CCASTATS_TXOP	6
-#define CCASTATS_GDTXDUR        7
-#define CCASTATS_BDTXDUR        8
+#define CCASTATS_TXDUR  0u
+#define CCASTATS_INBSS  1u
+#define CCASTATS_OBSS   2u
+#define CCASTATS_NOCTG  3u
+#define CCASTATS_NOPKT  4u
+#define CCASTATS_DOZE   5u
+#define CCASTATS_TXOP	6u
+#define CCASTATS_GDTXDUR        7u
+#define CCASTATS_BDTXDUR        8u
+#define CCASTATS_MYRX      9u
+#define CCASTATS_TXMUTE      10u
+#define CCASTATS_RXBLNK      11u
 
 /* FIXME: CCASTATS_MAX is 9 for existing chips and 10 for new ones.
  * This is to avoid rom invalidation of existing chips.
  */
+#define CCASTATS_V3_MAX    10
 #ifndef WLCHANIM_V2
 #define CCASTATS_MAX    9
 #else /* WLCHANIM_V2 */
-#define CCASTATS_MYRX      9
 #define CCASTATS_MAX    10
 #endif /* WLCHANIM_V2 */
+#define	CCASTATS_V4_MAX	12
 
 #define WL_CHANIM_COUNT_ALL	0xff
 #define WL_CHANIM_COUNT_ONE	0x1
+#define WL_CHANIM_US_DUR               0xfa
+#define WL_CHANIM_US_DUR_GET           0xfb
+#define WL_CHANIM_COUNT_US_ONE         0xfc
+#define WL_CHANIM_COUNT_US_ALL         0xfd
+#define WL_CHANIM_COUNT_US_RESET       0xfe
 
 /* flags used in scandb, indicates bss attributes of interest */
 #define WLC_SCANDB_CACHE_FLAG_NONE	(0u)		/* None */
@@ -2834,6 +2845,7 @@ enum wl_cnt_xtlv_id {
 #define WL_CLM_DFS_FCC             WL_CLM_DFS_TPC /**< Flag for DFS FCC */
 #define WL_CLM_DFS_EU              (WL_CLM_DFS_TPC | WL_CLM_RADAR_TYPE_EU) /**< Flag for DFS EU */
 #define WL_CLM_PP                  0x8000000u /**< Flag for Punctured bandwidth allowed */
+#define WL_CLM_NO_FDSS		   0x10000000u /**< Flag for FDSS disabled for given country */
 
 typedef enum sup_auth_status {
 	/* Basic supplicant authentication states */
@@ -3389,6 +3401,7 @@ enum wlc_capext_feature_bitpos {
 	WLC_CAPEXT_FEATURE_BITPOS_ANTGAIN6G		= 136,
 	WLC_CAPEXT_FEATURE_BITPOS_MONITOR_MULTI		= 137,
 	WLC_CAPEXT_FEATURE_BITPOS_MPF_SCAN		= 138,
+	WLC_CAPEXT_FEATURE_BITPOS_MRSNO			= 139,
 
 	WLC_CAPEXT_FEATURE_BITPOS_MAX
 };

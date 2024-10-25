@@ -70,6 +70,14 @@
 #define WL_HE_FEATURES_HE_P2P		0x20
 #define WL_HE_FEATURES_6G		0x80u
 
+/* customer requested aggr roaming value */
+#define WL_AGGR_ROAM_TRIGGER_VALUE      (-65)
+
+/* EHT defines */
+#define WL_EHT_FEATURES_STA_DISABLE	0x4u
+#define DHD_DISABLE_STA_EHT		BIT(0)
+#define DHD_ENABLE_STA_EHT		BIT(1)
+#define EHT_FEATURES_EHT_AP		0x1u
 
 extern bool wl_cfg80211_check_vif_in_use(struct net_device *ndev);
 
@@ -322,7 +330,13 @@ extern s32 wl_cfgvif_get_ml_scc_channel_array(struct bcm_cfg80211 *cfg,
 #if defined(KEEP_ALIVE) && defined(OEM_ANDROID)
 extern s32 wl_cfgvif_apply_default_keep_alive(struct net_device *ndev, struct bcm_cfg80211 *cfg);
 #endif /* KEEP_ALIVE && OEM_ANDROID */
+
 extern s32 wl_cfgvif_get_eht_features(struct net_device *dev, u32 *eht_feature_val);
+#if (LINUX_VERSION_CODE >= KERNEL_VERSION(6, 0, 0))
+extern s32 wl_cfgvif_set_eht_features(struct net_device *dev, struct bcm_cfg80211 *cfg,
+        u32 eht_mask);
+#endif /* LINUX_VERSION_CODE >= KERNEL_VERSION(6, 0, 0) */
+
 extern void wl_cfgvif_sta_multilink_config(struct bcm_cfg80211 *cfg, wl_assoc_state_t assoc_state);
 #if (LINUX_VERSION_CODE >= KERNEL_VERSION(5, 4, 0))
 extern s32 wl_cfgvif_update_assoc_fail_status(struct bcm_cfg80211 *cfg,
@@ -331,4 +345,8 @@ extern s32 wl_cfgvif_update_assoc_fail_status(struct bcm_cfg80211 *cfg,
 extern s32 wl_cfgvif_interface_ops(struct bcm_cfg80211 *cfg,
 	struct net_device *ndev, s32 bsscfg_idx,
 	wl_iftype_t iftype, s32 del, u8 *addr);
+#ifdef WL_AGGRESSIVE_ROAM
+extern void wl_cfgvif_enable_aggressive_roam(struct bcm_cfg80211 *cfg, struct net_device *dev,
+	bool enable);
+#endif /* WL_AGGRESSIVE_ROAM */
 #endif /* _wl_cfgvif_h_ */

@@ -415,27 +415,6 @@ static const char *wl_if_state_strs[WL_IF_STATE_MAX + 1] = {
 	"WL_IF_STATE_MAX"
 };
 
-#ifdef WBTEXT
-typedef struct wl_wbtext_bssid {
-	struct ether_addr ea;
-	struct list_head list;
-} wl_wbtext_bssid_t;
-
-static void wl_cfg80211_wbtext_reset_conf(struct bcm_cfg80211 *cfg, struct net_device *ndev);
-static void wl_cfg80211_wbtext_update_rcc(struct bcm_cfg80211 *cfg, struct net_device *dev);
-static bool wl_cfg80211_wbtext_check_bssid_list(struct bcm_cfg80211 *cfg, struct ether_addr *ea);
-static bool wl_cfg80211_wbtext_add_bssid_list(struct bcm_cfg80211 *cfg, struct ether_addr *ea);
-static void wl_cfg80211_wbtext_clear_bssid_list(struct bcm_cfg80211 *cfg);
-static bool wl_cfg80211_wbtext_send_nbr_req(struct bcm_cfg80211 *cfg, struct net_device *dev,
-	struct wl_profile *profile);
-static bool wl_cfg80211_wbtext_send_btm_query(struct bcm_cfg80211 *cfg, struct net_device *dev,
-	struct wl_profile *profile);
-static void wl_cfg80211_wbtext_set_wnm_maxidle(struct bcm_cfg80211 *cfg, struct net_device *dev);
-static int wl_cfg80211_recv_nbr_resp(struct net_device *dev, uint8 *body, uint body_len);
-static s32 wl_wbtext_init(struct bcm_cfg80211 *cfg);
-static void wl_wbtext_deinit(struct bcm_cfg80211 *cfg);
-#endif /* WBTEXT */
-
 #ifdef RTT_SUPPORT
 static s32 wl_cfg80211_rtt_event_handler(struct bcm_cfg80211 *cfg, bcm_struct_cfgdev *cfgdev,
 		const wl_event_msg_t *e, void *data);
@@ -6101,7 +6080,6 @@ exit:
 	return ret;
 }
 
-#define EHT_FEATURES_EHT_AP	0x1u
 static void
 wl_get_mlo_capabilities(struct net_device *dev)
 {
@@ -7009,7 +6987,17 @@ wl_do_preassoc_ops(struct bcm_cfg80211 *cfg,
 		 */
 		bool mlo_enable = TRUE;
 #if (LINUX_VERSION_CODE >= KERNEL_VERSION(6, 0, 0)) || defined(WL_MLO_HOST_CTRL)
-		if (!(sme->flags & CONNECT_REQ_MLO_SUPPORT))
+		bool eht_disable = FALSE;
+
+		if (sme->flags & ASSOC_REQ_DISABLE_EHT) {
+			wl_cfgvif_set_eht_features(dev, cfg, DHD_DISABLE_STA_EHT);
+			eht_disable = TRUE;
+			WL_INFORM_MEM(("eht disabled\n"));
+		} else {
+			wl_cfgvif_set_eht_features(dev, cfg, DHD_ENABLE_STA_EHT);
+		}
+
+		if ((!(sme->flags & CONNECT_REQ_MLO_SUPPORT)) || (eht_disable))
 		{
 			WL_INFORM_MEM(("[%s] mlo disabled\n", dev->name));
 			mlo_enable = FALSE;
@@ -14611,39 +14599,6 @@ wl_handle_assoc_fail(struct bcm_cfg80211 *cfg, wl_assoc_status_t *as, bool compl
 	return ret;
 }
 
-
-#ifdef WBTEXT
-static void
-wl_cfg80211_wbtext_reset_conf(struct bcm_cfg80211 *cfg, struct net_device *ndev)
-{
-#ifdef BCMDONGLEHOST
-	dhd_pub_t *dhdp = (dhd_pub_t *)(cfg->pub);
-	s32 err;
-
-	/* when STA was disconnected, clear join pref and set wbtext */
-	if (ndev->ieee80211_ptr->iftype == NL80211_IFTYPE_STATION &&
-		dhdp->wbtext_policy
-		== WL_BSSTRANS_POLICY_PRODUCT_WBTEXT) {
-		char smbuf[WLC_IOCTL_SMLEN];
-		if ((err = wldev_iovar_setbuf(ndev, "join_pref",
-			NULL, 0, smbuf, sizeof(smbuf), NULL)) == BCME_OK) {
-			if ((err = wldev_iovar_setint(ndev, "wnm_bsstrans_resp",
-				dhdp->wbtext_policy)) == BCME_OK) {
-				wl_cfg80211_wbtext_set_default(ndev);
-			} else {
-				WL_ERR(("Failed to set wbtext = %d\n", err));
-			}
-		} else {
-			WL_ERR(("Failed to clear join pref = %d\n", err));
-		}
-		wl_cfg80211_wbtext_clear_bssid_list(cfg);
-	} else {
-		WL_ERR(("wbtext not applicable\n"));
-	}
-#endif /* BCMDONGLEHOST */
-}
-#endif /* WBTEXT */
-
 static s32
 wl_handle_link_down(struct bcm_cfg80211 *cfg, wl_assoc_status_t *as)
 {
@@ -16562,6 +16517,9 @@ wl_bss_roaming_done(struct bcm_cfg80211 *cfg, struct net_device *ndev,
 		roam_info.fils.pmkid = fils_info->fils_pmkid;
 	}
 #endif
+	/* Update channel info for debuggability */
+	wl_connected_channel_debuggability(cfg, ndev);
+
 	cfg80211_roamed(ndev, &roam_info, GFP_KERNEL);
 #else
 	cfg80211_roamed(ndev,
@@ -16974,6 +16932,8 @@ wl_bss_connect_done(struct bcm_cfg80211 *cfg, struct net_device *ndev,
 	/* update status field */
 	if (completed) {
 		status = WLAN_STATUS_SUCCESS;
+		/* Update channel info for debuggability */
+		wl_connected_channel_debuggability(cfg, ndev);
 		/* Set CONNECTED status */
 		wl_set_drv_status(cfg, CONNECTED, ndev);
 	} else if (sec->auth_assoc_res_status) {
@@ -22704,6 +22664,7 @@ static void wl_cfg80211_work_handler(struct work_struct * work)
 	s32 pm = PM_FAST;
 	BCM_SET_CONTAINER_OF(cfg, work, struct bcm_cfg80211, pm_enable_work.work);
 	WL_DBG(("Enter \n"));
+	mutex_lock(&cfg->if_sync);
 	GCC_DIAGNOSTIC_PUSH_SUPPRESS_CAST();
 	for_each_ndev(cfg, iter, next) {
 		GCC_DIAGNOSTIC_POP();
@@ -22727,6 +22688,7 @@ static void wl_cfg80211_work_handler(struct work_struct * work)
 			}
 		}
 	}
+	mutex_unlock(&cfg->if_sync);
 
 #if defined(BCMDONGLEHOST) && defined(OEM_ANDROID)
 	DHD_PM_WAKE_UNLOCK(cfg->pub);
@@ -23674,349 +23636,6 @@ wl_get_netdev_by_name(struct bcm_cfg80211 *cfg, char *ifname)
 
 	return ndev;
 }
-
-#ifdef WBTEXT
-static bool wl_cfg80211_wbtext_check_bssid_list(struct bcm_cfg80211 *cfg, struct ether_addr *ea)
-{
-	wl_wbtext_bssid_t *bssid = NULL;
-	unsigned long flags;
-
-	WL_CFG_WBTEXT_BSSID_LIST_SYNC_LOCK(cfg->wbtext_bssid_list_sync, flags);
-	GCC_DIAGNOSTIC_PUSH_SUPPRESS_CAST();
-	/* check duplicate */
-	list_for_each_entry(bssid, &cfg->wbtext_bssid_list, list) {
-		GCC_DIAGNOSTIC_POP();
-		if (!memcmp(bssid->ea.octet, ea, ETHER_ADDR_LEN)) {
-			WL_CFG_WBTEXT_BSSID_LIST_SYNC_UNLOCK(cfg->wbtext_bssid_list_sync, flags);
-			return FALSE;
-		}
-	}
-	WL_CFG_WBTEXT_BSSID_LIST_SYNC_UNLOCK(cfg->wbtext_bssid_list_sync, flags);
-
-	return TRUE;
-}
-
-static bool wl_cfg80211_wbtext_add_bssid_list(struct bcm_cfg80211 *cfg, struct ether_addr *ea)
-{
-	wl_wbtext_bssid_t *bssid = NULL;
-	char eabuf[ETHER_ADDR_STR_LEN];
-	unsigned long flags;
-
-	bssid = (wl_wbtext_bssid_t *)MALLOC(cfg->osh, sizeof(wl_wbtext_bssid_t));
-	if (bssid == NULL) {
-		WL_ERR(("alloc failed\n"));
-		return FALSE;
-	}
-
-	memcpy(bssid->ea.octet, ea, ETHER_ADDR_LEN);
-
-	INIT_LIST_HEAD(&bssid->list);
-
-	WL_CFG_WBTEXT_BSSID_LIST_SYNC_LOCK(cfg->wbtext_bssid_list_sync, flags);
-	list_add_tail(&bssid->list, &cfg->wbtext_bssid_list);
-	WL_CFG_WBTEXT_BSSID_LIST_SYNC_UNLOCK(cfg->wbtext_bssid_list_sync, flags);
-
-	WL_DBG(("add wbtext bssid : %s\n", bcm_ether_ntoa(ea, eabuf)));
-
-	return TRUE;
-}
-
-static void wl_cfg80211_wbtext_clear_bssid_list(struct bcm_cfg80211 *cfg)
-{
-	wl_wbtext_bssid_t *bssid = NULL, *tmp = NULL;
-	char eabuf[ETHER_ADDR_STR_LEN];
-	unsigned long flags;
-
-	WL_CFG_WBTEXT_BSSID_LIST_SYNC_LOCK(cfg->wbtext_bssid_list_sync, flags);
-	GCC_DIAGNOSTIC_PUSH_SUPPRESS_CAST();
-	list_for_each_entry_safe(bssid, tmp, &cfg->wbtext_bssid_list, list) {
-		GCC_DIAGNOSTIC_POP();
-		WL_DBG(("clear wbtext bssid : %s\n", bcm_ether_ntoa(&bssid->ea, eabuf)));
-		list_del(&bssid->list);
-		MFREE(cfg->osh, bssid, sizeof(wl_wbtext_bssid_t));
-	}
-	WL_CFG_WBTEXT_BSSID_LIST_SYNC_UNLOCK(cfg->wbtext_bssid_list_sync, flags);
-}
-
-static void wl_cfg80211_wbtext_update_rcc(struct bcm_cfg80211 *cfg, struct net_device *dev)
-{
-	struct wl_connect_info *conn_info = wl_to_conn(cfg);
-	bcm_tlv_t * cap_ie = NULL;
-	bool req_sent = FALSE;
-	struct wl_profile *profile;
-
-	WL_DBG(("Enter\n"));
-
-	profile = wl_get_profile_by_netdev(cfg, dev);
-	if (!profile) {
-		WL_ERR(("no profile exists\n"));
-		return;
-	}
-
-	if (wl_cfg80211_wbtext_check_bssid_list(cfg,
-			(struct ether_addr *)&profile->bssid) == FALSE) {
-		WL_DBG(("already updated\n"));
-		return;
-	}
-
-	/* first, check NBR bit in RRM IE */
-	if ((cap_ie = bcm_parse_tlvs(conn_info->resp_ie, conn_info->resp_ie_len,
-			DOT11_MNG_RRM_CAP_ID)) != NULL) {
-		if (isset(cap_ie->data, DOT11_RRM_CAP_NEIGHBOR_REPORT)) {
-			WL_DBG(("sending neighbor report\n"));
-			req_sent = wl_cfg80211_wbtext_send_nbr_req(cfg, dev, profile);
-		}
-	}
-
-	/* if RRM nbr was not supported, check BTM bit in extend cap. IE */
-	if (!req_sent) {
-		if ((cap_ie = bcm_parse_tlvs(conn_info->resp_ie, conn_info->resp_ie_len,
-				DOT11_MNG_EXT_CAP_ID)) != NULL) {
-			if (cap_ie->len >= DOT11_EXTCAP_LEN_BSSTRANS &&
-					isset(cap_ie->data, DOT11_EXT_CAP_BSSTRANS_MGMT)) {
-				WL_DBG(("sending btm query\n"));
-				wl_cfg80211_wbtext_send_btm_query(cfg, dev, profile);
-			}
-		}
-	}
-}
-
-static bool wl_cfg80211_wbtext_send_nbr_req(struct bcm_cfg80211 *cfg, struct net_device *dev,
-	struct wl_profile *profile)
-{
-	int error = -1;
-	char *smbuf = NULL;
-	struct wl_connect_info *conn_info = wl_to_conn(cfg);
-	bcm_tlv_t * rrm_cap_ie = NULL;
-	wlc_ssid_t *ssid = NULL;
-	bool ret = FALSE;
-
-	WL_DBG(("Enter\n"));
-
-	/* check RRM nbr bit in extend cap. IE of assoc response */
-	if ((rrm_cap_ie = bcm_parse_tlvs(conn_info->resp_ie, conn_info->resp_ie_len,
-			DOT11_MNG_RRM_CAP_ID)) != NULL) {
-		if (!isset(rrm_cap_ie->data, DOT11_RRM_CAP_NEIGHBOR_REPORT)) {
-			WL_DBG(("AP doesn't support neighbor report\n"));
-			return FALSE;
-		}
-	}
-
-	smbuf = (char *)MALLOCZ(cfg->osh, WLC_IOCTL_MAXLEN);
-	if (smbuf == NULL) {
-		WL_ERR(("failed to allocated memory\n"));
-		goto nbr_req_out;
-	}
-
-	ssid = (wlc_ssid_t *)MALLOCZ(cfg->osh, sizeof(wlc_ssid_t));
-	if (ssid == NULL) {
-		WL_ERR(("failed to allocated memory\n"));
-		goto nbr_req_out;
-	}
-
-	ssid->SSID_len = MIN(profile->ssid.SSID_len, DOT11_MAX_SSID_LEN);
-	memcpy(ssid->SSID, profile->ssid.SSID, ssid->SSID_len);
-
-	error = wldev_iovar_setbuf(dev, "rrm_nbr_req", ssid,
-		sizeof(wlc_ssid_t), smbuf, WLC_IOCTL_MAXLEN, NULL);
-	if (error == BCME_OK) {
-		ret = wl_cfg80211_wbtext_add_bssid_list(cfg,
-			(struct ether_addr *)&profile->bssid);
-	} else {
-		WL_ERR(("failed to send neighbor report request, error=%d\n", error));
-	}
-
-nbr_req_out:
-	if (ssid) {
-		MFREE(cfg->osh, ssid, sizeof(wlc_ssid_t));
-	}
-
-	if (smbuf) {
-		MFREE(cfg->osh, smbuf, WLC_IOCTL_MAXLEN);
-	}
-	return ret;
-}
-
-static bool wl_cfg80211_wbtext_send_btm_query(struct bcm_cfg80211 *cfg, struct net_device *dev,
-	struct wl_profile *profile)
-
-{
-	int error = -1;
-	bool ret = FALSE;
-	wl_bsstrans_query_t btq;
-
-	WL_DBG(("Enter\n"));
-
-	bzero(&btq, sizeof(wl_bsstrans_query_t));
-
-	btq.version = WL_BSSTRANS_QUERY_VERSION_1;
-	error = wldev_iovar_setbuf(dev, "wnm_bsstrans_query", &btq,
-		sizeof(btq), cfg->ioctl_buf, WLC_IOCTL_SMLEN, &cfg->ioctl_buf_sync);
-	if (error == BCME_OK) {
-		ret = wl_cfg80211_wbtext_add_bssid_list(cfg,
-			(struct ether_addr *)&profile->bssid);
-	} else {
-		WL_ERR(("wl_cfg80211_wbtext_send_btm_query: failed to set BTM query,"
-			" error=%d\n", error));
-	}
-	return ret;
-}
-
-static void wl_cfg80211_wbtext_set_wnm_maxidle(struct bcm_cfg80211 *cfg, struct net_device *dev)
-{
-	keepalives_max_idle_t keepalive = {0, 0, 0, 0};
-	s32 bssidx, error;
-	int wnm_maxidle = 0;
-	struct wl_connect_info *conn_info = wl_to_conn(cfg);
-
-	/* AP supports wnm max idle ? */
-	if (bcm_parse_tlvs(conn_info->resp_ie, conn_info->resp_ie_len,
-			DOT11_MNG_BSS_MAX_IDLE_PERIOD_ID) != NULL) {
-		error = wldev_iovar_getint(dev, "wnm_maxidle", &wnm_maxidle);
-		if (error < 0) {
-			WL_ERR(("failed to get wnm max idle period : %d\n", error));
-		}
-	}
-
-	WL_DBG(("wnm max idle period : %d\n", wnm_maxidle));
-
-	/* if wnm maxidle has valid period, set it as keep alive */
-	if (wnm_maxidle > 0) {
-		keepalive.keepalive_count = 1;
-	}
-
-	if ((bssidx = wl_get_bssidx_by_wdev(cfg, dev->ieee80211_ptr)) >= 0) {
-		error = wldev_iovar_setbuf_bsscfg(dev, "wnm_keepalives_max_idle", &keepalive,
-			sizeof(keepalives_max_idle_t), cfg->ioctl_buf, WLC_IOCTL_SMLEN,
-			bssidx, &cfg->ioctl_buf_sync);
-		if (error < 0) {
-			if (error == BCME_BADARG) {
-				WL_ERR(("set wnm_keepalive with invalid arguments\n"));
-			} else {
-				WL_ERR(("set wnm_keepalives_max_idle failed : %d\n", error));
-			}
-		}
-	}
-}
-
-static int
-wl_cfg80211_recv_nbr_resp(struct net_device *dev, uint8 *body, uint body_len)
-{
-	dot11_rm_action_t *rm_rep;
-	bcm_tlv_t *tlvs;
-	uint tlv_len;
-	dot11_neighbor_rep_ie_t *nbr_rep_ie;
-	chanspec_t ch;
-#if defined(HOST_RCC_UPDATE)
-	char iobuf[WLC_IOCTL_SMLEN];
-	int i, error;
-	wl_roam_channel_list_t channel_list;
-#endif /* HOST_RCC_UPDATE */
-
-	if (body_len < DOT11_RM_ACTION_LEN) {
-		WL_ERR(("Received Neighbor Report frame with incorrect length %d\n",
-			body_len));
-		return BCME_ERROR;
-	}
-
-	rm_rep = (dot11_rm_action_t *)body;
-	WL_DBG(("received neighbor report (token = %d)\n", rm_rep->token));
-
-	tlvs = (bcm_tlv_t *)&rm_rep->data[0];
-
-	tlv_len = body_len - DOT11_RM_ACTION_LEN;
-
-	while (tlvs && tlvs->id == DOT11_MNG_NEIGHBOR_REP_ID) {
-		nbr_rep_ie = (dot11_neighbor_rep_ie_t *)tlvs;
-
-		if (nbr_rep_ie->len < DOT11_NEIGHBOR_REP_IE_FIXED_LEN) {
-			WL_ERR(("malformed Neighbor Report element with length %d\n",
-				nbr_rep_ie->len));
-			tlvs = bcm_next_tlv(tlvs, &tlv_len);
-			continue;
-		}
-
-		ch = CH20MHZ_CHSPEC(nbr_rep_ie->channel);
-		WL_DBG(("ch:%d, bssid:"MACDBG"\n",
-			ch, MAC2STRDBG(nbr_rep_ie->bssid.octet)));
-
-#if defined(HOST_RCC_UPDATE)
-		/* get RCC list */
-		error = wldev_iovar_getbuf(dev, "roamscan_channels", 0, 0,
-			(void *)&channel_list, sizeof(channel_list), NULL);
-		if (error) {
-			WL_ERR(("Failed to get roamscan channels, error = %d\n", error));
-			return BCME_ERROR;
-		}
-
-		/* update RCC */
-		if (channel_list.n < MAX_ROAM_CHANNEL) {
-			for (i = 0; i < channel_list.n; i++) {
-				if (channel_list.channels[i] == ch) {
-					break;
-				}
-			}
-			if (i == channel_list.n) {
-				channel_list.channels[channel_list.n] = ch;
-				channel_list.n++;
-			}
-		}
-
-		/* set RCC list */
-		error = wldev_iovar_setbuf(dev, "roamscan_channels", &channel_list,
-			sizeof(channel_list), iobuf, sizeof(iobuf), NULL);
-		if (error) {
-			WL_DBG(("Failed to set roamscan channels, error = %d\n", error));
-		} else {
-			WL_DBG(("RCC updated\n"));
-		}
-#else
-		/* RCC can't be updated without bss info sicne bss can't be matched. If RCC is
-		 * to be updated, the targeted scan for these channels needs to be triggered.
-		 */
-		WL_DBG(("RCC update skipped from NBR context\n"));
-#endif /* HOST_RCC_UPDATE */
-
-		tlvs = bcm_next_tlv(tlvs, &tlv_len);
-	}
-
-	return BCME_OK;
-}
-
-static s32
-wl_wbtext_init(struct bcm_cfg80211 *cfg)
-{
-	if (!cfg) {
-		WL_ERR(("cfg is NULL\n"));
-		return BCME_ERROR;
-	}
-
-	/* Allocate spinlock for protecting wbtext_bssid_list */
-	cfg->wbtext_bssid_list_sync = (void *)WL_CFG_WBTEXT_BSSID_LIST_SYNC_INIT(cfg->osh);
-
-	if (!cfg->wbtext_bssid_list_sync) {
-		WL_ERR(("Failed to alloc spinlock\n"));
-		return BCME_ERROR;
-	}
-	return BCME_OK;
-}
-
-static void
-wl_wbtext_deinit(struct bcm_cfg80211 *cfg)
-{
-	if (!cfg) {
-		WL_ERR(("cfg is NULL\n"));
-		return;
-	}
-
-	/* If there are still entries in the list, clean them up */
-	wl_cfg80211_wbtext_clear_bssid_list(cfg);
-
-	/* Free spinlock allocated in attach */
-	WL_CFG_WBTEXT_BSSID_LIST_SYNC_DEINIT(cfg->osh, cfg->wbtext_bssid_list_sync);
-	cfg->wbtext_bssid_list_sync = NULL;
-}
-#endif /* WBTEXT */
 
 #ifdef SUPPORT_SET_CAC
 void

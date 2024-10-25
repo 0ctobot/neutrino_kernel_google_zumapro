@@ -3138,6 +3138,10 @@ typedef BWL_PRE_PACKED_STRUCT struct wl_pwrstats {
 #define WLC_PMD_TX_PEND_WAR		0x400u   /* obsolete, can be reused */
 #define WLC_PMD_NAN_AWAKE		0x400u   /* Reusing for NAN */
 #define WLC_PMD_GPTIMER_STAY_AWAKE	0x800u
+#define WLC_PMD_RRM_IN_PROGRESS		0x1000u
+#define WLC_PMD_UCODE_WAKE_OVRRIDE	0x2000u
+#define WLC_PMD_WD_SLP_READY_REQ	0x4000u
+#define WLC_PMD_WD_TDLS			0x8000u
 
 
 #define WLC_PMD_PM2_RADIO_SOFF_PEND	0x2000u
@@ -3148,6 +3152,7 @@ typedef BWL_PRE_PACKED_STRUCT struct wl_pwrstats {
 #define WLC_PMD_PM_OVERRIDE		0x40000u	/* Dongle awake due to PM override */
 #define WLC_PMD_PASN_IN_PROGRESS	0x80000u	/* Dongle awake due to PASN exchange */
 #define WLC_PMD_WAKE_OTHER		0x100000u
+#define WLC_PMD_USER_WAKE_REQ		0x200000u
 
 typedef struct wlc_pm_debug {
 	uint32 timestamp;	     /**< timestamp in millisecond */
@@ -4471,8 +4476,11 @@ typedef struct phy_ecounter_log_core_v255 {
 	int8	noise_level_inst;	/* Instantaneous noise cal pwr */
 	int8	tgt_pwr;		/* Programmed Target power */
 	int8	estpwradj;		/* Current Est Power Adjust value */
-	int8	ed_threshold;	/* Energy detection threshold */
-	uint8	PAD1;
+	int8	ed_threshold;		/* Energy detection threshold */
+	uint8	debug_01;		/* for future debugging */
+	uint16	debug_02;		/* for future debugging */
+	uint16	debug_03;		/* for future debugging */
+	uint32	debug_04;		/* for future debugging */
 	int8	obss_pwrest[ACPHY_OBSS_SUBBAND_CNT];	/* OBSS signal power per sub-band in dBm */
 } phy_ecounter_log_core_v255_t;
 
@@ -5017,16 +5025,13 @@ typedef struct phy_ecounter_v255 {
 	uint8		phycal_disable;		/* Status of phy calibration */
 	int8		rxsense_noise_idx;	/* rxsense det thresh desense idx */
 	int8		rxsense_offset;		/* rxsense min power desense idx */
+	uint32		rxsense_disable_req_ch;	/* channel disable requests */
 	uint16		featureflag;		/* Currently active feature flags */
 	uint16		deaf_count;		/* Count for RX stay in carrier search state */
 	uint16		noise_mmt_overdue;	/* Noise measurement overdue status */
 	uint16		crsmin_pwr_apply_cnt;	/* Count for desense updates */
 	uint16		ed_crs_status;		/* Status of ED and CRS during noise cal */
-	uint16		preempt_status1;	/* status of preemption */
 	uint16		preempt_status2;	/* status of preemption */
-	uint16		preempt_status3;	/* status of preemption */
-	uint16		preempt_status4;	/* status of preemption */
-	uint16		counter_noise_iqest_to;	/* count of IQ_Est time out */
 	uint32		cca_stats_total_glitch;	/* ccastats: count of total glitches */
 	uint32		cca_stats_bphy_glitch;	/* ccastats: count of bphy glitches */
 	uint32		cca_stats_total_badplcp; /* ccastats: count of total badplcp */
@@ -5034,55 +5039,28 @@ typedef struct phy_ecounter_v255 {
 	uint32		cca_stats_mbsstime;	/* ccastats: monitor duration in msec */
 	uint32		cca_stats_ed_duration;	/* ccastats: ed_duration */
 	uint32		measurehold;		/* PHY hold activities */
-	uint32		rxsense_disable_req_ch;	/* channel disable requests */
 	uint32		ocl_disable_reqs;	/* OCL disable bitmap */
 	uint32		interference_mode;	/* interference mitigation mode */
 	uint32		power_mode;		/* power mode */
-	uint32		obss_last_read_time;	/* last stats read time */
 	int32		asym_intf_ed_thresh;	/* smartcca ed threshold %d */
+	uint32		obss_last_read_time;	/* last stats read time */
+	uint16		counter_noise_iqest_to;	/* count of IQ_Est time out */
 	uint16		obss_mit_bw;		/* selected mitigation BW */
 	uint16		obss_stats_cnt;		/* stats count */
-	uint16		dynbw_init_reducebw_cnt;	/* BW reduction cnt of initiator */
-	uint16		dynbw_resp_reducebw_cnt;	/* BW reduction cnt of responder */
-	uint16		dynbw_rxdata_reducebw_cnt;	/* rx data cnt with reduced BW */
 	uint16		obss_mmt_skip_cnt;	/* mmt skipped due to powersave */
 	uint16		obss_mmt_no_result_cnt;	/* mmt with no result */
 	uint16		obss_mmt_intr_err_cnt;	/* obss reg mismatch between ucode and fw */
-	uint16		gci_lst_inv_ctr;	/* last gci invalid */
-	uint16		gci_lst_rst_ctr;	/* last gci restore 0x%04x */
-	uint16		gci_lst_sem_ctr;	/* last gci seq number 0x%04x */
-	uint16		gci_lst_rb_st;		/* last gci status */
-	uint16		gci_dbg01;		/* gci dbg1 readback */
-	uint16		gci_dbg02;		/* gci dbg2 readback */
-	uint16		gci_dbg03;		/* gci dbg3 readback */
-	uint16		gci_dbg04;		/* gci dbg4 readback */
-	uint16		gci_dbg05;		/* gci dbg5 readback */
-	uint16		gci_lst_st_msk;		/* gci last status mask */
-	uint16		gci_inv_tx;		/* invalid gci during tx */
-	uint16		gci_inv_rx;		/* invalid gci during rx */
-	uint16		gci_rst_tx;		/* gci restore during tx */
-	uint16		gci_rst_rx;		/* gci restore during rx */
-	uint16		gci_sem_ctr;		/* gci seq number ctr */
-	uint16		gci_invstate;		/* gci status 0x%04x */
-	uint16		gci_ctl2;		/* gci ctrl 2 */
-	uint16		gci_chan;		/* channel during gci read 0x%04x */
-	uint16		gci_cm;			/* channel during gci read */
-	uint16		gci_sc;			/* gci read during scan */
-	uint16		gci_rst_sc;		/* gci restore during scan */
-	uint16		gci_prdc_rx;		/* periodic gci hc */
-	uint16		gci_wk_rx;		/* gci hc during wake */
-	uint16		gci_rmac_rx;		/* gci hc during mac read */
-	uint16		gci_tx_rx;		/* gci hc during tx/rx */
-	uint16		asym_intf_stats;	/* smartCCA status 0x%04x */
-	uint16		asym_intf_ncal_crs_stat;	/* noise cal and crs status %d */
-	int16		ed_crsEn;		/* ed enable 0x%04x */
-	int16		nvcfg0;			/* noise update to hw 0x%04x */
-	uint8		cal_suppressed_cntr_ed;	/* cnt including ss, mp cals, MSB is cur state */
-	uint8		sc_dccal_incc_cnt;	/* scan dccal counter */
-	uint8		sc_noisecal_incc_cnt;	/* scan noise cal counter */
 	uint8		obss_need_updt;		/* BW update needed flag */
 	uint8		obss_mit_status;	/* obss mitigation status */
 	uint8		obss_last_rec_bw;	/* last recommended bw to wlc-Sent to SW */
+	uint8		obss_cur_det_bitmap;	/* obss curr detection bitmap */
+	uint16		dynbw_init_reducebw_cnt;	/* BW reduction cnt of initiator */
+	uint16		dynbw_resp_reducebw_cnt;	/* BW reduction cnt of responder */
+	uint16		dynbw_rxdata_reducebw_cnt;	/* rx data cnt with reduced BW */
+	int16		ed_crsEn;		/* ed enable 0x%04x */
+	int16		nvcfg0;			/* noise update to hw 0x%04x */
+	uint16		asym_intf_stats;	/* smartCCA status 0x%04x */
+	uint16		asym_intf_ncal_crs_stat;	/* noise cal and crs status %d */
 	uint8		asym_intf_ant_noise_idx;		/* current noise storage index */
 	uint8		asym_intf_pending_host_req_type;	/* usb plugin request */
 	uint8		asym_intf_ncal_crs_stat_idx;		/* crs status storage index %d */
@@ -5090,10 +5068,39 @@ typedef struct phy_ecounter_v255 {
 	int8		asym_intf_rx_noise_mit_cm;		/* smartCCA rx coremask %d */
 	int8		asym_intf_avg_noise[2];			/* average noise %d */
 	int8		asym_intf_latest_noise[2];		/* current noise %d */
-	uint8		obss_curr_det[ACPHY_OBSS_SUBBAND_CNT];	/* obss curr detection */
-	uint8		debug_01;		/* padding */
-	uint8		debug_02;		/* padding */
-	uint8		debug_03;		/* padding */
+	uint8		cal_suppressed_cntr_ed;	/* cnt including ss, mp cals, MSB is cur state */
+	uint8		sc_dccal_incc_cnt;	/* scan dccal counter */
+	uint8		sc_noisecal_incc_cnt;	/* scan noise cal counter */
+	uint8		dcc_digi_gain;		/* digi gain value used for DC cal */
+	uint8		dcc_est_overflow;	/* DC cal estimation overflow indicator */
+	uint32		fbcx_info01;		/* Indicates FBCX debug information */
+	uint32		fbcx_info02;		/* Indicates FBCX debug information */
+	uint32		fbcx_info03;		/* Indicates FBCX debug information */
+	uint32		fbcx_info04;		/* Indicates FBCX debug information */
+	uint32		fbcx_info05;		/* Indicates FBCX debug information */
+	uint32		fbcx_info06;		/* Indicates FBCX debug information */
+	uint16		scan_info;		/* Indicates scan information */
+	uint16		scan_starts;		/* Indicates frame starts */
+	uint16		scan_detect[3];		/* Indicates frame detections */
+	uint16		scan_good_fcs[3];	/* Indicates good FCS Rx counter */
+	uint16		scan_bad_fcs;		/* Indicates bad FCS Rx counter */
+	uint16		scan_busy;		/* Indicates hardware busy */
+	uint16		scan_errors;		/* Indicates error counter */
+	uint16		PLL_2g_VCOCAL_calCapRB;	/* Indicates VCO cal code */
+	uint32		srmc_debug_01;		/* Indicates radio state info */
+	uint16		debug_cal_code_scan_5g_slice[8]; /* Indicates VCO cal code scan 5G radio */
+	uint16		debug_cal_code_main_slice;	/* Indicates VCO cal code main slice */
+	int16		phy_cal_debug_01;	/* Indicates DC cal params */
+	int16		phy_cal_debug_02;	/* Indicates DC cal params */
+	uint16		ml_req_txcnt;		/* Indicates ML notif req Tx count new attempts */
+	uint16		ml_req_tot_retry_cnt;	/* Indicates ML notif req total retries */
+	uint16		ml_resp_rxcnt;		/* Indicates ML notif resp Rx count */
+	uint16		ml_resp_match_rxcnt;	/* Indicates ML notif resp all conds matched */
+	uint8		ml_req_retry_cnt;	/* ML notification request retry count */
+	uint8		pa_mode;		/* PA mode */
+	uint8		debug_01;		/* for future debugging */
+	uint8		debug_02;		/* for future debugging */
+	uint16		debug_03;		/* for future debugging */
 	phy_ecounter_log_core_v255_t phy_ecounter_core[2];
 } phy_ecounter_v255_t;
 
@@ -5276,8 +5283,8 @@ typedef struct phy_phycal_core_v3 {
 	uint32	debug_06;
 } phy_phycal_core_v3_t;
 
-/* For trunk ONLY */
-typedef struct phy_phycal_core_v255 {
+/* For 27.10 */
+typedef struct phy_phycal_core_v4 {
 	/* RxIQ imbalance coeff */
 	int32	rxs;
 
@@ -5348,6 +5355,68 @@ typedef struct phy_phycal_core_v255 {
 	uint32	debug_10;
 	uint32	debug_11;
 	uint32	debug_12;
+} phy_phycal_core_v4_t;
+
+/* For trunk ONLY */
+typedef struct phy_phycal_core_v255 {
+	/* RxIQ imbalance coeff */
+	uint16	rxa;
+	uint16	rxb;
+	int32	rxs;
+
+	/* OFDM and BPHY TxIQ imbalance coeff */
+	uint16	ofdm_txd; /* contain di & dq */
+
+	/* tx baseindex */
+	uint8	baseidx;
+	uint8	baseidx_cck;
+
+	/* Rx IQ Cal coeff */
+	uint16	rxa_vpoff;
+	uint16	rxb_vpoff;
+	uint16	rxa_ipoff;
+	uint16	rxb_ipoff;
+	int32	rxs_vpoff;
+	int32	rxs_ipoff;
+
+	/* Tx IQ/LO calibration coeffs */
+	uint16	txiqlo_a0;
+	uint16	txiqlo_b0;
+	uint16	txiqlo_a1;
+	uint16	txiqlo_b1;
+	uint16	txiqlo_a2;
+	uint16	txiqlo_b2;
+
+	/* Misc. calibration params */
+	int32	txs;
+	int16	txs_mean;
+	uint16	txbaseidx_gtthres_cnt;
+	uint16	txgain_rad_gain;
+	uint16	txgain_rad_gain_mi;
+	uint16	txgain_rad_gain_hi;
+	uint16	txgain_bbmult;
+	int16	rxs_mean_vpoff;
+	int16	rxs_mean_ipoff;
+	int16	rxs_mean;
+	uint8	rxms;
+	uint8	rxms_vpoff;
+	uint8	rxms_ipoff;
+	uint8	ccktxgain_offset;
+	int8	mppc_gain_offset_qdB[TXCAL_MAX_PA_MODE];
+
+	int16	dc_est_i;		/* Residual DC Estimate */
+	int16	dc_est_q;		/* Residual DC Estimate */
+	int16	kappa_theta[PHY_RX_GAIN_INDICES][2u];	/* RX-IQ comp coefficients */
+	int16	dc_re_im[PHY_RX_GAIN_INDICES][2u];	/* DC compensation coefficients */
+	int16	txgaincal[PHY_TX_GAIN_CAL];		/* txgaincal correction factor */
+
+	/* Misc general purpose debug counters (will be used for future debugging) */
+	uint16	debug_01;
+	uint16	debug_02;
+	uint16	debug_03;
+	uint16	debug_04;
+	uint32	debug_05;
+	uint32	debug_06;
 } phy_phycal_core_v255_t;
 
 typedef struct phy_ecounter_phycal_v1 {
@@ -5451,8 +5520,8 @@ typedef struct phy_phycal_v3 {
 	phy_phycal_core_v3_t phy_phycal_core[2];
 } phy_phycal_v3_t;
 
-/* For trunk ONLY */
-typedef struct phy_phycal_v255 {
+/* For 27.10 */
+typedef struct phy_phycal_v4 {
 	uint32 last_cal_time; /* in [sec], covers 136 years if 32 bit */
 	chanspec_t chanspec;
 	int16 last_cal_temp;
@@ -5494,6 +5563,54 @@ typedef struct phy_phycal_v255 {
 	uint32	debug_10;
 	uint32	debug_11;
 
+	phy_phycal_core_v4_t phy_phycal_core[2];
+} phy_phycal_v4_t;
+
+/* For trunk ONLY */
+typedef struct phy_phycal_v255 {
+	/* General info */
+	uint32 last_cal_time; /* in [sec], covers 136 years if 32 bit */
+	chanspec_t chanspec;
+	int16 last_cal_temp;
+	uint8 txiqlocal_retry;
+	uint8 rxe;
+	uint8 cal_phase_id;
+	uint8 slice;
+	uint32 desense_reason;
+	uint16 dur;	/* duration of cal in usec */
+	uint8 reason;
+
+	/* Health check counters */
+	uint8 hc_retry_count_vpoff;
+	uint8 hc_retry_count_ipoff;
+	uint8 hc_retry_count_rx;
+	uint8 hc_retry_count_tx;
+
+	/* Health check exceed conditions */
+	uint8 hc_dev_exceed_log_rx_vpoff;
+	uint8 hc_dev_exceed_log_rx_ipoff;
+	uint8 hc_dev_exceed_log_rx;
+	uint8 hc_dev_exceed_log_tx;
+
+	uint8 sc_rxiqcal_skip_cnt;
+
+	/* Tx cal counters */
+	uint16 txiqcal_max_retry_cnt;
+	uint16 txiqcal_max_slope_cnt;
+	uint16 mppc_cal_failed_count;
+	uint16 debug_01;
+	uint16 txiqlocal_coeffs[20];
+	uint8 is_mppc_gain_offset_cal_success;
+
+	/* Misc general purpose debug counters (will be used for future debugging) */
+	uint8	debug_02;
+	uint8	debug_03;
+	uint8	debug_04;
+	uint16	debug_05;
+	uint16	debug_06;
+	uint32	debug_07;
+	uint32	debug_08;
+
 	phy_phycal_core_v255_t phy_phycal_core[2];
 } phy_phycal_v255_t;
 
@@ -5523,6 +5640,16 @@ typedef struct phy_ecounter_phycal_stats_v3 {
 	uint8			PAD[3];
 	phy_phycal_v3_t		phy_counter[];
 } phy_ecounter_phycal_stats_v3_t;
+
+/* For 27.10 */
+#define PHY_ECOUNTERS_PHYCAL_STATS_VER4	4u
+typedef struct phy_ecounter_phycal_stats_v4 {
+	uint16			version;
+	uint16			length;
+	uint8			num_channel;	/* Number of active channels. */
+	uint8			PAD[3];
+	phy_phycal_v4_t		phy_counter[];
+} phy_ecounter_phycal_stats_v4_t;
 
 /* For trunk ONLY */
 #define PHY_ECOUNTERS_PHYCAL_STATS_VER255	255u

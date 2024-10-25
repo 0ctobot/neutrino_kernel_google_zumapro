@@ -3342,9 +3342,7 @@ dhd_ifdel_event_handler(void *handle, void *event_info, u8 event)
 #endif /* WL_CFG80211 && LINUX_VERSION_CODE >= KERNEL_VERSION(3, 0, 0) */
 
 
-	if (!del_cmd_in_progress) {
-		dhd_clear_del_in_progress(dhdp, ndev);
-	}
+	dhd_clear_del_in_progress(dhdp, ndev);
 
 done:
 	MFREE(dhd->pub.osh, if_event, sizeof(dhd_if_event_t));
@@ -7560,7 +7558,10 @@ dhd_static_if_stop(struct net_device *net)
 		return BCME_OK;
 	}
 
+	dhd_net_if_lock_local(dhd);
 	dhd_set_del_in_progress(cfg->pub, net);
+	dhd_net_if_unlock_local(dhd);
+
 	/* Ensure queue is disabled */
 	netif_tx_disable(net);
 	ret = wl_cfg80211_static_if_close(net);
