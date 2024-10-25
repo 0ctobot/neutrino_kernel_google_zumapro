@@ -12,7 +12,6 @@
 #define __EXYNOS_HDCP2_AUTH_H__
 
 int hdcp22_dplink_authenticate(void);
-int hdcp22_dplink_abort(void);
 int hdcp22_dplink_handle_irq(void);
 
 #endif
